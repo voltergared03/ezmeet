@@ -4,10 +4,10 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
-## [1.14.1-beta.1] — 2026-06-11
+## [1.15.0-beta.1] — 2026-06-23
 
-Google Calendar auto-connect, database ownership transfer, and an iOS 26 Liquid
-Glass mobile navigation bar.
+A two-way ClickUp integration that can hand task management over to ClickUp, plus
+the in-meeting briefing — description and agenda now visible during the call.
 
 ### Added
 - **Two-way ClickUp integration — ClickUp becomes the primary task manager.**
@@ -22,6 +22,19 @@ Glass mobile navigation bar.
   tasks migrate to ClickUp; on disconnect the webhook is removed and tasks return
   to native Garely editing. Tasks with no ClickUp assignee stay native. Opt-in,
   non-blocking, and a no-op until configured.
+
+### Changed
+- **Meetings show their description and agenda during the call.** A new "Agenda"
+  tab in the meeting room — and the agenda card in the lobby — lists the meeting's
+  description and numbered agenda items, so everyone sees the briefing without
+  leaving the call. Quick meetings with no briefing simply don't show it.
+
+## [1.14.1-beta.1] — 2026-06-11
+
+Google Calendar auto-connect, database ownership transfer, and an iOS 26 Liquid
+Glass mobile navigation bar.
+
+### Added
 - **Transfer ownership of databases and individual tables.** A base owner or a
   workspace admin can hand a database to another member (the outgoing owner is
   kept on with admin access); each table now has its own owner who can rename,
