@@ -88,6 +88,7 @@ export function IntegrationsTab() {
   const [aiModels, setAiModels] = useState<{ id: string; maxOutput: number | null; contextLength: number | null }[]>([]);
   const [aiModelsLoading, setAiModelsLoading] = useState(false);
   const [aiModelsErr, setAiModelsErr] = useState('');
+  const [aiCustom, setAiCustom] = useState(false); // manual model-id entry (vs. the fetched dropdown)
   const [aiSaving, setAiSaving] = useState(false);
   const [aiSaved, setAiSaved] = useState(false);
   const [aiTesting, setAiTesting] = useState(false);
@@ -182,6 +183,15 @@ export function IntegrationsTab() {
       })
       .catch(() => {});
   }, []);
+
+  // Auto-load the provider's model list the first time the AI modal opens (when a
+  // key is already saved, or the provider is keyless), so the dropdown is ready.
+  useEffect(() => {
+    if (manage === 'AI model' && aiModels.length === 0 && !aiModelsLoading && (ai.apiKeySet || aiPresets[ai.provider]?.keyless)) {
+      loadAiModels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manage]);
 
   // Close the modal on Escape.
   useEffect(() => {
@@ -732,11 +742,15 @@ export function IntegrationsTab() {
     const keyless = !!aiPresets[ai.provider]?.keyless;
     const selModel = aiModels.find(m => m.id === ai.model);
     const modelMax = selModel?.maxOutput || null;
+    const showSelect = aiModels.length > 0 && !aiCustom;
+    // A saved/custom model id not present in the fetched list still needs an option.
+    const extraModel = ai.model && !aiModels.some(m => m.id === ai.model) ? ai.model : '';
+    const fmtTok = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <FieldWrapper label={t('settings.aiProvider')}>
           <select className="field" value={ai.provider}
-            onChange={e => { const p = e.target.value; const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); setAiModels([]); setAiModelsErr(''); }}>
+            onChange={e => { const p = e.target.value; const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); setAiModels([]); setAiModelsErr(''); setAiCustom(false); }}>
             {Object.entries(aiPresets).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </FieldWrapper>
@@ -752,16 +766,24 @@ export function IntegrationsTab() {
         </FieldWrapper>
         <FieldWrapper label={t('settings.aiModel')}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input className="field" list="aiModelList" value={ai.model} placeholder="deepseek-chat"
-              onChange={e => setAi(a => ({ ...a, model: e.target.value }))} style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
-            <datalist id="aiModelList">
-              {aiModels.map(m => <option key={m.id} value={m.id}>{m.contextLength ? `${m.id} · ${Math.round(m.contextLength / 1000)}K ctx` : m.id}</option>)}
-            </datalist>
-            <button className="btn btn-sm" onClick={loadAiModels} disabled={aiModelsLoading || (!keyless && !ai.apiKeySet && !aiKey.trim())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {showSelect ? (
+              <select className="field" value={ai.model} style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
+                onChange={e => { const v = e.target.value; if (v === '__custom') { setAiCustom(true); } else { setAi(a => ({ ...a, model: v })); } }}>
+                {!ai.model && <option value="" disabled>{t('settings.aiModelPick')}</option>}
+                {extraModel && <option value={extraModel}>{extraModel}</option>}
+                {aiModels.map(m => <option key={m.id} value={m.id}>{m.id}{m.maxOutput ? ` — ${fmtTok(m.maxOutput)} max` : m.contextLength ? ` — ${fmtTok(m.contextLength)} ctx` : ''}</option>)}
+                <option value="__custom">{t('settings.aiModelCustom')}</option>
+              </select>
+            ) : (
+              <input className="field" value={ai.model} placeholder="deepseek-chat"
+                onChange={e => setAi(a => ({ ...a, model: e.target.value }))} style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
+            )}
+            <button className="btn btn-sm" onClick={loadAiModels} disabled={aiModelsLoading || (!keyless && !ai.apiKeySet && !aiKey.trim())} title={t('settings.aiLoadModels')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               {aiModelsLoading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />} {t('settings.aiLoadModels')}
             </button>
           </div>
-          {aiModels.length > 0 && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{t('settings.aiModelsLoaded', { count: aiModels.length })}</div>}
+          {aiModels.length > 0 && !aiCustom && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{t('settings.aiModelsLoaded', { count: aiModels.length })}</div>}
+          {aiModels.length > 0 && aiCustom && <button className="btn btn-ghost" style={{ fontSize: 11, padding: '1px 0', marginTop: 4 }} onClick={() => setAiCustom(false)}>{t('settings.aiModelFromList')}</button>}
           {aiModelsErr && <div style={{ fontSize: 11.5, color: '#f87171', marginTop: 4 }}>{aiModelsErr}</div>}
         </FieldWrapper>
         <FieldWrapper label={t('settings.aiMaxTokens')}>

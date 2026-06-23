@@ -11,6 +11,32 @@ function normBase(u: string): string {
 
 type ModelInfo = { id: string; maxOutput: number | null; contextLength: number | null };
 
+/**
+ * Best-effort known output/context limits for common models, since most provider
+ * `/v1/models` endpoints return ids only (OpenRouter is the exception and its API
+ * values always win). Matched on the id's last path segment, most-specific first.
+ * A convenience for the picker — admins can still override the token field.
+ */
+const KNOWN_LIMITS: { match: RegExp; maxOutput: number; contextLength: number }[] = [
+  { match: /claude-(opus-4|fable-5|mythos-5)/, maxOutput: 128000, contextLength: 1000000 },
+  { match: /claude-sonnet-4/, maxOutput: 64000, contextLength: 1000000 },
+  { match: /claude-haiku-4/, maxOutput: 64000, contextLength: 200000 },
+  { match: /claude-3-5-haiku/, maxOutput: 8192, contextLength: 200000 },
+  { match: /claude-3/, maxOutput: 8192, contextLength: 200000 },
+  { match: /deepseek-(v4|chat|reasoner)/, maxOutput: 65536, contextLength: 1000000 },
+  { match: /gpt-4\.1/, maxOutput: 32768, contextLength: 1000000 },
+  { match: /gpt-4o/, maxOutput: 16384, contextLength: 128000 },
+  { match: /^(o1|o3|o4)/, maxOutput: 100000, contextLength: 200000 },
+  { match: /gpt-4/, maxOutput: 4096, contextLength: 128000 },
+  { match: /gpt-3\.5/, maxOutput: 4096, contextLength: 16385 },
+];
+
+function knownLimits(id: string): { maxOutput: number | null; contextLength: number | null } {
+  const base = id.toLowerCase().split('/').pop() || '';
+  const hit = KNOWN_LIMITS.find((k) => k.match.test(base));
+  return hit ? { maxOutput: hit.maxOutput, contextLength: hit.contextLength } : { maxOutput: null, contextLength: null };
+}
+
 // POST /api/settings/ai/models — list the provider's available models for the
 // dropdown. Uses the values typed in the modal (provider/baseUrl/apiKey) when given,
 // else the saved config. Only OpenRouter exposes per-model token limits; for the
@@ -58,9 +84,11 @@ export async function POST(req: NextRequest) {
       const id = typeof m?.id === 'string' ? m.id : (typeof m?.name === 'string' ? m.name : '');
       if (!id || seen.has(id)) continue;
       seen.add(id);
-      const maxOutput = Number(m?.top_provider?.max_completion_tokens ?? m?.max_completion_tokens ?? m?.max_output_tokens) || null;
-      const contextLength = Number(m?.context_length ?? m?.top_provider?.context_length ?? m?.context_window) || null;
-      models.push({ id, maxOutput, contextLength });
+      // API value wins (OpenRouter); fall back to the curated map for the rest.
+      const known = knownLimits(id);
+      const maxOutput = (Number(m?.top_provider?.max_completion_tokens ?? m?.max_completion_tokens ?? m?.max_output_tokens) || null) ?? null;
+      const contextLength = (Number(m?.context_length ?? m?.top_provider?.context_length ?? m?.context_window) || null) ?? null;
+      models.push({ id, maxOutput: maxOutput ?? known.maxOutput, contextLength: contextLength ?? known.contextLength });
     }
     models.sort((a, b) => a.id.localeCompare(b.id));
     return NextResponse.json({ models: models.slice(0, 1000) });
