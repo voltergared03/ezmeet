@@ -4,6 +4,29 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.17.0-beta.1] — 2026-06-23
+
+Generic outbound webhooks — wire Garely into Zapier, Make, n8n or any HTTP
+endpoint. One connector, hundreds of automations.
+
+### Added
+- **Outbound webhooks.** Settings → Integrations → Webhooks: add one or more
+  HTTPS endpoints, each subscribed to the events you care about, and Garely
+  POSTs a JSON payload whenever they fire. Events: `report.ready` (a meeting's
+  AI report is generated), `meeting.reminder` (ahead of a call), `task.created`
+  and `task.updated`. An endpoint with no events selected receives every event.
+- **Signed, verifiable deliveries.** Each POST carries `X-Garely-Signature:
+  sha256=<HMAC-SHA256 of the body>` (GitHub-compatible) signed with the
+  endpoint's secret, plus `X-Garely-Event`, `X-Garely-Delivery` and
+  `X-Garely-Timestamp` headers so receivers can verify authenticity and dedupe.
+  Secrets are encrypted at rest and never returned to the browser. Delivery is
+  opt-in, fire-and-forget and fail-soft — a slow or broken endpoint never delays
+  or breaks the meeting, report or task flow that triggered it. Send a test ping
+  per endpoint from the settings modal.
+
+### Notes
+- No schema change — webhook config lives in workspace settings; app-only deploy.
+
 ## [1.16.0-beta.1] — 2026-06-23
 
 Tier 1 integrations: outbound chat notifications, a pluggable AI-model provider
