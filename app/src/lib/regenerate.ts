@@ -20,6 +20,7 @@ import { createTaskFromAI, aiCellsFromModel, AI_FILLABLE_TYPES } from './tasks';
 import { pushMeetingTasksToClickUp, type ClickUpPushItem } from './clickup';
 import { pushMeetingTasksToLinear } from './linear';
 import { notifyChatReportReady } from './chat-notify';
+import { notifyWebhookReportReady } from './webhooks';
 import { coerceRowData } from './base-rows';
 
 export interface ReTranscribedSegment {
@@ -664,6 +665,8 @@ ${numbered}`;
     }
     // Post the report to the team chat (opt-in; first generation only). Fire-and-forget.
     void notifyChatReportReady(meetingId);
+    // Emit the report.ready outbound webhook (opt-in; first generation only). Fire-and-forget.
+    void notifyWebhookReportReady(meetingId);
   }
 
   // ClickUp + Linear push (opt-in, non-blocking, idempotent). Both run on first

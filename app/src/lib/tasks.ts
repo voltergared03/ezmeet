@@ -11,6 +11,7 @@ import {
 } from './system-tasks-table';
 import { userDepartmentIds, userCanAccessMeeting, userCanViewTask } from './access';
 import { getCurrentOrgId, requireCurrentOrgId } from './org';
+import { dispatchWebhook, taskWebhookPayload } from './webhooks';
 
 /**
  * Task adapter (Phase 3.2, roadmap §15) — the single place the app reads/writes
@@ -656,6 +657,9 @@ export async function createTask(session: Session, input: CreateTaskInput): Prom
   });
 
   const task = await getTaskById(row.id, { detail: false });
+  // Outbound webhook (opt-in; fire-and-forget). AI-extracted tasks are intentionally
+  // not fired here — they're covered by the report.ready event.
+  if (task) void dispatchWebhook('task.created', taskWebhookPayload(task));
   return { task: task!, assignees: finalAssignees };
 }
 
@@ -815,6 +819,8 @@ export async function updateTask(
   const dueChanged = newDue !== undefined && (newDue ?? null) !== (beforeDue ?? null);
 
   const task = await getTaskById(taskId, { detail: false });
+  // Outbound webhook (opt-in; fire-and-forget).
+  if (task) void dispatchWebhook('task.updated', taskWebhookPayload(task));
   return { task: task!, before: { status: beforeStatus, dueDate: beforeDue }, addedAssignees, statusChanged, dueChanged };
 }
 

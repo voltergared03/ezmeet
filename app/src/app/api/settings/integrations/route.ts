@@ -6,6 +6,7 @@ import { readConfig, getLlmConfig, getGoogleConfig, LLM_PRESETS } from '@/lib/co
 import { getSmtpConfig } from '@/lib/email';
 import { getS3Config } from '@/lib/s3';
 import { isChatConfigured } from '@/lib/chat-notify';
+import { getWebhooksForApi } from '@/lib/webhooks';
 
 // GET /api/settings/integrations — real status + metrics for each integration
 export async function GET() {
@@ -57,6 +58,10 @@ export async function GET() {
     : t('notConfiguredMetric');
   const chatOk = await isChatConfigured();
   const chatMetric = chatOk ? (keys.CHAT_PROVIDER || 'telegram') : t('notConfiguredMetric');
+  const webhookEndpoints = await getWebhooksForApi().catch(() => []);
+  const webhookActive = webhookEndpoints.filter((e) => e.enabled).length;
+  const webhookOk = webhookActive > 0;
+  const webhookMetric = webhookOk ? t('webhooksActive', { count: webhookActive }) : t('notConfiguredMetric');
 
   const integrations = [
     { name: 'LiveKit', desc: 'WebRTC SFU', status: livekitOk ? 'connected' : 'not_configured', metric: liveMeetings > 0 ? t('liveMeetings', { count: liveMeetings }) : 'self-hosted' },
@@ -69,6 +74,7 @@ export async function GET() {
     { name: 'ClickUp', desc: t('descClickup'), status: clickupOk ? 'connected' : 'not_configured', metric: clickupMetric },
     { name: 'Linear', desc: t('descLinear'), status: linearOk ? 'connected' : 'not_configured', metric: linearMetric },
     { name: 'Chat', desc: t('descChat'), status: chatOk ? 'connected' : 'not_configured', metric: chatMetric },
+    { name: 'Webhooks', desc: t('descWebhooks'), status: webhookOk ? 'connected' : 'not_configured', metric: webhookMetric },
   ];
 
   return NextResponse.json({ integrations });

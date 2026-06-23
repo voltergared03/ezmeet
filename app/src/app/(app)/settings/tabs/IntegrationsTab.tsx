@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import {
   Globe, Mic, Sparkles, Video, Mail, Archive, Download,
-  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare, GitBranch,
+  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare, GitBranch, Webhook, Trash2, Plus,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
 import { LinearIcon, ClickUpIcon, DeepgramIcon, LiveKitIcon, PostgresIcon, S3Icon, GoogleIcon } from '../components/BrandIcons';
 
 // Which connectors open a config modal (the rest are read-only status cards).
-const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Linear', 'Google OAuth', 'Chat']);
+const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Linear', 'Google OAuth', 'Chat', 'Webhooks']);
 
 export function IntegrationsTab() {
   const t = useTranslations();
@@ -26,6 +26,7 @@ export function IntegrationsTab() {
     ClickUp: <ClickUpIcon />,
     Linear: <LinearIcon />,
     Chat: <MessageSquare size={20} />,
+    Webhooks: <Webhook size={20} />,
   };
   const [integrations, setIntegrations] = useState<{ name: string; desc: string; status: string; metric?: string }[]>([]);
   // The connector whose config modal is open (by name), or null.
@@ -94,6 +95,17 @@ export function IntegrationsTab() {
   const [aiSaved, setAiSaved] = useState(false);
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestRes, setAiTestRes] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Webhooks: a list of outbound endpoints. `key` is a client-only React key; `id`
+  // is the server id ('' for a not-yet-saved endpoint); `secret` is a freshly typed
+  // value ('' = leave the stored secret untouched).
+  type WhRow = { key: string; id: string; url: string; enabled: boolean; events: string[]; secretSet: boolean; secret: string };
+  const [webhooks, setWebhooks] = useState<WhRow[]>([]);
+  const [webhookEvents, setWebhookEvents] = useState<string[]>([]);
+  const [webhooksSaving, setWebhooksSaving] = useState(false);
+  const [webhooksSaved, setWebhooksSaved] = useState(false);
+  const [webhookTestingId, setWebhookTestingId] = useState<string | null>(null);
+  const [webhookTestRes, setWebhookTestRes] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/settings/keys')
@@ -181,6 +193,16 @@ export function IntegrationsTab() {
           setAi({ provider: d.provider || 'deepseek', baseUrl: d.baseUrl || '', model: d.model || '', maxTokens: d.maxTokens ? String(d.maxTokens) : '', apiKeySet: !!d.apiKeySet });
           if (d.presets) setAiPresets(d.presets);
         }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/settings/webhooks')
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d.endpoints)) setWebhooks(d.endpoints.map((e: any) => ({ key: e.id, id: e.id, url: e.url || '', enabled: !!e.enabled, events: Array.isArray(e.events) ? e.events : [], secretSet: !!e.secretSet, secret: '' })));
+        if (Array.isArray(d.events)) setWebhookEvents(d.events);
       })
       .catch(() => {});
   }, []);
@@ -361,6 +383,44 @@ export function IntegrationsTab() {
         : { ok: false, msg: d.error || t('settings.networkError') });
     } catch { setAiTestRes({ ok: false, msg: t('settings.networkError') }); }
     finally { setAiTesting(false); }
+  };
+
+  // ── Webhooks row editing ──
+  const newKey = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+  const addWebhook = () => setWebhooks(w => [...w, { key: newKey(), id: '', url: '', enabled: true, events: [], secretSet: false, secret: '' }]);
+  const removeWebhook = (key: string) => setWebhooks(w => w.filter(e => e.key !== key));
+  const patchWebhook = (key: string, patch: Partial<WhRow>) => setWebhooks(w => w.map(e => e.key === key ? { ...e, ...patch } : e));
+  const toggleWebhookEvent = (key: string, ev: string) => setWebhooks(w => w.map(e => e.key === key ? { ...e, events: e.events.includes(ev) ? e.events.filter(x => x !== ev) : [...e.events, ev] } : e));
+
+  const saveWebhooks = async () => {
+    setWebhooksSaving(true); setWebhooksSaved(false);
+    try {
+      const payload = {
+        endpoints: webhooks
+          .filter(e => e.url.trim())
+          .map(e => ({ id: e.id || undefined, url: e.url.trim(), enabled: e.enabled, events: e.events, secret: e.secret.trim() || undefined })),
+      };
+      const res = await fetch('/api/settings/webhooks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(d.endpoints)) {
+        setWebhooks(d.endpoints.map((e: any) => ({ key: e.id, id: e.id, url: e.url || '', enabled: !!e.enabled, events: Array.isArray(e.events) ? e.events : [], secretSet: !!e.secretSet, secret: '' })));
+        setWebhooksSaved(true);
+        setTimeout(() => setWebhooksSaved(false), 2500);
+        refreshIntegrations();
+      }
+    } catch (e) { console.error(e); }
+    finally { setWebhooksSaving(false); }
+  };
+
+  const testWebhook = async (row: WhRow) => {
+    if (!row.id) { setWebhookTestRes({ id: row.key, ok: false, msg: t('settings.webhookSaveFirst') }); return; }
+    setWebhookTestingId(row.id); setWebhookTestRes(null);
+    try {
+      const res = await fetch('/api/settings/webhooks/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: row.id }) });
+      const d = await res.json().catch(() => ({}));
+      setWebhookTestRes({ id: row.key, ...(res.ok ? { ok: true, msg: t('settings.webhookTestSent') } : { ok: false, msg: d.error || t('settings.networkError') }) });
+    } catch { setWebhookTestRes({ id: row.key, ok: false, msg: t('settings.networkError') }); }
+    finally { setWebhookTestingId(null); }
   };
 
   const saveS3 = async () => {
@@ -812,6 +872,68 @@ export function IntegrationsTab() {
     );
   };
 
+  const renderWebhooksModal = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.webhooksHint')}</div>
+
+      {webhooks.length === 0 && (
+        <div style={{ fontSize: 12.5, color: 'var(--muted)', padding: '6px 0' }}>{t('settings.webhookNoEndpoints')}</div>
+      )}
+
+      {webhooks.map(row => (
+        <div key={row.key} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--surface-2)' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input className="field" value={row.url} placeholder="https://hooks.zapier.com/…"
+              onChange={e => patchWebhook(row.key, { url: e.target.value })} style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
+            <button className="btn btn-ghost btn-icon" style={{ width: 32, height: 32, flexShrink: 0 }} onClick={() => removeWebhook(row.key)} aria-label={t('common.delete')} title={t('common.delete')}><Trash2 size={15} /></button>
+          </div>
+          <FieldWrapper label={row.secretSet ? t('settings.webhookSecretSet') : t('settings.webhookSecret')}>
+            <input className="field" type="password" value={row.secret} placeholder={row.secretSet ? '••••••••••••' : 'whsec_…'}
+              onChange={e => patchWebhook(row.key, { secret: e.target.value })} style={{ fontFamily: 'var(--font-mono)' }} />
+          </FieldWrapper>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{t('settings.webhookEvents')}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {webhookEvents.map(ev => {
+                const on = row.events.includes(ev);
+                return (
+                  <button key={ev} type="button" onClick={() => toggleWebhookEvent(row.key, ev)} className="mono"
+                    style={{
+                      fontSize: 11.5, padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
+                      border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                      background: on ? 'color-mix(in oklab, var(--accent) 18%, transparent)' : 'transparent',
+                      color: on ? 'var(--accent-2)' : 'var(--muted)',
+                    }}>{ev}</button>
+                );
+              })}
+            </div>
+            {row.events.length === 0 && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 5 }}>{t('settings.webhookAllEvents')}</div>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <Toggle label={t('settings.webhookEnabled')} value={row.enabled} onChange={v => patchWebhook(row.key, { enabled: v })} />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              {webhookTestRes && webhookTestRes.id === row.key && <span style={{ fontSize: 12, color: webhookTestRes.ok ? 'var(--green)' : '#f87171' }}>{webhookTestRes.msg}</span>}
+              <button className="btn btn-sm" onClick={() => testWebhook(row)} disabled={webhookTestingId === row.id || !row.url.trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {webhookTestingId === row.id ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Webhook size={13} />} {t('settings.sendTest')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <button className="btn btn-sm" onClick={addWebhook} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <Plus size={14} /> {t('settings.webhookAddEndpoint')}
+      </button>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+        <button className="btn btn-primary btn-sm" onClick={saveWebhooks} disabled={webhooksSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {webhooksSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('common.save')}
+        </button>
+        {webhooksSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
+      </div>
+    </div>
+  );
+
   const renderModalBody = (name: string) => {
     switch (name) {
       case 'Deepgram': return renderKeysModal('Deepgram');
@@ -822,6 +944,7 @@ export function IntegrationsTab() {
       case 'Linear': return renderLinearModal();
       case 'Google OAuth': return renderGoogleModal();
       case 'Chat': return renderChatModal();
+      case 'Webhooks': return renderWebhooksModal();
       default: return null;
     }
   };

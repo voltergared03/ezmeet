@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
 import { notify } from '@/lib/notify';
 import { notifyChatMeetingReminder } from '@/lib/chat-notify';
+import { notifyWebhookMeetingReminder } from '@/lib/webhooks';
 import { getTranslator, workspaceLocale } from '@/lib/i18n-server';
 import { publicBaseUrl } from '@/lib/config';
 import { esc } from '@/lib/email/html';
@@ -87,6 +88,8 @@ async function getHandler(req: NextRequest) {
 
     // Team chat reminder (opt-in; fire-and-forget).
     void notifyChatMeetingReminder(m.id, m.title, startStr);
+    // Outbound webhook reminder (opt-in; fire-and-forget).
+    void notifyWebhookMeetingReminder(m.id, m.title, startStr);
 
     await prisma.meeting.update({ where: { id: m.id }, data: { reminderSent: true } }).catch(() => {});
   }
