@@ -40,6 +40,9 @@ export interface ActionItem {
   // derived shortcut (status === 'done') kept for the checkbox/PDF/export.
   status: 'open' | 'in_progress' | 'done';
   done: boolean;
+  // ClickUp two-way sync: read-only mirror when managed (status flows from ClickUp).
+  clickupManaged?: boolean;
+  clickupUrl?: string | null;
 }
 
 export interface UserItem {

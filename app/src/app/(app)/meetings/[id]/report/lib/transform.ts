@@ -45,6 +45,8 @@ export function transformApiData(data: any): Meeting {
         priority: (t.priority || 'medium') as 'high' | 'medium' | 'low',
         status: (t.status === 'in_progress' || t.status === 'done' ? t.status : 'open') as 'open' | 'in_progress' | 'done',
         done: t.status === 'done' || t.done || false,
+        clickupManaged: !!t.clickupManaged,
+        clickupUrl: t.clickupUrl ?? null,
       };
     });
 

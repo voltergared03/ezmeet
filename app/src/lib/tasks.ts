@@ -29,6 +29,7 @@ type UserLite = { id: string; name: string | null; image: string | null };
 export type SubtaskDTO = {
   id: string; title: string; status: string; priority: string; dueDate: string | null;
   assigneeName: string | null; assignee: UserLite | null;
+  clickupManaged: boolean; clickupUrl: string | null;
 };
 export type AssigneeRow = { id: string; taskId: string; userId: string; user: UserLite | null; createdAt: string };
 export type CollaboratorRow = { id: string; taskId: string; userId: string; user: UserLite | null; createdAt: string };
@@ -57,6 +58,12 @@ export type MeetingTaskDTO = {
   externalUrl: string | null;
   externalSync: string | null;
   lastSyncedAt: string | null;
+  // ClickUp two-way sync: when clickupManaged, this task is "owned" by ClickUp
+  // (an assignee exists there) → the board/report/detail render it read-only with
+  // a "Managed in ClickUp" badge + clickupUrl link; status mirrors from ClickUp.
+  clickupTaskId: string | null;
+  clickupUrl: string | null;
+  clickupManaged: boolean;
   assignee: UserLite | null;
   meeting: { id: string; title: string; scheduledAt: string | null } | null;
   department: { id: string; name: string; color: string | null } | null;
@@ -168,7 +175,7 @@ type LoadedRow = {
   data: Prisma.JsonValue;
   position: number;
   createdAt: Date;
-  taskMeta: { meetingId: string | null; reportId: string | null; departmentId: string | null; parentRowId: string | null; source: string; completedAt: Date | null } | null;
+  taskMeta: { meetingId: string | null; reportId: string | null; departmentId: string | null; parentRowId: string | null; source: string; completedAt: Date | null; clickupTaskId: string | null; clickupUrl: string | null; clickupStatus: string | null; clickupSyncedAt: Date | null } | null;
   assignments?: { id: string; userId: string; createdAt: Date }[];
   collaborators?: { id: string; userId: string; createdAt: Date }[];
   _count?: { comments: number; attachments: number };
@@ -231,6 +238,9 @@ function assembleTaskDTO(
     externalUrl: null,
     externalSync: null,
     lastSyncedAt: null,
+    clickupTaskId: meta?.clickupTaskId ?? null,
+    clickupUrl: meta?.clickupUrl ?? null,
+    clickupManaged: !!meta?.clickupTaskId,
     assignee: lead,
     meeting: extras.meeting ? { id: extras.meeting.id, title: extras.meeting.title, scheduledAt: iso(extras.meeting.scheduledAt) } : null,
     department: extras.department ?? null,
@@ -264,6 +274,8 @@ function buildSubtaskDTO(row: LoadedRow, f: TaskFieldIds, users: Map<string, Use
     dueDate: str(data[f.dueDate]),
     assigneeName: lead?.name ?? null,
     assignee: lead,
+    clickupManaged: !!row.taskMeta?.clickupTaskId,
+    clickupUrl: row.taskMeta?.clickupUrl ?? null,
   };
 }
 
@@ -804,6 +816,14 @@ export async function deleteTask(taskId: string): Promise<void> {
     if (subIds.length) await tx.row.deleteMany({ where: { id: { in: subIds } } }); // cascades each sub's TaskRow + Row*
     await tx.row.delete({ where: { id: taskId } }); // cascades this row's TaskRow + Row*
   });
+}
+
+/** True if the task Row is "owned" by ClickUp (an assignee exists there). Owned
+ *  tasks are a read-only mirror in Garely — user edits/deletes are rejected
+ *  (they're managed in ClickUp; status/deletion flow back via the webhook). */
+export async function isClickUpManaged(taskId: string): Promise<boolean> {
+  const tr = await prisma.taskRow.findUnique({ where: { rowId: taskId }, select: { clickupTaskId: true } });
+  return !!tr?.clickupTaskId;
 }
 
 /**

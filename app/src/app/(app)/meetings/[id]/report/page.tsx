@@ -393,7 +393,7 @@ export default function MeetingReportPage() {
   // before — the report checkbox never wrote, so changes never reached the board).
   const toggleActionItem = useCallback(async (id: string) => {
     const item = actionItems.find((i) => i.id === id);
-    if (!item) return;
+    if (!item || item.clickupManaged) return; // managed in ClickUp — read-only mirror
     const nextStatus: 'open' | 'done' = item.done ? 'open' : 'done';
     const prevItems = actionItems;
     setActionItems((prev) =>
@@ -1121,13 +1121,14 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                     >
                       <button
                         onClick={() => toggleActionItem(item.id)}
+                        disabled={item.clickupManaged}
                         style={{
                           width: 20,
                           height: 20,
                           borderRadius: 6,
                           border: item.done ? 'none' : item.status === 'in_progress' ? '2px solid #f59e0b' : '2px solid var(--border-2)',
                           background: item.done ? 'var(--green)' : 'transparent',
-                          cursor: 'pointer',
+                          cursor: item.clickupManaged ? 'default' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -1163,9 +1164,14 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                             </span>
                           )}
                           <PriorityChip priority={item.priority} />
+                          {item.clickupManaged && (
+                            <a href={item.clickupUrl || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'color-mix(in oklab, var(--accent) 14%, transparent)', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+                              ClickUp ↗
+                            </a>
+                          )}
                         </div>
                       </div>
-                      {isAdmin && (
+                      {isAdmin && !item.clickupManaged && (
                         <button
                           onClick={() => deleteActionItem(item.id)}
                           title={tr('report.deleteActionItem')}

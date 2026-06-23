@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/api-auth";
 import { withRoute } from "@/lib/with-route";
 import { userCanViewTask } from "@/lib/access";
 import { jsonError } from "@/lib/http";
-import { setRowAssignees, usersByIds } from "@/lib/tasks";
+import { setRowAssignees, usersByIds, isClickUpManaged } from "@/lib/tasks";
 import { notifyTaskAssigned } from "@/lib/task-notify";
 
 // Manage a task's (or subtask's) set of assignees. Tasks are base-engine Rows;
@@ -36,6 +36,7 @@ export const POST = withRoute("tasks.assignees.add", async (req: NextRequest, ct
   const { id } = await ctx.params;
   if (!(await userCanViewTask(id, session.user.id, session.user.role))) return jsonError("forbidden", 403);
 
+  if (await isClickUpManaged(id)) return jsonError("clickup_managed", 409);
   const parsed = postSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return jsonError("invalid_body", 400);
   const u = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { id: true } });
@@ -57,6 +58,7 @@ export const DELETE = withRoute("tasks.assignees.remove", async (req: NextReques
   const { id } = await ctx.params;
   if (!(await userCanViewTask(id, session.user.id, session.user.role))) return jsonError("forbidden", 403);
 
+  if (await isClickUpManaged(id)) return jsonError("clickup_managed", 409);
   const userId = new URL(req.url).searchParams.get("userId");
   if (!userId) return jsonError("userId required", 400);
   const existing = await prisma.rowAssignment.findMany({ where: { rowId: id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { userId: true } });

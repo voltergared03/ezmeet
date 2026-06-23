@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import {
   Globe, Mic, Sparkles, Video, Mail, Archive, Download,
-  Key, Eye, EyeOff, Loader2, Save, Check,
+  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
 
@@ -19,6 +19,7 @@ export function IntegrationsTab() {
     'Google OAuth': <Globe size={18} />,
     PostgreSQL: <Archive size={18} />,
     'S3 Storage': <Download size={18} />,
+    ClickUp: <ListChecks size={18} />,
   };
   const [integrations, setIntegrations] = useState<{ name: string; desc: string; status: string; metric?: string }[]>([]);
 
@@ -47,6 +48,14 @@ export function IntegrationsTab() {
   const [s3Saved, setS3Saved] = useState(false);
   const [s3Testing, setS3Testing] = useState(false);
   const [s3Test, setS3Test] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // ClickUp integration config (paste token → it works)
+  const [clickup, setClickup] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; teamId: string; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department', teamId: '' });
+  const [clickupToken, setClickupToken] = useState('');
+  const [clickupSaving, setClickupSaving] = useState(false);
+  const [clickupSaved, setClickupSaved] = useState(false);
+  const [clickupTesting, setClickupTesting] = useState(false);
+  const [clickupTest, setClickupTest] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/settings/keys')
@@ -87,6 +96,60 @@ export function IntegrationsTab() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetch('/api/settings/clickup')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.error) setClickup({
+          enabled: !!d.enabled, tokenSet: !!d.tokenSet,
+          routingMode: d.routingMode === 'inbox' ? 'inbox' : 'department', teamId: d.teamId || '',
+          migration: d.migration ?? null,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  const refreshIntegrations = () => {
+    fetch('/api/settings/integrations')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.integrations)) setIntegrations(d.integrations); })
+      .catch(() => {});
+  };
+
+  const saveClickup = async () => {
+    setClickupSaving(true); setClickupSaved(false);
+    try {
+      const payload: any = { enabled: clickup.enabled, routingMode: clickup.routingMode };
+      if (clickupToken.trim()) payload.token = clickupToken.trim();
+      const res = await fetch('/api/settings/clickup', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        setClickupSaved(true);
+        if (clickupToken.trim()) { setClickup(c => ({ ...c, tokenSet: true })); setClickupToken(''); }
+        setTimeout(() => setClickupSaved(false), 2500);
+        refreshIntegrations();
+      }
+    } catch (e) { console.error(e); }
+    finally { setClickupSaving(false); }
+  };
+
+  const testClickup = async () => {
+    setClickupTesting(true); setClickupTest(null);
+    try {
+      // If a fresh token was typed, persist it first so the test hits the new one.
+      if (clickupToken.trim()) {
+        const saveRes = await fetch('/api/settings/clickup', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: clickupToken.trim() }) });
+        if (!saveRes.ok) { setClickupTest({ ok: false, msg: t('settings.networkError') }); return; }
+        setClickup(c => ({ ...c, tokenSet: true })); setClickupToken('');
+      }
+      const res = await fetch('/api/settings/clickup/test', { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      setClickupTest(res.ok
+        ? { ok: true, msg: d.team ? `${t('settings.connectionSuccess')} · ${d.team}` : t('settings.connectionSuccess') }
+        : { ok: false, msg: d.error || t('settings.networkError') });
+    } catch { setClickupTest({ ok: false, msg: t('settings.networkError') }); }
+    finally { setClickupTesting(false); }
+  };
 
   const saveS3 = async () => {
     setS3Saving(true); setS3Saved(false);
@@ -418,6 +481,53 @@ export function IntegrationsTab() {
             </button>
             {s3Saved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
             {s3Test && <span style={{ fontSize: 12.5, color: s3Test.ok ? 'var(--green)' : '#f87171' }}>{s3Test.msg}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* ClickUp */}
+      <div className="card" style={{ padding: '18px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <ListChecks size={16} style={{ color: 'var(--accent-2)' }} />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>ClickUp</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{t('settings.clickupDesc')}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+          <Toggle label={t('settings.clickupEnabled')} value={clickup.enabled} onChange={v => setClickup(c => ({ ...c, enabled: v }))} />
+          <FieldWrapper label={clickup.tokenSet ? t('settings.clickupTokenSet') : t('settings.clickupToken')}>
+            <input className="field" type="password" value={clickupToken}
+              placeholder={clickup.tokenSet ? '••••••••••••' : 'pk_...'}
+              onChange={e => setClickupToken(e.target.value)}
+              style={{ fontFamily: 'var(--font-mono)' }} />
+          </FieldWrapper>
+          <FieldWrapper label={t('settings.clickupRouting')}>
+            <select className="field" value={clickup.routingMode}
+              onChange={e => setClickup(c => ({ ...c, routingMode: e.target.value === 'inbox' ? 'inbox' : 'department' }))}>
+              <option value="department">{t('settings.clickupRoutingDepartment')}</option>
+              <option value="inbox">{t('settings.clickupRoutingInbox')}</option>
+            </select>
+          </FieldWrapper>
+          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupHint')}</div>
+          {clickup.migration?.state && (
+            <div style={{ fontSize: 12, color: clickup.migration.state === 'error' ? '#f87171' : 'var(--muted)' }}>
+              {clickup.migration.state === 'running'
+                ? t('settings.clickupMigrating', { done: clickup.migration.migrated ?? 0, total: clickup.migration.total ?? 0 })
+                : clickup.migration.state === 'done'
+                  ? t('settings.clickupMigrated', { count: clickup.migration.migrated ?? 0 })
+                  : t('settings.clickupMigrationError')}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary btn-sm" onClick={saveClickup} disabled={clickupSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {clickupSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('common.save')}
+            </button>
+            <button className="btn btn-sm" onClick={testClickup} disabled={clickupTesting || (!clickup.tokenSet && !clickupToken.trim())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {clickupTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
+            </button>
+            {clickupSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
+            {clickupTest && <span style={{ fontSize: 12.5, color: clickupTest.ok ? 'var(--green)' : '#f87171' }}>{clickupTest.msg}</span>}
           </div>
         </div>
       </div>

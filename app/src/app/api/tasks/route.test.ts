@@ -17,6 +17,7 @@ vi.mock('@/lib/tasks', () => ({
   deleteTask: vi.fn(async () => undefined),
   authorizeTaskMutation: vi.fn(),
   listTaskFields: vi.fn(async () => []),
+  isClickUpManaged: vi.fn(async () => false),
 }));
 vi.mock('@/lib/access', () => ({ userCanViewTask: vi.fn(async () => true) }));
 vi.mock('@/lib/task-notify', () => ({ notifyTaskAssigned: vi.fn(), notifyTaskUpdated: vi.fn() }));

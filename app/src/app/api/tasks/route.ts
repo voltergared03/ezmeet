@@ -3,7 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { requireAuth } from "@/lib/api-auth";
 import { userCanViewTask } from "@/lib/access";
 import { notifyTaskAssigned, notifyTaskUpdated } from "@/lib/task-notify";
-import { listTasks, createTask, updateTask, deleteTask, authorizeTaskMutation, listTaskFields } from "@/lib/tasks";
+import { listTasks, createTask, updateTask, deleteTask, authorizeTaskMutation, listTaskFields, isClickUpManaged } from "@/lib/tasks";
 import { z } from "zod";
 import { validateBody } from "@/lib/validate";
 
@@ -75,6 +75,10 @@ export async function POST(req: NextRequest) {
   if (v.data.parentId && !(await userCanViewTask(v.data.parentId, session.user.id, session.user.role))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // Can't add a subtask under a ClickUp-managed parent (read-only mirror in Garely).
+  if (v.data.parentId && (await isClickUpManaged(v.data.parentId))) {
+    return NextResponse.json({ error: (await getTranslations("errors"))("clickupManaged") }, { status: 409 });
+  }
 
   const result = await createTask(session, v.data);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
@@ -100,6 +104,8 @@ export async function PATCH(req: NextRequest) {
   if ("error" in authz) {
     return NextResponse.json({ error: authz.error === "taskNotFound" ? t("taskNotFound") : authz.error }, { status: authz.status });
   }
+
+  if (await isClickUpManaged(taskId)) return NextResponse.json({ error: t("clickupManaged") }, { status: 409 });
 
   const result = await updateTask(taskId, fields);
   if (!result) return NextResponse.json({ error: t("taskNotFound") }, { status: 404 });
@@ -134,6 +140,8 @@ export async function DELETE(req: NextRequest) {
   if ("error" in authz) {
     return NextResponse.json({ error: authz.error === "taskNotFound" ? t("taskNotFound") : authz.error }, { status: authz.status });
   }
+
+  if (await isClickUpManaged(taskId)) return NextResponse.json({ error: t("clickupManaged") }, { status: 409 });
 
   try {
     await deleteTask(taskId);

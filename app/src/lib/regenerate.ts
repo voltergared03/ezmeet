@@ -17,6 +17,7 @@ import { sendReportEmail } from './report-email';
 import { provisionSystemTasksTable } from './system-tasks-table';
 import { provisionSystemDecisionsTable } from './system-decisions-table';
 import { createTaskFromAI, aiCellsFromModel, AI_FILLABLE_TYPES } from './tasks';
+import { pushMeetingTasksToClickUp, type ClickUpPushItem } from './clickup';
 import { coerceRowData } from './base-rows';
 
 export interface ReTranscribedSegment {
@@ -502,6 +503,10 @@ ${numbered}`;
   const allDecisions = topics.flatMap((t: any) => t.decisions) as { text: string; owner: string | null }[];
   const leadFirst = (lead: string | null, ids: string[]) => (lead ? [lead, ...ids.filter((x) => x !== lead)] : ids);
 
+  // Collected AFTER commit for the (opt-in, fire-and-forget) ClickUp push. Captured
+  // here because the transaction's return value (and the created Row ids) is discarded.
+  const clickupItems: ClickUpPushItem[] = [];
+
   await prisma.$transaction(async (tx) => {
     // Re-derive AI tasks: delete the meeting's AI Rows (cascades TaskRow + Row*).
     const aiRows = await tx.taskRow.findMany({ where: { meetingId, source: 'ai' }, select: { rowId: true } });
@@ -537,9 +542,13 @@ ${numbered}`;
         regIds: leadFirst(r.leadId, r.regIds),
         cells: r.cells,
       });
+      clickupItems.push({
+        rowId: parentRowId, title: r.title, priority: r.priority ?? null, dueDate: r.dueDate,
+        departmentId: r.departmentId, assigneeUserIds: leadFirst(r.leadId, r.regIds), parentTitle: null,
+      });
       // Subtasks: child rows under the parent, inheriting its department.
       for (const s of r.subtasks) {
-        await createTaskFromAI(tx, {
+        const { rowId: subRowId } = await createTaskFromAI(tx, {
           tableId: prov.table.id,
           fieldIds: prov.fieldIds,
           fields: taskFields,
@@ -551,6 +560,10 @@ ${numbered}`;
           priority: s.priority,
           dueDate: s.dueDate,
           regIds: leadFirst(s.leadId, s.regIds),
+        });
+        clickupItems.push({
+          rowId: subRowId, title: s.title, priority: s.priority ?? null, dueDate: s.dueDate,
+          departmentId: r.departmentId, assigneeUserIds: leadFirst(s.leadId, s.regIds), parentTitle: r.title,
         });
       }
     }
@@ -647,6 +660,15 @@ ${numbered}`;
     } catch (e) {
       console.error('report email failed:', e);
     }
+  }
+
+  // ClickUp push (opt-in, non-blocking, idempotent). Runs on BOTH first generation
+  // and regeneration so re-runs UPDATE the ClickUp tasks instead of duplicating.
+  // Self-gates on config (silent no-op unless enabled) and never throws.
+  try {
+    await pushMeetingTasksToClickUp(meetingId, clickupItems);
+  } catch (e) {
+    console.error('clickup push failed:', e);
   }
 
   return { topics: topics.length };

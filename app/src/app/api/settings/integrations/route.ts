@@ -32,7 +32,7 @@ export async function GET() {
     prisma.meeting.count({ where: { status: 'live' } }).catch(() => 0),
   ]);
 
-  const keys = await readConfig(['DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL']);
+  const keys = await readConfig(['DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE']);
   const ds = await getDeepSeekConfig();
   const smtp = await getSmtpConfig().catch(() => null);
   const s3 = await getS3Config().catch(() => null);
@@ -45,6 +45,10 @@ export async function GET() {
   // check DB+env (getGoogleConfig) — NOT env alone, else a wizard-configured
   // workspace is falsely flagged "not configured" and the checklist nags forever.
   const googleOk = !!(google.clientId && google.clientSecret);
+  const clickupOk = keys.CLICKUP_ENABLED === 'true' && !!(keys.CLICKUP_TOKEN || '').trim();
+  const clickupMetric = clickupOk
+    ? (keys.CLICKUP_ROUTING_MODE === 'inbox' ? t('clickupInbox') : t('clickupByDept'))
+    : t('notConfiguredMetric');
 
   const integrations = [
     { name: 'LiveKit', desc: 'WebRTC SFU', status: livekitOk ? 'connected' : 'not_configured', metric: liveMeetings > 0 ? t('liveMeetings', { count: liveMeetings }) : 'self-hosted' },
@@ -54,6 +58,7 @@ export async function GET() {
     { name: 'Google OAuth', desc: t('descGoogle'), status: googleOk ? 'connected' : 'not_configured', metric: t('users', { count: userCount }) },
     { name: 'PostgreSQL', desc: 'Prisma · self-hosted', status: dbStatus, metric: dbSize },
     { name: 'S3 Storage', desc: t('descS3'), status: s3 ? 'connected' : 'not_configured', metric: s3 ? s3.bucket : t('notConfiguredMetric') },
+    { name: 'ClickUp', desc: t('descClickup'), status: clickupOk ? 'connected' : 'not_configured', metric: clickupMetric },
   ];
 
   return NextResponse.json({ integrations });

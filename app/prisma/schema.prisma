@@ -765,12 +765,21 @@ model TaskRow {
   parentRowId  String?
   source       String    @default("manual") // ai | manual
   completedAt  DateTime?
+  // ClickUp two-way sync (set when this task is "owned" by ClickUp — i.e. an
+  // assignee exists in the ClickUp workspace). While set, the task renders
+  // read-only in Garely (managed in ClickUp); the webhook mirrors status changes
+  // and deletions back here. Cleared when ClickUp is disconnected.
+  clickupTaskId  String?
+  clickupUrl     String?
+  clickupStatus  String? // last status mirrored FROM ClickUp (display)
+  clickupSyncedAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   @@index([meetingId])
   @@index([departmentId])
   @@index([parentRowId])
+  @@index([clickupTaskId])
 }
 
 // Idempotency log for date-field reminders (one row per row×field×target-day
@@ -894,4 +903,26 @@ model ServerFileTransfer {
   @@index([orgId, createdAt])
   @@index([connectionId])
   @@index([sessionId])
+}
+
+// === ClickUp integration (one-way push of AI meeting tasks → ClickUp) ===
+// Idempotency link. Row.id is NOT stable across report regenerations (regenerate
+// delete-then-inserts the meeting's AI task Rows with fresh cuids), so the link
+// keys on a STABLE semantic tuple — meetingId + normalized title + departmentId
+// (+ parent title for subtasks) — hashed into `dedupeKey`. On regenerate the same
+// task yields the same key → we UPDATE the existing ClickUp task instead of
+// creating a duplicate. No FK to Row (the Row id churns); meetingId is the anchor.
+model ClickUpTaskLink {
+  id            String   @id @default(cuid())
+  meetingId     String
+  dedupeKey     String // sha256(meetingId | normTitle | departmentId | parentTitle)
+  clickupTaskId String
+  clickupUrl    String
+  listId        String?
+  title         String? // last-synced title (audit/debug)
+  syncedAt      DateTime @default(now())
+
+  @@unique([meetingId, dedupeKey])
+  @@index([meetingId])
+  @@index([clickupTaskId])
 }

@@ -10,6 +10,18 @@ Google Calendar auto-connect, database ownership transfer, and an iOS 26 Liquid
 Glass mobile navigation bar.
 
 ### Added
+- **Two-way ClickUp integration — ClickUp becomes the primary task manager.**
+  Paste a ClickUp Personal API token in Settings → Integrations and turn it on;
+  everything else (workspace, members, department→list routing, the "Source"
+  field) is auto-discovered. Any task whose assignee exists in ClickUp (matched
+  by email) is pushed to the list matching its department, tagged **Source =
+  Garely Call**, and becomes a **read-only mirror** in Garely (board, report
+  action items and the detail drawer show a "Managed in ClickUp" badge + link;
+  edits happen in ClickUp). Status changes and deletions flow **back** from
+  ClickUp via a signed webhook (HMAC-SHA256). On connect, all existing assigned
+  tasks migrate to ClickUp; on disconnect the webhook is removed and tasks return
+  to native Garely editing. Tasks with no ClickUp assignee stay native. Opt-in,
+  non-blocking, and a no-op until configured.
 - **Transfer ownership of databases and individual tables.** A base owner or a
   workspace admin can hand a database to another member (the outgoing owner is
   kept on with admin access); each table now has its own owner who can rename,
