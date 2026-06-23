@@ -7,6 +7,7 @@ import {
   Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare, GitBranch,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
+import { LinearIcon, ClickUpIcon, DeepgramIcon, LiveKitIcon, PostgresIcon, S3Icon, GoogleIcon } from '../components/BrandIcons';
 
 // Which connectors open a config modal (the rest are read-only status cards).
 const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Linear', 'Google OAuth', 'Chat']);
@@ -15,15 +16,15 @@ export function IntegrationsTab() {
   const t = useTranslations();
   const locale = useLocale();
   const INTEGRATION_ICONS: Record<string, React.ReactNode> = {
-    LiveKit: <Video size={20} />,
-    Deepgram: <Mic size={20} />,
+    LiveKit: <LiveKitIcon />,
+    Deepgram: <DeepgramIcon />,
     'AI model': <Sparkles size={20} />,
     'SMTP Email': <Mail size={20} />,
-    'Google OAuth': <Globe size={20} />,
-    PostgreSQL: <Archive size={20} />,
-    'S3 Storage': <Download size={20} />,
-    ClickUp: <ListChecks size={20} />,
-    Linear: <GitBranch size={20} />,
+    'Google OAuth': <GoogleIcon />,
+    PostgreSQL: <PostgresIcon />,
+    'S3 Storage': <S3Icon />,
+    ClickUp: <ClickUpIcon />,
+    Linear: <LinearIcon />,
     Chat: <MessageSquare size={20} />,
   };
   const [integrations, setIntegrations] = useState<{ name: string; desc: string; status: string; metric?: string }[]>([]);
