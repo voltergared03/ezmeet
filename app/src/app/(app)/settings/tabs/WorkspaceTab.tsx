@@ -185,26 +185,6 @@ export function WorkspaceTab() {
         </div>
       </div>
 
-      {/* Provider pricing */}
-      <div className="card" style={{ padding: '18px 22px' }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{t('settings.providerPricing')}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 }}>{t('settings.providerPricingDesc')}</div>
-        <div className="settings-grid-2" style={{ display: 'grid', gap: 14 }}>
-          <FieldWrapper label={t('settings.deepseekInputPrice')}>
-            <input className="field" type="number" step="0.01" value={ws.PRICE_DEEPSEEK_IN} onChange={e => set('PRICE_DEEPSEEK_IN', Number(e.target.value))} />
-          </FieldWrapper>
-          <FieldWrapper label={t('settings.deepseekOutputPrice')}>
-            <input className="field" type="number" step="0.01" value={ws.PRICE_DEEPSEEK_OUT} onChange={e => set('PRICE_DEEPSEEK_OUT', Number(e.target.value))} />
-          </FieldWrapper>
-          <FieldWrapper label={t('settings.deepgramPrice')}>
-            <input className="field" type="number" step="0.0001" value={ws.PRICE_DEEPGRAM_MIN} onChange={e => set('PRICE_DEEPGRAM_MIN', Number(e.target.value))} />
-          </FieldWrapper>
-          <FieldWrapper label={t('settings.emailLimitPerMonth')}>
-            <input className="field" type="number" value={ws.EMAIL_LIMIT} onChange={e => set('EMAIL_LIMIT', Number(e.target.value))} />
-          </FieldWrapper>
-        </div>
-      </div>
-
       {/* Save */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="btn btn-primary" onClick={save} disabled={saving}

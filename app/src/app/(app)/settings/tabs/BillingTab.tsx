@@ -2,12 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { UsageRow } from '../components/shared';
+import { Save, Check, Loader2 } from 'lucide-react';
+import { UsageRow, FieldWrapper } from '../components/shared';
+
+type Pricing = { PRICE_DEEPSEEK_IN: number; PRICE_DEEPSEEK_OUT: number; PRICE_DEEPGRAM_MIN: number; EMAIL_LIMIT: number };
 
 export function BillingTab() {
   const t = useTranslations();
   const [usage, setUsage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Provider pricing — drives the cost figures above; lives here (Usage) so the
+  // rates sit next to the spend they compute. Saved via the workspace config
+  // endpoint (partial PATCH), independent of the Workspace tab.
+  const [pricing, setPricing] = useState<Pricing | null>(null);
+  const [savingPricing, setSavingPricing] = useState(false);
+  const [pricingSaved, setPricingSaved] = useState(false);
+  const [pricingErr, setPricingErr] = useState('');
 
   useEffect(() => {
     fetch('/api/settings/usage')
@@ -15,7 +26,37 @@ export function BillingTab() {
       .then(data => { if (!data.error) setUsage(data); })
       .catch(console.error)
       .finally(() => setLoading(false));
+    fetch('/api/settings/workspace')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.error) setPricing({
+          PRICE_DEEPSEEK_IN: Number(d.PRICE_DEEPSEEK_IN ?? 0),
+          PRICE_DEEPSEEK_OUT: Number(d.PRICE_DEEPSEEK_OUT ?? 0),
+          PRICE_DEEPGRAM_MIN: Number(d.PRICE_DEEPGRAM_MIN ?? 0),
+          EMAIL_LIMIT: Number(d.EMAIL_LIMIT ?? 0),
+        });
+      })
+      .catch(() => {});
   }, []);
+
+  const setP = (k: keyof Pricing, v: number) => setPricing(p => (p ? { ...p, [k]: v } : p));
+
+  const savePricing = async () => {
+    if (!pricing) return;
+    setSavingPricing(true); setPricingSaved(false); setPricingErr('');
+    try {
+      const res = await fetch('/api/settings/workspace', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pricing),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setPricingSaved(true); setTimeout(() => setPricingSaved(false), 2500);
+        // Re-pull usage so the cost figures reflect the new rates immediately.
+        fetch('/api/settings/usage').then(r => r.json()).then(data => { if (!data.error) setUsage(data); }).catch(() => {});
+      } else { setPricingErr(d.error || t('settings.saveFailed')); }
+    } catch { setPricingErr(t('settings.networkError')); }
+    finally { setSavingPricing(false); }
+  };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>{t('common.loading')}</div>;
   if (!usage) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>{t('settings.loadDataFailed')}</div>;
@@ -37,7 +78,7 @@ export function BillingTab() {
   };
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div className="billing-grid" style={{ display: 'grid', gap: 18 }}>
         <div className="card" style={{
           padding: 24, gridColumn: '1 / -1',
@@ -73,6 +114,40 @@ export function BillingTab() {
           </div>
         </div>
       </div>
+
+      {/* Provider pricing — the rates that compute the costs above */}
+      {pricing && (
+        <div className="card" style={{ padding: '18px 22px' }}>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{t('settings.providerPricing')}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 }}>{t('settings.providerPricingDesc')}</div>
+          <div className="settings-grid-2" style={{ display: 'grid', gap: 14 }}>
+            <FieldWrapper label={t('settings.deepseekInputPrice')}>
+              <input className="field" type="number" step="0.01" value={pricing.PRICE_DEEPSEEK_IN} onChange={e => setP('PRICE_DEEPSEEK_IN', Number(e.target.value))} />
+            </FieldWrapper>
+            <FieldWrapper label={t('settings.deepseekOutputPrice')}>
+              <input className="field" type="number" step="0.01" value={pricing.PRICE_DEEPSEEK_OUT} onChange={e => setP('PRICE_DEEPSEEK_OUT', Number(e.target.value))} />
+            </FieldWrapper>
+            <FieldWrapper label={t('settings.deepgramPrice')}>
+              <input className="field" type="number" step="0.0001" value={pricing.PRICE_DEEPGRAM_MIN} onChange={e => setP('PRICE_DEEPGRAM_MIN', Number(e.target.value))} />
+            </FieldWrapper>
+            <FieldWrapper label={t('settings.emailLimitPerMonth')}>
+              <input className="field" type="number" value={pricing.EMAIL_LIMIT} onChange={e => setP('EMAIL_LIMIT', Number(e.target.value))} />
+            </FieldWrapper>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+            <button className="btn btn-primary" onClick={savePricing} disabled={savingPricing}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {savingPricing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={14} />} {t('common.save')}
+            </button>
+            {pricingSaved && (
+              <span style={{ fontSize: 13, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Check size={14} /> {t('common.saved')}
+              </span>
+            )}
+            {pricingErr && <span style={{ fontSize: 13, color: 'var(--red)' }}>{pricingErr}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
