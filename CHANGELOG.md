@@ -4,6 +4,42 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.16.0-beta.1] — 2026-06-23
+
+Tier 1 integrations: outbound chat notifications, a pluggable AI-model provider
+with an API-driven model picker, and a full two-way Linear sync — plus the AI
+provider is no longer locked to DeepSeek.
+
+### Added
+- **Chat notifications → Telegram / Slack / Mattermost / Discord.** Settings →
+  Integrations → Chat: paste a Telegram bot token + chat id, or a Slack /
+  Mattermost / Discord incoming-webhook URL, and turn it on. Meeting AI reports
+  (summary + decisions + link) post when generated, and meeting reminders post
+  ahead of the call. Secrets are encrypted at rest; opt-in, non-blocking, and
+  never delays or breaks report generation.
+- **Pluggable AI model provider.** The AI integration is now provider-agnostic —
+  pick DeepSeek, OpenRouter, OpenAI, Anthropic, Ollama (local), or any custom
+  OpenAI-compatible endpoint in Settings → Integrations → AI model. Click **Load
+  models** to pull the provider's model list into a dropdown (or type a custom
+  id), and set an optional **Max output tokens** ceiling — auto-filled from the
+  model's reported limit where the provider exposes it. Existing DeepSeek setups
+  keep working unchanged. Reach Claude via OpenRouter (`anthropic/claude-opus-4-8`)
+  or Anthropic directly.
+- **Two-way Linear sync — AI tasks ↔ Linear issues.** Paste a Linear API key in
+  Settings → Integrations → Linear and turn it on; teams, members (matched by
+  email) and workflow states are auto-discovered. Tasks route to the team
+  matching each department; any task whose assignee exists in Linear becomes a
+  **read-only mirror** in Garely (badge + link) while Linear owns it. Workflow-
+  state changes and deletions flow **back** via a signed webhook (HMAC-SHA256
+  with a replay guard). On connect, existing assigned tasks migrate; on
+  disconnect, tasks return to native Garely editing. Tasks with no Linear
+  assignee stay native. Opt-in and a no-op until configured.
+
+### Fixed
+- **Meeting-chat assistant honours the configured AI model.** It was hardcoded to
+  a DeepSeek model id and would have failed against other providers; it now uses
+  whichever model the workspace has selected.
+
 ## [1.15.0-beta.1] — 2026-06-23
 
 A two-way ClickUp integration that can hand task management over to ClickUp, plus
