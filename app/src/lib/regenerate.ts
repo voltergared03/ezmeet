@@ -18,6 +18,7 @@ import { provisionSystemTasksTable } from './system-tasks-table';
 import { provisionSystemDecisionsTable } from './system-decisions-table';
 import { createTaskFromAI, aiCellsFromModel, AI_FILLABLE_TYPES } from './tasks';
 import { pushMeetingTasksToClickUp, type ClickUpPushItem } from './clickup';
+import { pushMeetingTasksToLinear } from './linear';
 import { notifyChatReportReady } from './chat-notify';
 import { coerceRowData } from './base-rows';
 
@@ -347,7 +348,7 @@ ${numbered}`;
       temperature: 0.2,
       // Large headroom: reasoning models spend much of the budget on hidden
       // reasoning before the JSON, and a detailed report can be long.
-      max_tokens: 64000,
+      max_tokens: Math.min(64000, ds.maxTokens ?? 64000), // configured value is a CEILING, never a floor (don't starve the report)
       // Stream the response so a multi-minute generation doesn't trip fetch's
       // header/idle timeouts (the full JSON only arrives at the very end).
       stream: true,
@@ -665,13 +666,19 @@ ${numbered}`;
     void notifyChatReportReady(meetingId);
   }
 
-  // ClickUp push (opt-in, non-blocking, idempotent). Runs on BOTH first generation
-  // and regeneration so re-runs UPDATE the ClickUp tasks instead of duplicating.
-  // Self-gates on config (silent no-op unless enabled) and never throws.
+  // ClickUp + Linear push (opt-in, non-blocking, idempotent). Both run on first
+  // generation AND regeneration so re-runs UPDATE the external tasks instead of
+  // duplicating. Each self-gates on its own config (silent no-op unless enabled),
+  // shares the same captured items (identical shape), and never throws.
   try {
     await pushMeetingTasksToClickUp(meetingId, clickupItems);
   } catch (e) {
     console.error('clickup push failed:', e);
+  }
+  try {
+    await pushMeetingTasksToLinear(meetingId, clickupItems);
+  } catch (e) {
+    console.error('linear push failed:', e);
   }
 
   return { topics: topics.length };

@@ -40,6 +40,7 @@ cat > /var/spool/cron/crontabs/root <<'EOF'
 0 8 * * *   /usr/local/bin/run-cron-job base-reminders >/proc/1/fd/1 2>&1
 */10 * * * * /usr/local/bin/run-cron-job calendar-sync >/proc/1/fd/1 2>&1
 */30 * * * * /usr/local/bin/run-cron-job clickup-health >/proc/1/fd/1 2>&1
+*/30 * * * * /usr/local/bin/run-cron-job linear-health >/proc/1/fd/1 2>&1
 EOF
 
 echo "[cron] scheduler started — jobs target ${APP_URL}"

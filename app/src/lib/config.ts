@@ -58,15 +58,21 @@ function normBase(u: string): string {
  * Active LLM provider config. New `AI_*` keys win; falls back to the legacy
  * `DEEPSEEK_*` keys/env so existing installs keep working with zero reconfig.
  */
-export async function getLlmConfig(): Promise<{ provider: LlmProvider; apiKey: string; baseUrl: string; model: string }> {
-  const m = await readConfig(['AI_PROVIDER', 'AI_API_KEY', 'AI_BASE_URL', 'AI_MODEL', 'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'DEEPSEEK_MODEL']);
+export async function getLlmConfig(): Promise<{ provider: LlmProvider; apiKey: string; baseUrl: string; model: string; maxTokens: number | null }> {
+  const m = await readConfig(['AI_PROVIDER', 'AI_API_KEY', 'AI_BASE_URL', 'AI_MODEL', 'AI_MAX_TOKENS', 'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'DEEPSEEK_MODEL']);
   const provider = LLM_PROVIDERS.includes(m.AI_PROVIDER as LlmProvider) ? (m.AI_PROVIDER as LlmProvider) : 'deepseek';
   const preset = LLM_PRESETS[provider];
+  // Optional output-token ceiling. null → each call site keeps its own default
+  // (so leaving it unset never changes existing behavior); a positive value
+  // overrides max_tokens on the generative calls (report, chat, quiz).
+  const rawMax = Number(m.AI_MAX_TOKENS || process.env.AI_MAX_TOKENS || '');
+  const maxTokens = Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : null;
   return {
     provider,
     apiKey: decKey(m.AI_API_KEY) || m.DEEPSEEK_API_KEY || process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || '',
     baseUrl: normBase(m.AI_BASE_URL || m.DEEPSEEK_BASE_URL || process.env.AI_BASE_URL || process.env.DEEPSEEK_BASE_URL || preset.baseUrl),
     model: m.AI_MODEL || m.DEEPSEEK_MODEL || process.env.AI_MODEL || process.env.DEEPSEEK_MODEL || preset.model,
+    maxTokens,
   };
 }
 
@@ -75,9 +81,9 @@ export async function getLlmConfig(): Promise<{ provider: LlmProvider; apiKey: s
  * whatever the admin selected) via {@link getLlmConfig}. Existing AI call sites
  * keep calling this and transparently pick up the configured provider.
  */
-export async function getDeepSeekConfig(): Promise<{ apiKey: string; baseUrl: string; model: string }> {
-  const { apiKey, baseUrl, model } = await getLlmConfig();
-  return { apiKey, baseUrl, model };
+export async function getDeepSeekConfig(): Promise<{ apiKey: string; baseUrl: string; model: string; maxTokens: number | null }> {
+  const { apiKey, baseUrl, model, maxTokens } = await getLlmConfig();
+  return { apiKey, baseUrl, model, maxTokens };
 }
 
 /** Google OAuth credentials — DB first (set via /setup), env fallback. */

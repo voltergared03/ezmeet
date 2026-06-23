@@ -49,6 +49,15 @@ describe('getLlmConfig', () => {
 
   it('getDeepSeekConfig delegates to the active provider (keyless Ollama)', async () => {
     prismaMock.systemConfig.findMany.mockResolvedValue(rows({ AI_PROVIDER: 'ollama', AI_BASE_URL: 'http://localhost:11434', AI_MODEL: 'llama3.1' }) as any);
-    expect(await getDeepSeekConfig()).toEqual({ apiKey: '', baseUrl: 'http://localhost:11434', model: 'llama3.1' });
+    expect(await getDeepSeekConfig()).toEqual({ apiKey: '', baseUrl: 'http://localhost:11434', model: 'llama3.1', maxTokens: null });
+  });
+
+  it('maxTokens is null when unset and a positive integer when set', async () => {
+    prismaMock.systemConfig.findMany.mockResolvedValue([] as any);
+    expect((await getLlmConfig()).maxTokens).toBeNull();
+    prismaMock.systemConfig.findMany.mockResolvedValue(rows({ AI_MAX_TOKENS: '32000' }) as any);
+    expect((await getLlmConfig()).maxTokens).toBe(32000);
+    prismaMock.systemConfig.findMany.mockResolvedValue(rows({ AI_MAX_TOKENS: '0' }) as any);
+    expect((await getLlmConfig()).maxTokens).toBeNull(); // 0 / invalid → fall back to defaults
   });
 });

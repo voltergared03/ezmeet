@@ -773,6 +773,14 @@ model TaskRow {
   clickupUrl     String?
   clickupStatus  String? // last status mirrored FROM ClickUp (display)
   clickupSyncedAt DateTime?
+  // Linear two-way sync — same ownership model as ClickUp above: set when this
+  // task is "owned" by Linear (an assignee exists in the Linear workspace). While
+  // set, the task renders read-only in Garely; the webhook mirrors workflow-state
+  // changes + deletions back here. Cleared when Linear is disconnected.
+  linearIssueId   String?
+  linearUrl       String?
+  linearStatus    String? // last workflow-state name mirrored FROM Linear (display)
+  linearSyncedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -780,6 +788,7 @@ model TaskRow {
   @@index([departmentId])
   @@index([parentRowId])
   @@index([clickupTaskId])
+  @@index([linearIssueId])
 }
 
 // Idempotency log for date-field reminders (one row per row×field×target-day
@@ -925,4 +934,23 @@ model ClickUpTaskLink {
   @@unique([meetingId, dedupeKey])
   @@index([meetingId])
   @@index([clickupTaskId])
+}
+
+// === Linear integration (two-way sync of AI meeting tasks ↔ Linear issues) ===
+// Same idempotency model as ClickUpTaskLink — the link keys on a STABLE semantic
+// tuple hashed into `dedupeKey` (Row.id churns on regenerate). On regenerate the
+// same task yields the same key → we UPDATE the existing Linear issue, not dup.
+model LinearTaskLink {
+  id            String   @id @default(cuid())
+  meetingId     String
+  dedupeKey     String // sha256(meetingId | normTitle | departmentId | parentTitle)
+  linearIssueId String
+  linearUrl     String
+  teamId        String? // destination Linear team (audit/debug)
+  title         String? // last-synced title (audit/debug)
+  syncedAt      DateTime @default(now())
+
+  @@unique([meetingId, dedupeKey])
+  @@index([meetingId])
+  @@index([linearIssueId])
 }

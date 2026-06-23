@@ -17,6 +17,7 @@ export async function GET() {
     provider: cfg.provider,
     baseUrl: cfg.baseUrl,
     model: cfg.model,
+    maxTokens: cfg.maxTokens,
     apiKeySet: !!((raw.AI_API_KEY || raw.DEEPSEEK_API_KEY || process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || '').trim()),
     presets: LLM_PRESETS,
   });
@@ -43,6 +44,12 @@ export async function PATCH(req: NextRequest) {
     AI_BASE_URL: (typeof body.baseUrl === 'string' && body.baseUrl.trim()) ? body.baseUrl.trim() : preset.baseUrl,
     AI_MODEL: (typeof body.model === 'string' && body.model.trim()) ? body.model.trim() : preset.model,
   };
+  // Optional output-token ceiling. A positive number sets it; 0 / '' / null clears
+  // it (back to per-call defaults). Only touch the key when the field is present.
+  if (body.maxTokens !== undefined) {
+    const n = Math.floor(Number(body.maxTokens));
+    updates.AI_MAX_TOKENS = Number.isFinite(n) && n > 0 ? String(n) : '';
+  }
   // Only overwrite the key when a real value (not a masked placeholder) is supplied.
   const real = (v: unknown) => typeof v === 'string' && !!v.trim() && !/^[•*]+$/.test(v.trim());
   if (real(body.apiKey)) updates.AI_API_KEY = encryptSecret((body.apiKey as string).trim());

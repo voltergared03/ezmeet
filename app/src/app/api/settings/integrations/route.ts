@@ -33,7 +33,7 @@ export async function GET() {
     prisma.meeting.count({ where: { status: 'live' } }).catch(() => 0),
   ]);
 
-  const keys = await readConfig(['DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'CHAT_PROVIDER']);
+  const keys = await readConfig(['DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'LINEAR_ENABLED', 'LINEAR_TOKEN', 'LINEAR_ROUTING_MODE', 'CHAT_PROVIDER']);
   const ai = await getLlmConfig();
   const smtp = await getSmtpConfig().catch(() => null);
   const s3 = await getS3Config().catch(() => null);
@@ -51,6 +51,10 @@ export async function GET() {
   const clickupMetric = clickupOk
     ? (keys.CLICKUP_ROUTING_MODE === 'inbox' ? t('clickupInbox') : t('clickupByDept'))
     : t('notConfiguredMetric');
+  const linearOk = keys.LINEAR_ENABLED === 'true' && !!(keys.LINEAR_TOKEN || '').trim();
+  const linearMetric = linearOk
+    ? (keys.LINEAR_ROUTING_MODE === 'inbox' ? t('clickupInbox') : t('clickupByDept'))
+    : t('notConfiguredMetric');
   const chatOk = await isChatConfigured();
   const chatMetric = chatOk ? (keys.CHAT_PROVIDER || 'telegram') : t('notConfiguredMetric');
 
@@ -63,6 +67,7 @@ export async function GET() {
     { name: 'PostgreSQL', desc: 'Prisma · self-hosted', status: dbStatus, metric: dbSize },
     { name: 'S3 Storage', desc: t('descS3'), status: s3 ? 'connected' : 'not_configured', metric: s3 ? s3.bucket : t('notConfiguredMetric') },
     { name: 'ClickUp', desc: t('descClickup'), status: clickupOk ? 'connected' : 'not_configured', metric: clickupMetric },
+    { name: 'Linear', desc: t('descLinear'), status: linearOk ? 'connected' : 'not_configured', metric: linearMetric },
     { name: 'Chat', desc: t('descChat'), status: chatOk ? 'connected' : 'not_configured', metric: chatMetric },
   ];
 

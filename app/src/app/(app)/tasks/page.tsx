@@ -27,6 +27,7 @@ interface Subtask {
   id: string; title: string; status: string; priority: string;
   dueDate: string | null; assigneeName: string | null; assignee: TaskAssignee | null;
   clickupManaged?: boolean; clickupUrl?: string | null;
+  linearManaged?: boolean; linearUrl?: string | null;
 }
 interface Task {
   id: string; title: string; description?: string | null;
@@ -35,8 +36,9 @@ interface Task {
   assignee: TaskAssignee | null; meeting?: TaskMeeting;
   assigneeId?: string | null; completedAt?: string | null;
   departmentId?: string | null;
-  // ClickUp two-way sync: when managed, this task is a read-only mirror (edits in ClickUp).
+  // External two-way sync: when managed, this task is a read-only mirror (edits in ClickUp/Linear).
   clickupManaged?: boolean; clickupUrl?: string | null;
+  linearManaged?: boolean; linearUrl?: string | null;
   department?: { id: string; name: string; color: string | null } | null;
   parentId?: string | null;
   collaborators?: { userId: string }[];
@@ -94,16 +96,22 @@ function Hl({ text, q }: { text: string; q: string }) {
 }
 
 /* ─── Status checkbox ───────────────────────────────────── */
-/** Small "Managed in ClickUp" chip + link, shown on read-only (ClickUp-owned) tasks. */
-function ClickUpChip({ url }: { url?: string | null }) {
+/** Small "Managed in ClickUp/Linear" chip + link, shown on read-only (externally owned) tasks. */
+function ManagedChip({ label, url }: { label: string; url?: string | null }) {
   const inner = (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, lineHeight: 1.4, padding: "1px 7px", borderRadius: 6, background: "color-mix(in oklab, var(--accent) 14%, transparent)", color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>
-      ClickUp{url ? " ↗" : ""}
+      {label}{url ? " ↗" : ""}
     </span>
   );
   return url
-    ? <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title="Managed in ClickUp" style={{ textDecoration: "none" }}>{inner}</a>
+    ? <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title={`Managed in ${label}`} style={{ textDecoration: "none" }}>{inner}</a>
     : inner;
+}
+/** A task is externally owned (read-only mirror) if managed by ClickUp OR Linear. */
+function managedOf(t: { clickupManaged?: boolean; clickupUrl?: string | null; linearManaged?: boolean; linearUrl?: string | null }): { managed: boolean; label: string; url: string | null } {
+  if (t.linearManaged) return { managed: true, label: "Linear", url: t.linearUrl ?? null };
+  if (t.clickupManaged) return { managed: true, label: "ClickUp", url: t.clickupUrl ?? null };
+  return { managed: false, label: "", url: null };
 }
 
 function StatusCheckbox({ status, onClick }: { status: string; onClick: (e: React.MouseEvent) => void }) {
@@ -589,7 +597,7 @@ function TaskTableRow({ t, cols, onEdit, onStatusChange, q, expanded, onToggleEx
             textDecoration: isDone ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             <Hl text={t.title} q={q} />
           </span>
-          {t.clickupManaged && <ClickUpChip url={t.clickupUrl} />}
+          {(t.clickupManaged || t.linearManaged) && <ManagedChip label={t.linearManaged ? "Linear" : "ClickUp"} url={t.linearManaged ? t.linearUrl : t.clickupUrl} />}
         </div>
         {showSubtitle && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--muted)", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
@@ -859,7 +867,7 @@ function KanbanCard({ t, onEdit, onDragStart, dragging, customFields = [], membe
   const isDone = t.status === "done";
 
   return (
-    <div draggable={!t.clickupManaged} onDragStart={onDragStart} onClick={onEdit}
+    <div draggable={!(t.clickupManaged || t.linearManaged)} onDragStart={onDragStart} onClick={onEdit}
       style={{
         background: "var(--surface)", border: "1px solid var(--border)",
         borderLeft: isOverdue ? "3px solid var(--red)" : "1px solid var(--border)",
@@ -878,7 +886,7 @@ function KanbanCard({ t, onEdit, onDragStart, dragging, customFields = [], membe
           color: isDone ? "var(--muted)" : "var(--text)",
           textDecoration: isDone ? "line-through" : "none",
         }}>{t.title}</div>
-        {t.clickupManaged && <ClickUpChip url={t.clickupUrl} />}
+        {(t.clickupManaged || t.linearManaged) && <ManagedChip label={t.linearManaged ? "Linear" : "ClickUp"} url={t.linearManaged ? t.linearUrl : t.clickupUrl} />}
       </div>
       {t.meeting && t.meetingId ? (
         <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)", fontSize: 11.5, marginBottom: 10,
@@ -1723,24 +1731,24 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
           )}
         </div>
 
-        {task?.clickupManaged && (
+        {(task?.clickupManaged || task?.linearManaged) && (
           <div style={{ margin: "0 22px 12px", padding: "10px 12px", borderRadius: 8, background: "color-mix(in oklab, var(--accent) 10%, transparent)", border: "1px solid color-mix(in oklab, var(--accent) 30%, transparent)", fontSize: 12.5, color: "var(--accent)", display: "flex", alignItems: "center", gap: 8 }}>
-            <span>{tr("tasks.clickupManagedNotice")}</span>
-            {task.clickupUrl && <a href={task.clickupUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>ClickUp ↗</a>}
+            <span>{task?.linearManaged ? tr("tasks.linearManagedNotice") : tr("tasks.clickupManagedNotice")}</span>
+            {(task?.linearManaged ? task.linearUrl : task.clickupUrl) && <a href={(task?.linearManaged ? task.linearUrl : task.clickupUrl) || "#"} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>{task?.linearManaged ? "Linear ↗" : "ClickUp ↗"}</a>}
           </div>
         )}
 
         {/* Footer */}
         <div style={{ padding: "14px 22px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-          {!isNew && !task?.clickupManaged && (
+          {!isNew && !(task?.clickupManaged || task?.linearManaged) && (
             <button className="btn btn-sm" onClick={handleDelete} disabled={saving}
               style={{ color: "var(--red)", borderColor: "color-mix(in oklab, var(--red) 30%, transparent)" }}>
               <Trash2 size={13} /> {tr("common.delete")}
             </button>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            <button className="btn" onClick={onClose}>{task?.clickupManaged ? tr("common.close") : tr("common.cancel")}</button>
-            {!task?.clickupManaged && (
+            <button className="btn" onClick={onClose}>{(task?.clickupManaged || task?.linearManaged) ? tr("common.close") : tr("common.cancel")}</button>
+            {!(task?.clickupManaged || task?.linearManaged) && (
               <button className="btn btn-primary" disabled={!valid || saving} onClick={save}
                 style={{ opacity: valid && !saving ? 1 : 0.5, fontWeight: 600 }}>
                 {saving ? <Loader2 size={14} className="spin" /> : null}
@@ -1914,7 +1922,7 @@ export default function TasksPage() {
   }), [tasks, userId]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
-    if (tasks.find(t => t.id === taskId)?.clickupManaged) return; // read-only mirror — manage status in ClickUp
+    { const ext = tasks.find(t => t.id === taskId); if (ext?.clickupManaged || ext?.linearManaged) return; } // read-only mirror — manage status in ClickUp/Linear
     const prevTasks = tasks;
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     try {

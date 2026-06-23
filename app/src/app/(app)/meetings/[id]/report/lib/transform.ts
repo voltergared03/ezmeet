@@ -47,6 +47,8 @@ export function transformApiData(data: any): Meeting {
         done: t.status === 'done' || t.done || false,
         clickupManaged: !!t.clickupManaged,
         clickupUrl: t.clickupUrl ?? null,
+        linearManaged: !!t.linearManaged,
+        linearUrl: t.linearUrl ?? null,
       };
     });
 

@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import {
   Globe, Mic, Sparkles, Video, Mail, Archive, Download,
-  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare,
+  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare, GitBranch,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
 
 // Which connectors open a config modal (the rest are read-only status cards).
-const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Google OAuth', 'Chat']);
+const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Linear', 'Google OAuth', 'Chat']);
 
 export function IntegrationsTab() {
   const t = useTranslations();
@@ -23,6 +23,7 @@ export function IntegrationsTab() {
     PostgreSQL: <Archive size={20} />,
     'S3 Storage': <Download size={20} />,
     ClickUp: <ListChecks size={20} />,
+    Linear: <GitBranch size={20} />,
     Chat: <MessageSquare size={20} />,
   };
   const [integrations, setIntegrations] = useState<{ name: string; desc: string; status: string; metric?: string }[]>([]);
@@ -63,6 +64,14 @@ export function IntegrationsTab() {
   const [clickupTesting, setClickupTesting] = useState(false);
   const [clickupTest, setClickupTest] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  // Linear two-way sync config (mirrors ClickUp)
+  const [linear, setLinear] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department' });
+  const [linearToken, setLinearToken] = useState('');
+  const [linearSaving, setLinearSaving] = useState(false);
+  const [linearSaved, setLinearSaved] = useState(false);
+  const [linearTesting, setLinearTesting] = useState(false);
+  const [linearTest, setLinearTest] = useState<{ ok: boolean; msg: string } | null>(null);
+
   // Chat notifications config (Telegram / Slack / Mattermost / Discord)
   const [chat, setChat] = useState<{ enabled: boolean; provider: string; chatId: string; botTokenSet: boolean; webhookSet: boolean }>({ enabled: false, provider: 'telegram', chatId: '', botTokenSet: false, webhookSet: false });
   const [chatBotToken, setChatBotToken] = useState('');
@@ -73,9 +82,12 @@ export function IntegrationsTab() {
   const [chatTestRes, setChatTestRes] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // AI model provider config (DeepSeek / OpenRouter / OpenAI / Anthropic / Ollama / Custom)
-  const [ai, setAi] = useState<{ provider: string; baseUrl: string; model: string; apiKeySet: boolean }>({ provider: 'deepseek', baseUrl: '', model: '', apiKeySet: false });
+  const [ai, setAi] = useState<{ provider: string; baseUrl: string; model: string; maxTokens: string; apiKeySet: boolean }>({ provider: 'deepseek', baseUrl: '', model: '', maxTokens: '', apiKeySet: false });
   const [aiKey, setAiKey] = useState('');
   const [aiPresets, setAiPresets] = useState<Record<string, { label: string; baseUrl: string; model: string; keyless?: boolean }>>({});
+  const [aiModels, setAiModels] = useState<{ id: string; maxOutput: number | null; contextLength: number | null }[]>([]);
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  const [aiModelsErr, setAiModelsErr] = useState('');
   const [aiSaving, setAiSaving] = useState(false);
   const [aiSaved, setAiSaved] = useState(false);
   const [aiTesting, setAiTesting] = useState(false);
@@ -135,6 +147,19 @@ export function IntegrationsTab() {
   }, []);
 
   useEffect(() => {
+    fetch('/api/settings/linear')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.error) setLinear({
+          enabled: !!d.enabled, tokenSet: !!d.tokenSet,
+          routingMode: d.routingMode === 'inbox' ? 'inbox' : 'department',
+          migration: d.migration ?? null,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     fetch('/api/settings/chat')
       .then(r => r.json())
       .then(d => {
@@ -151,7 +176,7 @@ export function IntegrationsTab() {
       .then(r => r.json())
       .then(d => {
         if (!d.error) {
-          setAi({ provider: d.provider || 'deepseek', baseUrl: d.baseUrl || '', model: d.model || '', apiKeySet: !!d.apiKeySet });
+          setAi({ provider: d.provider || 'deepseek', baseUrl: d.baseUrl || '', model: d.model || '', maxTokens: d.maxTokens ? String(d.maxTokens) : '', apiKeySet: !!d.apiKeySet });
           if (d.presets) setAiPresets(d.presets);
         }
       })
@@ -207,6 +232,39 @@ export function IntegrationsTab() {
     finally { setClickupTesting(false); }
   };
 
+  const saveLinear = async () => {
+    setLinearSaving(true); setLinearSaved(false);
+    try {
+      const payload: any = { enabled: linear.enabled, routingMode: linear.routingMode };
+      if (linearToken.trim()) payload.token = linearToken.trim();
+      const res = await fetch('/api/settings/linear', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        setLinearSaved(true);
+        if (linearToken.trim()) { setLinear(c => ({ ...c, tokenSet: true })); setLinearToken(''); }
+        setTimeout(() => setLinearSaved(false), 2500);
+        refreshIntegrations();
+      }
+    } catch (e) { console.error(e); }
+    finally { setLinearSaving(false); }
+  };
+
+  const testLinear = async () => {
+    setLinearTesting(true); setLinearTest(null);
+    try {
+      if (linearToken.trim()) {
+        const saveRes = await fetch('/api/settings/linear', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: linearToken.trim() }) });
+        if (!saveRes.ok) { setLinearTest({ ok: false, msg: t('settings.networkError') }); return; }
+        setLinear(c => ({ ...c, tokenSet: true })); setLinearToken('');
+      }
+      const res = await fetch('/api/settings/linear/test', { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      setLinearTest(res.ok
+        ? { ok: true, msg: d.team ? `${t('settings.connectionSuccess')} · ${d.team}` : t('settings.connectionSuccess') }
+        : { ok: false, msg: d.error || t('settings.networkError') });
+    } catch { setLinearTest({ ok: false, msg: t('settings.networkError') }); }
+    finally { setLinearTesting(false); }
+  };
+
   const saveChat = async () => {
     setChatSaving(true); setChatSaved(false);
     try {
@@ -243,10 +301,27 @@ export function IntegrationsTab() {
     finally { setChatTesting(false); }
   };
 
+  const loadAiModels = async () => {
+    setAiModelsLoading(true); setAiModelsErr('');
+    try {
+      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl };
+      if (aiKey.trim()) payload.apiKey = aiKey.trim();
+      const res = await fetch('/api/settings/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(d.models)) {
+        setAiModels(d.models);
+        if (!d.models.length) setAiModelsErr(t('settings.aiModelsEmpty'));
+      } else {
+        setAiModels([]); setAiModelsErr(d.error || t('settings.networkError'));
+      }
+    } catch { setAiModels([]); setAiModelsErr(t('settings.networkError')); }
+    finally { setAiModelsLoading(false); }
+  };
+
   const saveAi = async () => {
     setAiSaving(true); setAiSaved(false);
     try {
-      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model };
+      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, maxTokens: ai.maxTokens.trim() ? Number(ai.maxTokens) : 0 };
       if (aiKey.trim()) payload.apiKey = aiKey.trim();
       const res = await fetch('/api/settings/ai', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (res.ok) {
@@ -263,7 +338,7 @@ export function IntegrationsTab() {
     setAiTesting(true); setAiTestRes(null);
     try {
       // Persist the current form first so the probe uses it.
-      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model };
+      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, maxTokens: ai.maxTokens.trim() ? Number(ai.maxTokens) : 0 };
       if (aiKey.trim()) payload.apiKey = aiKey.trim();
       const saveRes = await fetch('/api/settings/ai', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!saveRes.ok) { setAiTestRes({ ok: false, msg: t('settings.networkError') }); return; }
@@ -572,6 +647,42 @@ export function IntegrationsTab() {
     </div>
   );
 
+  const renderLinearModal = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Toggle label={t('settings.linearEnabled')} value={linear.enabled} onChange={v => setLinear(c => ({ ...c, enabled: v }))} />
+      <FieldWrapper label={linear.tokenSet ? t('settings.linearTokenSet') : t('settings.linearToken')}>
+        <input className="field" type="password" value={linearToken} placeholder={linear.tokenSet ? '••••••••••••' : 'lin_api_...'}
+          onChange={e => setLinearToken(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
+      </FieldWrapper>
+      <FieldWrapper label={t('settings.linearRouting')}>
+        <select className="field" value={linear.routingMode} onChange={e => setLinear(c => ({ ...c, routingMode: e.target.value === 'inbox' ? 'inbox' : 'department' }))}>
+          <option value="department">{t('settings.linearRoutingDepartment')}</option>
+          <option value="inbox">{t('settings.linearRoutingInbox')}</option>
+        </select>
+      </FieldWrapper>
+      <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.linearHint')}</div>
+      {linear.migration?.state && (
+        <div style={{ fontSize: 12, color: linear.migration.state === 'error' ? '#f87171' : 'var(--muted)' }}>
+          {linear.migration.state === 'running'
+            ? t('settings.clickupMigrating', { done: linear.migration.migrated ?? 0, total: linear.migration.total ?? 0 })
+            : linear.migration.state === 'done'
+              ? t('settings.clickupMigrated', { count: linear.migration.migrated ?? 0 })
+              : t('settings.clickupMigrationError')}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary btn-sm" onClick={saveLinear} disabled={linearSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {linearSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('common.save')}
+        </button>
+        <button className="btn btn-sm" onClick={testLinear} disabled={linearTesting || (!linear.tokenSet && !linearToken.trim())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {linearTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
+        </button>
+        {linearSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
+        {linearTest && <span style={{ fontSize: 12.5, color: linearTest.ok ? 'var(--green)' : '#f87171' }}>{linearTest.msg}</span>}
+      </div>
+    </div>
+  );
+
   const renderChatModal = () => {
     const isTelegram = chat.provider === 'telegram';
     return (
@@ -619,11 +730,13 @@ export function IntegrationsTab() {
 
   const renderAiModal = () => {
     const keyless = !!aiPresets[ai.provider]?.keyless;
+    const selModel = aiModels.find(m => m.id === ai.model);
+    const modelMax = selModel?.maxOutput || null;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <FieldWrapper label={t('settings.aiProvider')}>
           <select className="field" value={ai.provider}
-            onChange={e => { const p = e.target.value; const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); }}>
+            onChange={e => { const p = e.target.value; const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); setAiModels([]); setAiModelsErr(''); }}>
             {Object.entries(aiPresets).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </FieldWrapper>
@@ -638,8 +751,28 @@ export function IntegrationsTab() {
             onChange={e => setAi(a => ({ ...a, baseUrl: e.target.value }))} style={{ fontFamily: 'var(--font-mono)' }} />
         </FieldWrapper>
         <FieldWrapper label={t('settings.aiModel')}>
-          <input className="field" value={ai.model} placeholder="deepseek-chat"
-            onChange={e => setAi(a => ({ ...a, model: e.target.value }))} style={{ fontFamily: 'var(--font-mono)' }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="field" list="aiModelList" value={ai.model} placeholder="deepseek-chat"
+              onChange={e => setAi(a => ({ ...a, model: e.target.value }))} style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
+            <datalist id="aiModelList">
+              {aiModels.map(m => <option key={m.id} value={m.id}>{m.contextLength ? `${m.id} · ${Math.round(m.contextLength / 1000)}K ctx` : m.id}</option>)}
+            </datalist>
+            <button className="btn btn-sm" onClick={loadAiModels} disabled={aiModelsLoading || (!keyless && !ai.apiKeySet && !aiKey.trim())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {aiModelsLoading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />} {t('settings.aiLoadModels')}
+            </button>
+          </div>
+          {aiModels.length > 0 && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{t('settings.aiModelsLoaded', { count: aiModels.length })}</div>}
+          {aiModelsErr && <div style={{ fontSize: 11.5, color: '#f87171', marginTop: 4 }}>{aiModelsErr}</div>}
+        </FieldWrapper>
+        <FieldWrapper label={t('settings.aiMaxTokens')}>
+          <input className="field" type="number" min={0} value={ai.maxTokens} placeholder={t('settings.aiMaxTokensAuto')}
+            onChange={e => setAi(a => ({ ...a, maxTokens: e.target.value }))} style={{ fontFamily: 'var(--font-mono)' }} />
+          {modelMax && (
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {t('settings.aiModelMax', { n: modelMax.toLocaleString() })}
+              <button className="btn btn-ghost" style={{ fontSize: 11, padding: '1px 7px' }} onClick={() => setAi(a => ({ ...a, maxTokens: String(modelMax) }))}>{t('settings.aiUseMax')}</button>
+            </div>
+          )}
         </FieldWrapper>
         <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.aiHint')}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -663,6 +796,7 @@ export function IntegrationsTab() {
       case 'SMTP Email': return renderSmtpModal();
       case 'S3 Storage': return renderS3Modal();
       case 'ClickUp': return renderClickupModal();
+      case 'Linear': return renderLinearModal();
       case 'Google OAuth': return renderGoogleModal();
       case 'Chat': return renderChatModal();
       default: return null;

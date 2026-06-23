@@ -122,7 +122,7 @@ ${grounding}`;
       // The configured model may be a reasoning model that spends tokens on
       // hidden reasoning before emitting `content`; keep a generous budget so
       // the JSON answer isn't truncated (the report generator uses 64000).
-      max_tokens: 16000,
+      max_tokens: Math.min(16000, ds.maxTokens ?? 16000),
     }),
   });
   if (!res.ok) {

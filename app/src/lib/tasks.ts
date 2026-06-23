@@ -30,6 +30,7 @@ export type SubtaskDTO = {
   id: string; title: string; status: string; priority: string; dueDate: string | null;
   assigneeName: string | null; assignee: UserLite | null;
   clickupManaged: boolean; clickupUrl: string | null;
+  linearManaged: boolean; linearUrl: string | null;
 };
 export type AssigneeRow = { id: string; taskId: string; userId: string; user: UserLite | null; createdAt: string };
 export type CollaboratorRow = { id: string; taskId: string; userId: string; user: UserLite | null; createdAt: string };
@@ -64,6 +65,10 @@ export type MeetingTaskDTO = {
   clickupTaskId: string | null;
   clickupUrl: string | null;
   clickupManaged: boolean;
+  // Linear two-way sync — same read-only-mirror semantics as ClickUp above.
+  linearIssueId: string | null;
+  linearUrl: string | null;
+  linearManaged: boolean;
   assignee: UserLite | null;
   meeting: { id: string; title: string; scheduledAt: string | null } | null;
   department: { id: string; name: string; color: string | null } | null;
@@ -175,7 +180,7 @@ type LoadedRow = {
   data: Prisma.JsonValue;
   position: number;
   createdAt: Date;
-  taskMeta: { meetingId: string | null; reportId: string | null; departmentId: string | null; parentRowId: string | null; source: string; completedAt: Date | null; clickupTaskId: string | null; clickupUrl: string | null; clickupStatus: string | null; clickupSyncedAt: Date | null } | null;
+  taskMeta: { meetingId: string | null; reportId: string | null; departmentId: string | null; parentRowId: string | null; source: string; completedAt: Date | null; clickupTaskId: string | null; clickupUrl: string | null; clickupStatus: string | null; clickupSyncedAt: Date | null; linearIssueId: string | null; linearUrl: string | null; linearStatus: string | null; linearSyncedAt: Date | null } | null;
   assignments?: { id: string; userId: string; createdAt: Date }[];
   collaborators?: { id: string; userId: string; createdAt: Date }[];
   _count?: { comments: number; attachments: number };
@@ -241,6 +246,9 @@ function assembleTaskDTO(
     clickupTaskId: meta?.clickupTaskId ?? null,
     clickupUrl: meta?.clickupUrl ?? null,
     clickupManaged: !!meta?.clickupTaskId,
+    linearIssueId: meta?.linearIssueId ?? null,
+    linearUrl: meta?.linearUrl ?? null,
+    linearManaged: !!meta?.linearIssueId,
     assignee: lead,
     meeting: extras.meeting ? { id: extras.meeting.id, title: extras.meeting.title, scheduledAt: iso(extras.meeting.scheduledAt) } : null,
     department: extras.department ?? null,
@@ -276,6 +284,8 @@ function buildSubtaskDTO(row: LoadedRow, f: TaskFieldIds, users: Map<string, Use
     assignee: lead,
     clickupManaged: !!row.taskMeta?.clickupTaskId,
     clickupUrl: row.taskMeta?.clickupUrl ?? null,
+    linearManaged: !!row.taskMeta?.linearIssueId,
+    linearUrl: row.taskMeta?.linearIssueId ? (row.taskMeta?.linearUrl ?? null) : null,
   };
 }
 
@@ -818,12 +828,13 @@ export async function deleteTask(taskId: string): Promise<void> {
   });
 }
 
-/** True if the task Row is "owned" by ClickUp (an assignee exists there). Owned
- *  tasks are a read-only mirror in Garely — user edits/deletes are rejected
- *  (they're managed in ClickUp; status/deletion flow back via the webhook). */
+/** True if the task Row is "owned" by an external tracker — ClickUp OR Linear (an
+ *  assignee exists there). Owned tasks are a read-only mirror in Garely: user
+ *  edits/deletes are rejected (they're managed externally; status/deletion flow
+ *  back via the webhook). Name kept for back-compat; gate now covers both. */
 export async function isClickUpManaged(taskId: string): Promise<boolean> {
-  const tr = await prisma.taskRow.findUnique({ where: { rowId: taskId }, select: { clickupTaskId: true } });
-  return !!tr?.clickupTaskId;
+  const tr = await prisma.taskRow.findUnique({ where: { rowId: taskId }, select: { clickupTaskId: true, linearIssueId: true } });
+  return !!(tr?.clickupTaskId || tr?.linearIssueId);
 }
 
 /**

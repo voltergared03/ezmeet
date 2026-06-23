@@ -14,7 +14,6 @@ import { workspaceLocale } from '@/lib/i18n-server';
 
 export const maxDuration = 120;
 
-const CHAT_MODEL = 'deepseek-v4-flash';
 const MAX_TRANSCRIPT_CHARS = 60000; // keep the prompt well within the model's window
 const MAX_HISTORY = 12; // last N turns sent back as context
 const MAX_MSG_CHARS = 4000; // clamp any single message
@@ -127,10 +126,10 @@ ${numbered}`;
       method: 'POST',
       headers: { Authorization: `Bearer ${ds.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: CHAT_MODEL,
+        model: ds.model,
         messages: [{ role: 'system', content: system }, ...history],
         temperature: 0.3,
-        max_tokens: 8000,
+        max_tokens: Math.min(8000, ds.maxTokens ?? 8000),
         stream: true,
       }),
     });
