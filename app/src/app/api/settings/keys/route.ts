@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { isInternalAuthed } from '@/lib/internal-auth';
 import { withRoute } from '@/lib/with-route';
 
-const ALLOWED_KEYS = ['DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'DEEPSEEK_MODEL', 'DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'DEEPGRAM_LANGUAGE'];
-const SECRET_KEYS = ['DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY'];
+const ALLOWED_KEYS = ['DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'DEEPSEEK_MODEL', 'DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'DEEPGRAM_LANGUAGE', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
+const SECRET_KEYS = ['DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'GOOGLE_CLIENT_SECRET'];
 
 // GET /api/settings/keys — masked for admins (write-only secrets); full values for
 // internal callers (the Python agent, authenticated by the shared secret header).
