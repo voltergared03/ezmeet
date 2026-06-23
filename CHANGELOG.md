@@ -4,6 +4,26 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.18.0-beta.1] — 2026-06-23
+
+HubSpot CRM integration — turn finished meetings into CRM activity.
+
+### Added
+- **HubSpot CRM.** Settings → Integrations → CRM: paste a HubSpot Private App
+  token and turn it on. When a meeting's AI report is generated, Garely finds
+  each participant's contact by email and logs the meeting (summary + decisions
+  + report link) as a Meeting activity associated to everyone from the call who
+  exists in HubSpot. One-way Garely → CRM, opt-in, fire-and-forget and fail-soft
+  — never delays or breaks report generation. Optionally auto-create a contact
+  for an unknown participant email. The token is encrypted at rest and never
+  returned to the browser. Provider is stored so Pipedrive / Salesforce can be
+  added on the same pattern later.
+
+### Changed
+- **Provider pricing moved to the Usage tab.** The per-provider rates (DeepSeek
+  in/out, Deepgram/min, email limit) now live in Settings → Usage, next to the
+  cost figures they compute, and the spend updates as soon as you save them.
+
 ## [1.17.0-beta.1] — 2026-06-23
 
 Generic outbound webhooks — wire Garely into Zapier, Make, n8n or any HTTP

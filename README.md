@@ -116,6 +116,16 @@ install in place (secrets and config are preserved).
 - **Admin panel**: users, workspace policies, **integrations status** (with a dashboard **setup checklist** that guides post-install service config), usage/cost.
 - **First-run setup wizard** (`/setup`): branding, auth methods & integrations from the browser — zero config-file editing.
 
+### Integrations
+
+- **Two-way task sync** — AI meeting tasks ↔ **ClickUp** and **Linear** issues: tasks route to the matching list/team (members matched by email), and status changes or deletions on the other side mirror back into Garely.
+- **CRM (HubSpot)** — when a meeting's AI report is generated, the meeting (summary + decisions + link) is logged as an activity on each participant's matching contact; optional auto-create of unknown contacts.
+- **Chat notifications** — meeting reports & reminders pushed to **Telegram / Slack / Mattermost / Discord**.
+- **Outbound webhooks** — signed JSON events (`report.ready`, `meeting.reminder`, `task.created/updated`) to any HTTPS endpoint, ready for **Zapier / Make / n8n** or your own server (`X-Garely-Signature` HMAC-SHA256).
+- **Pluggable AI provider** — DeepSeek, OpenRouter, OpenAI, Anthropic, Ollama (local) or any OpenAI-compatible endpoint, with an API-driven model picker.
+- **Two-way Google Calendar** sync, **SMTP** email and **S3** storage.
+- All managed from **admin → Settings → Integrations** — each connector encrypts its secrets at rest and is opt-in, non-blocking and never delays meeting or report flows.
+
 ### Notifications, calendar & PWA
 
 - **Notifications**: in-app, **Web Push** (delivered even when the app/tab is closed) + email — meeting invitations with `.ics`, task assigned / updated, meeting reminders, **weekly digest with an AI "where to focus" rollup**, report-ready, @mentions.
