@@ -7,10 +7,10 @@ import {
   Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare, GitBranch, Webhook, Trash2, Plus,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
-import { LinearIcon, ClickUpIcon, DeepgramIcon, LiveKitIcon, PostgresIcon, S3Icon, GoogleIcon } from '../components/BrandIcons';
+import { LinearIcon, ClickUpIcon, DeepgramIcon, LiveKitIcon, PostgresIcon, S3Icon, GoogleIcon, HubSpotIcon } from '../components/BrandIcons';
 
 // Which connectors open a config modal (the rest are read-only status cards).
-const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Linear', 'Google OAuth', 'Chat', 'Webhooks']);
+const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Linear', 'Google OAuth', 'Chat', 'Webhooks', 'CRM']);
 
 export function IntegrationsTab() {
   const t = useTranslations();
@@ -27,6 +27,7 @@ export function IntegrationsTab() {
     Linear: <LinearIcon />,
     Chat: <MessageSquare size={20} />,
     Webhooks: <Webhook size={20} />,
+    CRM: <HubSpotIcon />,
   };
   const [integrations, setIntegrations] = useState<{ name: string; desc: string; status: string; metric?: string }[]>([]);
   // The connector whose config modal is open (by name), or null.
@@ -106,6 +107,14 @@ export function IntegrationsTab() {
   const [webhooksSaved, setWebhooksSaved] = useState(false);
   const [webhookTestingId, setWebhookTestingId] = useState<string | null>(null);
   const [webhookTestRes, setWebhookTestRes] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
+
+  // CRM (HubSpot) — log finished meetings to the matching contact.
+  const [crm, setCrm] = useState<{ enabled: boolean; provider: string; tokenSet: boolean; createContact: boolean }>({ enabled: false, provider: 'hubspot', tokenSet: false, createContact: false });
+  const [crmToken, setCrmToken] = useState('');
+  const [crmSaving, setCrmSaving] = useState(false);
+  const [crmSaved, setCrmSaved] = useState(false);
+  const [crmTesting, setCrmTesting] = useState(false);
+  const [crmTest, setCrmTest] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/settings/keys')
@@ -203,6 +212,15 @@ export function IntegrationsTab() {
       .then(d => {
         if (Array.isArray(d.endpoints)) setWebhooks(d.endpoints.map((e: any) => ({ key: e.id, id: e.id, url: e.url || '', enabled: !!e.enabled, events: Array.isArray(e.events) ? e.events : [], secretSet: !!e.secretSet, secret: '' })));
         if (Array.isArray(d.events)) setWebhookEvents(d.events);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/settings/crm')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.error) setCrm({ enabled: !!d.enabled, provider: d.provider || 'hubspot', tokenSet: !!d.tokenSet, createContact: !!d.createContact });
       })
       .catch(() => {});
   }, []);
@@ -421,6 +439,38 @@ export function IntegrationsTab() {
       setWebhookTestRes({ id: row.key, ...(res.ok ? { ok: true, msg: t('settings.webhookTestSent') } : { ok: false, msg: d.error || t('settings.networkError') }) });
     } catch { setWebhookTestRes({ id: row.key, ok: false, msg: t('settings.networkError') }); }
     finally { setWebhookTestingId(null); }
+  };
+
+  const saveCrm = async () => {
+    setCrmSaving(true); setCrmSaved(false);
+    try {
+      const payload: any = { enabled: crm.enabled, provider: crm.provider, createContact: crm.createContact };
+      if (crmToken.trim()) payload.token = crmToken.trim();
+      const res = await fetch('/api/settings/crm', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        setCrmSaved(true);
+        if (crmToken.trim()) { setCrm(c => ({ ...c, tokenSet: true })); setCrmToken(''); }
+        setTimeout(() => setCrmSaved(false), 2500);
+        refreshIntegrations();
+      }
+    } catch (e) { console.error(e); }
+    finally { setCrmSaving(false); }
+  };
+
+  const testCrm = async () => {
+    setCrmTesting(true); setCrmTest(null);
+    try {
+      // Persist a freshly typed token first so the probe uses it.
+      if (crmToken.trim()) {
+        const saveRes = await fetch('/api/settings/crm', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: crmToken.trim() }) });
+        if (!saveRes.ok) { setCrmTest({ ok: false, msg: t('settings.networkError') }); return; }
+        setCrm(c => ({ ...c, tokenSet: true })); setCrmToken('');
+      }
+      const res = await fetch('/api/settings/crm/test', { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      setCrmTest(res.ok ? { ok: true, msg: t('settings.connectionSuccess') } : { ok: false, msg: d.error || t('settings.networkError') });
+    } catch { setCrmTest({ ok: false, msg: t('settings.networkError') }); }
+    finally { setCrmTesting(false); }
   };
 
   const saveS3 = async () => {
@@ -934,6 +984,33 @@ export function IntegrationsTab() {
     </div>
   );
 
+  const renderCrmModal = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Toggle label={t('settings.crmEnabled')} value={crm.enabled} onChange={v => setCrm(c => ({ ...c, enabled: v }))} />
+      <FieldWrapper label={t('settings.crmProvider')}>
+        <select className="field" value={crm.provider} onChange={e => setCrm(c => ({ ...c, provider: e.target.value }))}>
+          <option value="hubspot">HubSpot</option>
+        </select>
+      </FieldWrapper>
+      <FieldWrapper label={crm.tokenSet ? t('settings.crmTokenSet') : t('settings.crmToken')}>
+        <input className="field" type="password" value={crmToken} placeholder={crm.tokenSet ? '••••••••••••' : 'pat-…'}
+          onChange={e => setCrmToken(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
+      </FieldWrapper>
+      <Toggle label={t('settings.crmCreateContact')} value={crm.createContact} onChange={v => setCrm(c => ({ ...c, createContact: v }))} />
+      <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.crmHint')}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary btn-sm" onClick={saveCrm} disabled={crmSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {crmSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('common.save')}
+        </button>
+        <button className="btn btn-sm" onClick={testCrm} disabled={crmTesting || (!crm.tokenSet && !crmToken.trim())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {crmTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
+        </button>
+        {crmSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
+        {crmTest && <span style={{ fontSize: 12.5, color: crmTest.ok ? 'var(--green)' : '#f87171' }}>{crmTest.msg}</span>}
+      </div>
+    </div>
+  );
+
   const renderModalBody = (name: string) => {
     switch (name) {
       case 'Deepgram': return renderKeysModal('Deepgram');
@@ -945,6 +1022,7 @@ export function IntegrationsTab() {
       case 'Google OAuth': return renderGoogleModal();
       case 'Chat': return renderChatModal();
       case 'Webhooks': return renderWebhooksModal();
+      case 'CRM': return renderCrmModal();
       default: return null;
     }
   };

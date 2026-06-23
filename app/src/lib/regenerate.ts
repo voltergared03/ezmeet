@@ -21,6 +21,7 @@ import { pushMeetingTasksToClickUp, type ClickUpPushItem } from './clickup';
 import { pushMeetingTasksToLinear } from './linear';
 import { notifyChatReportReady } from './chat-notify';
 import { notifyWebhookReportReady } from './webhooks';
+import { pushMeetingToCrm } from './crm';
 import { coerceRowData } from './base-rows';
 
 export interface ReTranscribedSegment {
@@ -667,6 +668,8 @@ ${numbered}`;
     void notifyChatReportReady(meetingId);
     // Emit the report.ready outbound webhook (opt-in; first generation only). Fire-and-forget.
     void notifyWebhookReportReady(meetingId);
+    // Log the meeting to the CRM contact (opt-in; first generation only). Fire-and-forget.
+    void pushMeetingToCrm(meetingId);
   }
 
   // ClickUp + Linear push (opt-in, non-blocking, idempotent). Both run on first

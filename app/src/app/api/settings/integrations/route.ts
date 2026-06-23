@@ -34,7 +34,7 @@ export async function GET() {
     prisma.meeting.count({ where: { status: 'live' } }).catch(() => 0),
   ]);
 
-  const keys = await readConfig(['DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'LINEAR_ENABLED', 'LINEAR_TOKEN', 'LINEAR_ROUTING_MODE', 'CHAT_PROVIDER']);
+  const keys = await readConfig(['DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'LINEAR_ENABLED', 'LINEAR_TOKEN', 'LINEAR_ROUTING_MODE', 'CHAT_PROVIDER', 'CRM_ENABLED', 'CRM_TOKEN', 'CRM_PROVIDER']);
   const ai = await getLlmConfig();
   const smtp = await getSmtpConfig().catch(() => null);
   const s3 = await getS3Config().catch(() => null);
@@ -62,6 +62,8 @@ export async function GET() {
   const webhookActive = webhookEndpoints.filter((e) => e.enabled).length;
   const webhookOk = webhookActive > 0;
   const webhookMetric = webhookOk ? t('webhooksActive', { count: webhookActive }) : t('notConfiguredMetric');
+  const crmOk = keys.CRM_ENABLED === 'true' && !!(keys.CRM_TOKEN || '').trim();
+  const crmMetric = crmOk ? (keys.CRM_PROVIDER || 'hubspot') : t('notConfiguredMetric');
 
   const integrations = [
     { name: 'LiveKit', desc: 'WebRTC SFU', status: livekitOk ? 'connected' : 'not_configured', metric: liveMeetings > 0 ? t('liveMeetings', { count: liveMeetings }) : 'self-hosted' },
@@ -75,6 +77,7 @@ export async function GET() {
     { name: 'Linear', desc: t('descLinear'), status: linearOk ? 'connected' : 'not_configured', metric: linearMetric },
     { name: 'Chat', desc: t('descChat'), status: chatOk ? 'connected' : 'not_configured', metric: chatMetric },
     { name: 'Webhooks', desc: t('descWebhooks'), status: webhookOk ? 'connected' : 'not_configured', metric: webhookMetric },
+    { name: 'CRM', desc: t('descCrm'), status: crmOk ? 'connected' : 'not_configured', metric: crmMetric },
   ];
 
   return NextResponse.json({ integrations });
