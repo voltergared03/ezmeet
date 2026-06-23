@@ -18,6 +18,7 @@ import { provisionSystemTasksTable } from './system-tasks-table';
 import { provisionSystemDecisionsTable } from './system-decisions-table';
 import { createTaskFromAI, aiCellsFromModel, AI_FILLABLE_TYPES } from './tasks';
 import { pushMeetingTasksToClickUp, type ClickUpPushItem } from './clickup';
+import { notifyChatReportReady } from './chat-notify';
 import { coerceRowData } from './base-rows';
 
 export interface ReTranscribedSegment {
@@ -660,6 +661,8 @@ ${numbered}`;
     } catch (e) {
       console.error('report email failed:', e);
     }
+    // Post the report to the team chat (opt-in; first generation only). Fire-and-forget.
+    void notifyChatReportReady(meetingId);
   }
 
   // ClickUp push (opt-in, non-blocking, idempotent). Runs on BOTH first generation

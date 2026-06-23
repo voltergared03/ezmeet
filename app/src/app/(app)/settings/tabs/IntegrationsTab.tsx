@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import {
   Globe, Mic, Sparkles, Video, Mail, Archive, Download,
-  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug,
+  Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
 
 // Which connectors open a config modal (the rest are read-only status cards).
-const MANAGEABLE = new Set(['Deepgram', 'DeepSeek', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Google OAuth']);
+const MANAGEABLE = new Set(['Deepgram', 'AI model', 'SMTP Email', 'S3 Storage', 'ClickUp', 'Google OAuth', 'Chat']);
 
 export function IntegrationsTab() {
   const t = useTranslations();
@@ -17,12 +17,13 @@ export function IntegrationsTab() {
   const INTEGRATION_ICONS: Record<string, React.ReactNode> = {
     LiveKit: <Video size={20} />,
     Deepgram: <Mic size={20} />,
-    DeepSeek: <Sparkles size={20} />,
+    'AI model': <Sparkles size={20} />,
     'SMTP Email': <Mail size={20} />,
     'Google OAuth': <Globe size={20} />,
     PostgreSQL: <Archive size={20} />,
     'S3 Storage': <Download size={20} />,
     ClickUp: <ListChecks size={20} />,
+    Chat: <MessageSquare size={20} />,
   };
   const [integrations, setIntegrations] = useState<{ name: string; desc: string; status: string; metric?: string }[]>([]);
   // The connector whose config modal is open (by name), or null.
@@ -61,6 +62,24 @@ export function IntegrationsTab() {
   const [clickupSaved, setClickupSaved] = useState(false);
   const [clickupTesting, setClickupTesting] = useState(false);
   const [clickupTest, setClickupTest] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Chat notifications config (Telegram / Slack / Mattermost / Discord)
+  const [chat, setChat] = useState<{ enabled: boolean; provider: string; chatId: string; botTokenSet: boolean; webhookSet: boolean }>({ enabled: false, provider: 'telegram', chatId: '', botTokenSet: false, webhookSet: false });
+  const [chatBotToken, setChatBotToken] = useState('');
+  const [chatWebhook, setChatWebhook] = useState('');
+  const [chatSaving, setChatSaving] = useState(false);
+  const [chatSaved, setChatSaved] = useState(false);
+  const [chatTesting, setChatTesting] = useState(false);
+  const [chatTestRes, setChatTestRes] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // AI model provider config (DeepSeek / OpenRouter / OpenAI / Anthropic / Ollama / Custom)
+  const [ai, setAi] = useState<{ provider: string; baseUrl: string; model: string; apiKeySet: boolean }>({ provider: 'deepseek', baseUrl: '', model: '', apiKeySet: false });
+  const [aiKey, setAiKey] = useState('');
+  const [aiPresets, setAiPresets] = useState<Record<string, { label: string; baseUrl: string; model: string; keyless?: boolean }>>({});
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiSaved, setAiSaved] = useState(false);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestRes, setAiTestRes] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/settings/keys')
@@ -115,6 +134,30 @@ export function IntegrationsTab() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch('/api/settings/chat')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.error) setChat({
+          enabled: !!d.enabled, provider: d.provider || 'telegram', chatId: d.chatId || '',
+          botTokenSet: !!d.botTokenSet, webhookSet: !!d.webhookSet,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/settings/ai')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.error) {
+          setAi({ provider: d.provider || 'deepseek', baseUrl: d.baseUrl || '', model: d.model || '', apiKeySet: !!d.apiKeySet });
+          if (d.presets) setAiPresets(d.presets);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Close the modal on Escape.
   useEffect(() => {
     if (!manage) return;
@@ -162,6 +205,76 @@ export function IntegrationsTab() {
         : { ok: false, msg: d.error || t('settings.networkError') });
     } catch { setClickupTest({ ok: false, msg: t('settings.networkError') }); }
     finally { setClickupTesting(false); }
+  };
+
+  const saveChat = async () => {
+    setChatSaving(true); setChatSaved(false);
+    try {
+      const payload: any = { enabled: chat.enabled, provider: chat.provider, chatId: chat.chatId };
+      if (chatBotToken.trim()) payload.botToken = chatBotToken.trim();
+      if (chatWebhook.trim()) payload.webhookUrl = chatWebhook.trim();
+      const res = await fetch('/api/settings/chat', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        setChatSaved(true);
+        if (chatBotToken.trim()) { setChat(c => ({ ...c, botTokenSet: true })); setChatBotToken(''); }
+        if (chatWebhook.trim()) { setChat(c => ({ ...c, webhookSet: true })); setChatWebhook(''); }
+        setTimeout(() => setChatSaved(false), 2500);
+        refreshIntegrations();
+      }
+    } catch (e) { console.error(e); }
+    finally { setChatSaving(false); }
+  };
+
+  const testChat = async () => {
+    setChatTesting(true); setChatTestRes(null);
+    try {
+      // Persist the current form first so the test message uses it (no need to enable yet).
+      const payload: any = { provider: chat.provider, chatId: chat.chatId };
+      if (chatBotToken.trim()) payload.botToken = chatBotToken.trim();
+      if (chatWebhook.trim()) payload.webhookUrl = chatWebhook.trim();
+      const saveRes = await fetch('/api/settings/chat', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!saveRes.ok) { setChatTestRes({ ok: false, msg: t('settings.networkError') }); return; }
+      if (chatBotToken.trim()) { setChat(c => ({ ...c, botTokenSet: true })); setChatBotToken(''); }
+      if (chatWebhook.trim()) { setChat(c => ({ ...c, webhookSet: true })); setChatWebhook(''); }
+      const res = await fetch('/api/settings/chat/test', { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      setChatTestRes(res.ok ? { ok: true, msg: t('settings.testSent') } : { ok: false, msg: d.error || t('settings.networkError') });
+    } catch { setChatTestRes({ ok: false, msg: t('settings.networkError') }); }
+    finally { setChatTesting(false); }
+  };
+
+  const saveAi = async () => {
+    setAiSaving(true); setAiSaved(false);
+    try {
+      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model };
+      if (aiKey.trim()) payload.apiKey = aiKey.trim();
+      const res = await fetch('/api/settings/ai', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        setAiSaved(true);
+        if (aiKey.trim()) { setAi(a => ({ ...a, apiKeySet: true })); setAiKey(''); }
+        setTimeout(() => setAiSaved(false), 2500);
+        refreshIntegrations();
+      }
+    } catch (e) { console.error(e); }
+    finally { setAiSaving(false); }
+  };
+
+  const testAi = async () => {
+    setAiTesting(true); setAiTestRes(null);
+    try {
+      // Persist the current form first so the probe uses it.
+      const payload: any = { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model };
+      if (aiKey.trim()) payload.apiKey = aiKey.trim();
+      const saveRes = await fetch('/api/settings/ai', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!saveRes.ok) { setAiTestRes({ ok: false, msg: t('settings.networkError') }); return; }
+      if (aiKey.trim()) { setAi(a => ({ ...a, apiKeySet: true })); setAiKey(''); }
+      const res = await fetch('/api/settings/ai/test', { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      setAiTestRes(res.ok
+        ? { ok: true, msg: d.model ? `${t('settings.connectionSuccess')} · ${d.model}` : t('settings.connectionSuccess') }
+        : { ok: false, msg: d.error || t('settings.networkError') });
+    } catch { setAiTestRes({ ok: false, msg: t('settings.networkError') }); }
+    finally { setAiTesting(false); }
   };
 
   const saveS3 = async () => {
@@ -244,9 +357,6 @@ export function IntegrationsTab() {
     { key: 'DEEPGRAM_API_KEY', label: 'Deepgram API Key', service: 'Deepgram' },
     { key: 'DEEPGRAM_MODEL', label: 'Deepgram Model', service: 'Deepgram' },
     { key: 'DEEPGRAM_LANGUAGE', label: 'Deepgram Language', service: 'Deepgram' },
-    { key: 'DEEPSEEK_API_KEY', label: 'DeepSeek API Key', service: 'DeepSeek' },
-    { key: 'DEEPSEEK_BASE_URL', label: 'DeepSeek Base URL', service: 'DeepSeek' },
-    { key: 'DEEPSEEK_MODEL', label: 'DeepSeek Model', service: 'DeepSeek' },
     { key: 'GOOGLE_CLIENT_ID', label: 'Client ID', service: 'Google OAuth' },
     { key: 'GOOGLE_CLIENT_SECRET', label: 'Client secret', service: 'Google OAuth' },
   ];
@@ -298,9 +408,7 @@ export function IntegrationsTab() {
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="field" value={editValue} onChange={e => setEditValue(e.target.value)}
               placeholder={
-                keyName === 'DEEPSEEK_BASE_URL' ? 'https://api.deepseek.com'
-                : keyName === 'DEEPSEEK_MODEL' ? 'deepseek-chat'
-                : keyName === 'DEEPGRAM_MODEL' ? 'nova-3'
+                keyName === 'DEEPGRAM_MODEL' ? 'nova-3'
                 : keyName === 'DEEPGRAM_LANGUAGE' ? 'multi'
                 : keyName === 'GOOGLE_CLIENT_ID' ? '….apps.googleusercontent.com'
                 : keyName === 'GOOGLE_CLIENT_SECRET' ? 'GOCSPX-…'
@@ -464,14 +572,99 @@ export function IntegrationsTab() {
     </div>
   );
 
+  const renderChatModal = () => {
+    const isTelegram = chat.provider === 'telegram';
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Toggle label={t('settings.chatEnabled')} value={chat.enabled} onChange={v => setChat(c => ({ ...c, enabled: v }))} />
+        <FieldWrapper label={t('settings.chatProvider')}>
+          <select className="field" value={chat.provider} onChange={e => setChat(c => ({ ...c, provider: e.target.value }))}>
+            <option value="telegram">Telegram</option>
+            <option value="slack">Slack</option>
+            <option value="mattermost">Mattermost</option>
+            <option value="discord">Discord</option>
+          </select>
+        </FieldWrapper>
+        {isTelegram ? (
+          <>
+            <FieldWrapper label={chat.botTokenSet ? t('settings.chatBotTokenSet') : t('settings.chatBotToken')}>
+              <input className="field" type="password" value={chatBotToken} placeholder={chat.botTokenSet ? '••••••••••••' : '123456:ABC-…'}
+                onChange={e => setChatBotToken(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
+            </FieldWrapper>
+            <FieldWrapper label={t('settings.chatChatId')}>
+              <input className="field" value={chat.chatId} placeholder="-1001234567890"
+                onChange={e => setChat(c => ({ ...c, chatId: e.target.value }))} style={{ fontFamily: 'var(--font-mono)' }} />
+            </FieldWrapper>
+          </>
+        ) : (
+          <FieldWrapper label={chat.webhookSet ? t('settings.chatWebhookSet') : t('settings.chatWebhook')}>
+            <input className="field" type="password" value={chatWebhook} placeholder={chat.webhookSet ? '••••••••••••' : 'https://…'}
+              onChange={e => setChatWebhook(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
+          </FieldWrapper>
+        )}
+        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.chatHint')}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={saveChat} disabled={chatSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {chatSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('common.save')}
+          </button>
+          <button className="btn btn-sm" onClick={testChat} disabled={chatTesting || (isTelegram ? (!chat.botTokenSet && !chatBotToken.trim()) : (!chat.webhookSet && !chatWebhook.trim()))} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {chatTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <MessageSquare size={13} />} {t('settings.sendTest')}
+          </button>
+          {chatSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
+          {chatTestRes && <span style={{ fontSize: 12.5, color: chatTestRes.ok ? 'var(--green)' : '#f87171' }}>{chatTestRes.msg}</span>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAiModal = () => {
+    const keyless = !!aiPresets[ai.provider]?.keyless;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <FieldWrapper label={t('settings.aiProvider')}>
+          <select className="field" value={ai.provider}
+            onChange={e => { const p = e.target.value; const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); }}>
+            {Object.entries(aiPresets).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </FieldWrapper>
+        {!keyless && (
+          <FieldWrapper label={ai.apiKeySet ? t('settings.aiKeySet') : t('settings.aiKey')}>
+            <input className="field" type="password" value={aiKey} placeholder={ai.apiKeySet ? '••••••••••••' : 'sk-…'}
+              onChange={e => setAiKey(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
+          </FieldWrapper>
+        )}
+        <FieldWrapper label={t('settings.aiBaseUrl')}>
+          <input className="field" value={ai.baseUrl} placeholder="https://api.deepseek.com"
+            onChange={e => setAi(a => ({ ...a, baseUrl: e.target.value }))} style={{ fontFamily: 'var(--font-mono)' }} />
+        </FieldWrapper>
+        <FieldWrapper label={t('settings.aiModel')}>
+          <input className="field" value={ai.model} placeholder="deepseek-chat"
+            onChange={e => setAi(a => ({ ...a, model: e.target.value }))} style={{ fontFamily: 'var(--font-mono)' }} />
+        </FieldWrapper>
+        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.aiHint')}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={saveAi} disabled={aiSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {aiSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('common.save')}
+          </button>
+          <button className="btn btn-sm" onClick={testAi} disabled={aiTesting || (!keyless && !ai.apiKeySet && !aiKey.trim())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {aiTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
+          </button>
+          {aiSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
+          {aiTestRes && <span style={{ fontSize: 12.5, color: aiTestRes.ok ? 'var(--green)' : '#f87171' }}>{aiTestRes.msg}</span>}
+        </div>
+      </div>
+    );
+  };
+
   const renderModalBody = (name: string) => {
     switch (name) {
       case 'Deepgram': return renderKeysModal('Deepgram');
-      case 'DeepSeek': return renderKeysModal('DeepSeek');
+      case 'AI model': return renderAiModal();
       case 'SMTP Email': return renderSmtpModal();
       case 'S3 Storage': return renderS3Modal();
       case 'ClickUp': return renderClickupModal();
       case 'Google OAuth': return renderGoogleModal();
+      case 'Chat': return renderChatModal();
       default: return null;
     }
   };

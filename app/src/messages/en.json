@@ -1094,6 +1094,21 @@
     "manage": "Manage",
     "connect": "Connect",
     "googleRedirectHint": "Add this redirect URI to your Google OAuth client in Google Cloud Console:",
+    "chatEnabled": "Enable chat notifications",
+    "chatProvider": "Provider",
+    "chatBotToken": "Bot token",
+    "chatBotTokenSet": "Bot token (saved · paste a new one to change)",
+    "chatChatId": "Chat / channel ID",
+    "chatWebhook": "Incoming webhook URL",
+    "chatWebhookSet": "Webhook URL (saved · paste a new one to change)",
+    "chatHint": "Telegram: create a bot via @BotFather, add it to your group, and paste the bot token + the chat ID. Slack / Mattermost / Discord: paste an incoming-webhook URL. Meeting reports and reminders are posted there.",
+    "aiProvider": "Provider",
+    "aiKey": "API key",
+    "aiKeySet": "API key (saved — paste to replace)",
+    "aiBaseUrl": "Base URL",
+    "aiModel": "Model",
+    "aiHint": "Powers AI reports, the meeting chat assistant, agendas and quizzes. Any OpenAI-compatible API works. For Claude, pick OpenRouter (model anthropic/claude-opus-4-8) or Anthropic. Ollama runs locally with no key. Leave Base URL blank to use the provider default.",
+    "testSent": "Test message sent ✓",
     "statusError": "Error",
     "notConfigured": "Not configured",
     "apiKeys": "API keys",
@@ -1363,6 +1378,12 @@
     "requestIdAndActionRequired": "requestId and action are required",
     "invalidCurrentPassword": "Incorrect current password"
   },
+  "chat": {
+    "reportReady": "📋 {title} — meeting report ready",
+    "decisionsLabel": "Decisions",
+    "reminder": "⏰ {title} starts at {time}",
+    "test": "✅ Garely is connected to this chat."
+  },
   "integrations": {
     "descSmtp": "Transactional email · nodemailer",
     "descGoogle": "SSO for the team",
@@ -1371,6 +1392,8 @@
     "notConfiguredMetric": "not configured",
     "users": "{count, plural, one {# user} other {# users}}",
     "descClickup": "Push AI meeting tasks → ClickUp",
+    "descChat": "Meeting reports & reminders → team chat",
+    "descAi": "LLM · reports, chat, agendas, quizzes",
     "clickupByDept": "by department",
     "clickupInbox": "→ Call Inbox"
   },

@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { decryptSecret } from './twofactor';
 
 /** Read multiple SystemConfig keys at once → { key: value }. Missing keys are absent. */
 export async function readConfig(keys: string[]): Promise<Record<string, string>> {
@@ -19,14 +20,64 @@ export async function writeConfig(updates: Record<string, string>): Promise<void
   }
 }
 
-/** DeepSeek connection config — DB first, env fallback, sane defaults. */
-export async function getDeepSeekConfig(): Promise<{ apiKey: string; baseUrl: string; model: string }> {
-  const m = await readConfig(['DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'DEEPSEEK_MODEL']);
+/**
+ * Pluggable AI provider. Every option speaks the OpenAI-compatible
+ * `/v1/chat/completions` wire format, so the whole app reaches them through the
+ * same SSE client — switching provider is config only, no code path changes.
+ * `claude` is reached via OpenRouter or Anthropic's OpenAI-compatible endpoint
+ * (Garely's AI path is OpenAI-shaped; we don't run the native Anthropic SDK here).
+ */
+export type LlmProvider = 'deepseek' | 'openrouter' | 'openai' | 'anthropic' | 'ollama' | 'custom';
+
+/** baseUrl carries NO trailing `/v1` — call sites append `/v1/chat/completions`. */
+export const LLM_PRESETS: Record<LlmProvider, { label: string; baseUrl: string; model: string; keyless?: boolean }> = {
+  deepseek:   { label: 'DeepSeek',                  baseUrl: 'https://api.deepseek.com',  model: 'deepseek-chat' },
+  openrouter: { label: 'OpenRouter',                baseUrl: 'https://openrouter.ai/api', model: 'anthropic/claude-opus-4-8' },
+  openai:     { label: 'OpenAI',                    baseUrl: 'https://api.openai.com',    model: 'gpt-4o' },
+  anthropic:  { label: 'Anthropic (Claude)',        baseUrl: 'https://api.anthropic.com', model: 'claude-opus-4-8' },
+  ollama:     { label: 'Ollama (local)',            baseUrl: 'http://localhost:11434',    model: 'llama3.1', keyless: true },
+  custom:     { label: 'Custom (OpenAI-compatible)', baseUrl: '',                          model: '' },
+};
+
+const LLM_PROVIDERS = Object.keys(LLM_PRESETS) as LlmProvider[];
+
+/** Decrypt a stored secret (AES-GCM `v1.…`); tolerate a legacy plaintext value. */
+function decKey(stored: string | null | undefined): string {
+  const raw = (stored || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('v1.')) { try { return decryptSecret(raw); } catch { return ''; } }
+  return raw;
+}
+
+/** Normalize a base URL: drop trailing slashes and an accidental trailing `/v1`. */
+function normBase(u: string): string {
+  return (u || '').trim().replace(/\/+$/, '').replace(/\/v1$/i, '').replace(/\/+$/, '');
+}
+
+/**
+ * Active LLM provider config. New `AI_*` keys win; falls back to the legacy
+ * `DEEPSEEK_*` keys/env so existing installs keep working with zero reconfig.
+ */
+export async function getLlmConfig(): Promise<{ provider: LlmProvider; apiKey: string; baseUrl: string; model: string }> {
+  const m = await readConfig(['AI_PROVIDER', 'AI_API_KEY', 'AI_BASE_URL', 'AI_MODEL', 'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'DEEPSEEK_MODEL']);
+  const provider = LLM_PROVIDERS.includes(m.AI_PROVIDER as LlmProvider) ? (m.AI_PROVIDER as LlmProvider) : 'deepseek';
+  const preset = LLM_PRESETS[provider];
   return {
-    apiKey: m.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY || '',
-    baseUrl: (m.DEEPSEEK_BASE_URL || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, ''),
-    model: m.DEEPSEEK_MODEL || process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    provider,
+    apiKey: decKey(m.AI_API_KEY) || m.DEEPSEEK_API_KEY || process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || '',
+    baseUrl: normBase(m.AI_BASE_URL || m.DEEPSEEK_BASE_URL || process.env.AI_BASE_URL || process.env.DEEPSEEK_BASE_URL || preset.baseUrl),
+    model: m.AI_MODEL || m.DEEPSEEK_MODEL || process.env.AI_MODEL || process.env.DEEPSEEK_MODEL || preset.model,
   };
+}
+
+/**
+ * @deprecated Back-compat shim — resolves the *active* provider (DeepSeek or
+ * whatever the admin selected) via {@link getLlmConfig}. Existing AI call sites
+ * keep calling this and transparently pick up the configured provider.
+ */
+export async function getDeepSeekConfig(): Promise<{ apiKey: string; baseUrl: string; model: string }> {
+  const { apiKey, baseUrl, model } = await getLlmConfig();
+  return { apiKey, baseUrl, model };
 }
 
 /** Google OAuth credentials — DB first (set via /setup), env fallback. */

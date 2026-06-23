@@ -9,12 +9,12 @@ type Integ = { name: string; desc: string; status: string; metric: string };
 
 // Integrations that the operator is expected to configure post-setup. Postgres /
 // LiveKit are infra (in compose) so we don't nag about them here.
-const TRACKED = ['Google OAuth', 'SMTP Email', 'Deepgram', 'DeepSeek', 'S3 Storage'];
+const TRACKED = ['Google OAuth', 'SMTP Email', 'Deepgram', 'AI model', 'S3 Storage'];
 
 const TEST_ENDPOINT: Record<string, string> = {
   'SMTP Email': '/api/settings/email/test',
   'S3 Storage': '/api/settings/s3/test',
-  DeepSeek: '/api/settings/deepseek/test',
+  'AI model': '/api/settings/ai/test',
   Deepgram: '/api/settings/deepgram/test',
 };
 

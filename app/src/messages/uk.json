@@ -1094,6 +1094,21 @@
     "manage": "Керувати",
     "connect": "Підключити",
     "googleRedirectHint": "Додайте цей redirect URI до вашого Google OAuth-клієнта в Google Cloud Console:",
+    "chatEnabled": "Увімкнути сповіщення в чат",
+    "chatProvider": "Провайдер",
+    "chatBotToken": "Токен бота",
+    "chatBotTokenSet": "Токен бота (збережено · вставте новий для зміни)",
+    "chatChatId": "ID чату / каналу",
+    "chatWebhook": "URL вхідного webhook",
+    "chatWebhookSet": "URL webhook (збережено · вставте новий для зміни)",
+    "chatHint": "Telegram: створіть бота через @BotFather, додайте його в групу і вставте токен бота + ID чату. Slack / Mattermost / Discord: вставте URL вхідного webhook. Звіти й нагадування про мітинги надсилаються туди.",
+    "aiProvider": "Провайдер",
+    "aiKey": "API-ключ",
+    "aiKeySet": "API-ключ (збережено — вставте, щоб замінити)",
+    "aiBaseUrl": "Базовий URL",
+    "aiModel": "Модель",
+    "aiHint": "Живить AI-звіти, асистента в чаті мітингу, порядки денні та квізи. Працює з будь-яким OpenAI-сумісним API. Для Claude оберіть OpenRouter (модель anthropic/claude-opus-4-8) або Anthropic. Ollama працює локально без ключа. Залиште «Базовий URL» порожнім, щоб використати типовий для провайдера.",
+    "testSent": "Тестове повідомлення надіслано ✓",
     "statusError": "Помилка",
     "notConfigured": "Не налаштовано",
     "apiKeys": "API ключі",
@@ -1363,6 +1378,12 @@
     "requestIdAndActionRequired": "requestId та action обовʼязкові",
     "invalidCurrentPassword": "Невірний поточний пароль"
   },
+  "chat": {
+    "reportReady": "📋 {title} — звіт по мітингу готовий",
+    "decisionsLabel": "Рішення",
+    "reminder": "⏰ {title} починається о {time}",
+    "test": "✅ Garely підключено до цього чату."
+  },
   "integrations": {
     "descSmtp": "Транзакційна пошта · nodemailer",
     "descGoogle": "SSO для команди",
@@ -1371,6 +1392,8 @@
     "notConfiguredMetric": "не налаштовано",
     "users": "{count, plural, one {# юзер} few {# юзери} many {# юзерів} other {# юзерів}}",
     "descClickup": "AI-задачі з мітингів → ClickUp",
+    "descChat": "Звіти й нагадування про мітинги → чат команди",
+    "descAi": "LLM · звіти, чат, порядки денні, квізи",
     "clickupByDept": "за департаментом",
     "clickupInbox": "→ Call Inbox"
   },
