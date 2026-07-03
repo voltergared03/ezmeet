@@ -193,6 +193,32 @@ export async function clickUpPing(token: string): Promise<{ teams: { id: string;
   return { teams: (data.teams || []).map((t) => ({ id: t.id, name: t.name })) };
 }
 
+/**
+ * How much the fallback list (auto-detected "Call Inbox", or an explicit fallback)
+ * is actually catching — so an admin can judge whether it's still needed. Counts
+ * pushed tasks whose destination was the fallback list. Null when disabled/unresolvable.
+ */
+export async function getFallbackStats(): Promise<{ listName: string; last30d: number; total: number } | null> {
+  const cfg = await getClickUpConfig();
+  if (!cfg) return null;
+  try {
+    const teamId = await resolveTeamId(cfg);
+    const { fallbackListId } = await resolveListMap(cfg, teamId);
+    if (!fallbackListId) return null;
+    const info = await cuJson<{ name?: string; space?: { name?: string } }>(cfg.token, `/list/${fallbackListId}`).catch(() => null);
+    const listName = info?.space?.name || info?.name || 'fallback list';
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [last30d, total] = await Promise.all([
+      prisma.clickUpTaskLink.count({ where: { listId: fallbackListId, syncedAt: { gte: since } } }),
+      prisma.clickUpTaskLink.count({ where: { listId: fallbackListId } }),
+    ]);
+    return { listName, last30d, total };
+  } catch (e) {
+    console.error('[clickup] fallback stats failed:', (e as Error).message);
+    return null;
+  }
+}
+
 // ─────────────────────────── runtime resolvers (cached per push-run) ───────────────────────────
 
 async function resolveTeamId(cfg: ClickUpConfig): Promise<string> {

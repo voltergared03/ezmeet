@@ -5,7 +5,7 @@ import { readConfig } from '@/lib/config';
 import {
   mapPriority, normName, dedupeKeyFor, listIdForDepartment,
   pushMeetingTasksToClickUp, garelyStatusToClickUp, clickUpStatusToGarely,
-  verifyClickUpSignature, applyClickUpEvent, migrateAllTasksToClickUp,
+  verifyClickUpSignature, applyClickUpEvent, migrateAllTasksToClickUp, getFallbackStats,
   type ClickUpConfig, type ClickUpPushItem,
 } from '@/lib/clickup';
 import { createHmac } from 'crypto';
@@ -120,6 +120,7 @@ function installFetch() {
     if (u.includes('/space/sp2/list')) return json({ lists: [{ id: 'L_INBOX', name: 'New Tasks' }] });
     if (u.includes('/list/L_IT/field')) return json({ fields: [{ id: 'fSrc', name: 'Source', type: 'drop_down', type_config: { options: [{ id: 'optTg', name: 'Telegram' }, { id: 'optGC', name: 'Garely Call' }] } }] });
     if (u.includes('/list/L_IT/task') && method === 'POST') return json({ id: 'CU1', url: 'https://app.clickup.com/t/CU1' });
+    if (u.endsWith('/list/L_INBOX')) return json({ name: 'New Tasks', space: { name: 'Call Inbox' } });
     if (u.includes('/task/CU1') && method === 'PUT') return json({ id: 'CU1' });
     return json({});
   });
@@ -416,5 +417,23 @@ describe('migrateAllTasksToClickUp', () => {
     expect(post!.body.name).toBe('Migrated task');
     expect(post!.body.status).toBe('done'); // done task migrated with the right status
     expect(prismaMock.taskRow.update).toHaveBeenCalled();
+  });
+});
+
+describe('getFallbackStats', () => {
+  it('null when disabled', async () => {
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_ENABLED: 'false' });
+    expect(await getFallbackStats()).toBeNull();
+  });
+  it('resolves the fallback list + counts tasks routed there (30d + all-time)', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.clickUpTaskLink.count.mockResolvedValueOnce(3 as any).mockResolvedValueOnce(12 as any);
+    installFetch();
+    const stats = await getFallbackStats();
+    expect(stats).toEqual({ listName: 'Call Inbox', last30d: 3, total: 12 });
+    // the 30-day count is scoped to the fallback list id
+    const countArgs = prismaMock.clickUpTaskLink.count.mock.calls[0][0] as any;
+    expect(countArgs.where.listId).toBe('L_INBOX');
+    expect(countArgs.where.syncedAt.gte).toBeInstanceOf(Date);
   });
 });

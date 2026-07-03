@@ -66,6 +66,8 @@ export function IntegrationsTab() {
   const [clickupSaved, setClickupSaved] = useState(false);
   const [clickupTesting, setClickupTesting] = useState(false);
   const [clickupTest, setClickupTest] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [clickupFallback, setClickupFallback] = useState<{ listName: string; last30d: number; total: number } | null>(null);
+  const [clickupFallbackLoading, setClickupFallbackLoading] = useState(false);
 
   // Linear two-way sync config (mirrors ClickUp)
   const [linear, setLinear] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department' });
@@ -231,6 +233,20 @@ export function IntegrationsTab() {
   useEffect(() => {
     if (manage === 'AI model' && aiModels.length === 0 && !aiModelsLoading && (ai.apiKeySet || aiPresets[ai.provider]?.keyless)) {
       loadAiModels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manage]);
+
+  // Lazily load how much the fallback (Call Inbox) list is catching when the ClickUp
+  // modal opens (it hits the ClickUp API, so it's not on the main settings GET).
+  useEffect(() => {
+    if (manage === 'ClickUp' && clickup.enabled && clickup.tokenSet && clickupFallback === null && !clickupFallbackLoading) {
+      setClickupFallbackLoading(true);
+      fetch('/api/settings/clickup/fallback-stats')
+        .then(r => r.json())
+        .then(d => { if (d.stats) setClickupFallback(d.stats); })
+        .catch(() => {})
+        .finally(() => setClickupFallbackLoading(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manage]);
@@ -749,6 +765,22 @@ export function IntegrationsTab() {
       <Toggle label={t('settings.clickupPersonalRouting')} value={clickup.personalRouting} onChange={v => setClickup(c => ({ ...c, personalRouting: v }))} />
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupPersonalHint')}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupHint')}</div>
+      {clickup.enabled && clickup.tokenSet && (
+        <div style={{
+          fontSize: 12, lineHeight: 1.5, borderRadius: 10, padding: '9px 12px',
+          border: '1px solid var(--border)', background: 'var(--surface-2)',
+          color: clickupFallback && clickupFallback.last30d > 0 ? 'var(--amber, #d99a2b)' : 'var(--muted)',
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+          {clickupFallbackLoading
+            ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> {t('settings.clickupFallbackChecking')}</>
+            : clickupFallback
+              ? (clickupFallback.last30d > 0
+                ? t('settings.clickupFallbackActive', { count: clickupFallback.last30d, name: clickupFallback.listName })
+                : t('settings.clickupFallbackEmpty', { name: clickupFallback.listName, total: clickupFallback.total }))
+              : null}
+        </div>
+      )}
       {clickup.migration?.state && (
         <div style={{ fontSize: 12, color: clickup.migration.state === 'error' ? '#f87171' : 'var(--muted)' }}>
           {clickup.migration.state === 'running'
