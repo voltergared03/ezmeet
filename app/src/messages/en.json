@@ -1155,6 +1155,8 @@
     "clickupRoutingDepartment": "By department → matching list",
     "clickupRoutingInbox": "Everything → Call Inbox",
     "clickupHint": "Paste your ClickUp Personal API token and turn it on. Tasks route to the list matching each department (members matched by email); team, lists and fields are auto-discovered.",
+    "clickupPersonalRouting": "Personal lists for cross-department people",
+    "clickupPersonalHint": "When on, a task is created per assignee, and anyone who belongs to 2+ departments (e.g. admins) gets their tasks in their own auto-created list under a “Garely Personal” space instead of a department space. Single-department members keep going to their department. Status syncs both ways (last change wins).",
     "linearEnabled": "Enable Linear sync",
     "linearToken": "API key (lin_api_…)",
     "linearTokenSet": "API key (saved · paste a new one to change)",

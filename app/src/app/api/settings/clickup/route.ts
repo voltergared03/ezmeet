@@ -11,7 +11,7 @@ export async function GET() {
   if (!session?.user || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const m = await readConfig(['CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'CLICKUP_TEAM_ID', 'CLICKUP_MIGRATION']);
+  const m = await readConfig(['CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'CLICKUP_TEAM_ID', 'CLICKUP_MIGRATION', 'CLICKUP_PERSONAL_ROUTING']);
   let migration: unknown = null;
   try { if (m.CLICKUP_MIGRATION) migration = JSON.parse(m.CLICKUP_MIGRATION); } catch { /* ignore */ }
   return NextResponse.json({
@@ -19,6 +19,7 @@ export async function GET() {
     tokenSet: !!(m.CLICKUP_TOKEN || '').trim(),
     routingMode: m.CLICKUP_ROUTING_MODE === 'inbox' ? 'inbox' : 'department',
     teamId: m.CLICKUP_TEAM_ID || '',
+    personalRouting: m.CLICKUP_PERSONAL_ROUTING === 'true',
     migration,
   });
 }
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest) {
 
   if (typeof body.enabled === 'boolean') updates.CLICKUP_ENABLED = body.enabled ? 'true' : 'false';
   if (typeof body.routingMode === 'string') updates.CLICKUP_ROUTING_MODE = body.routingMode === 'inbox' ? 'inbox' : 'department';
+  if (typeof body.personalRouting === 'boolean') updates.CLICKUP_PERSONAL_ROUTING = body.personalRouting ? 'true' : 'false';
   if (typeof body.teamId === 'string') updates.CLICKUP_TEAM_ID = body.teamId.trim();
   if (typeof body.fallbackListId === 'string') updates.CLICKUP_FALLBACK_LIST_ID = body.fallbackListId.trim();
   if (body.listMap && typeof body.listMap === 'object') {

@@ -929,11 +929,18 @@ model ClickUpTaskLink {
   clickupUrl    String
   listId        String?
   title         String? // last-synced title (audit/debug)
+  // Per-user routing (personal-routing mode): one link per (task Row × assignee),
+  // so a task split into N ClickUp copies can map ANY copy back to its Garely Row.
+  // Null on legacy links (one-task-per-row model) — reverse-sync then falls back
+  // to TaskRow.clickupTaskId.
+  rowId          String?
+  assigneeUserId String?
   syncedAt      DateTime @default(now())
 
   @@unique([meetingId, dedupeKey])
   @@index([meetingId])
   @@index([clickupTaskId])
+  @@index([rowId])
 }
 
 // === Linear integration (two-way sync of AI meeting tasks ↔ Linear issues) ===

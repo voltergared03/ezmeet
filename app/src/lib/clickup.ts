@@ -55,6 +55,11 @@ export interface ClickUpConfig {
   routingMode: 'department' | 'inbox';
   listMap: Record<string, string>; // explicit dept-name → list-id overrides
   fallbackListId: string; // '' → auto-detect "Call Inbox"
+  // Per-user routing (opt-in). When on, a task is split into one ClickUp task PER
+  // assignee, and an assignee who belongs to 2+ departments is routed to their own
+  // auto-created personal list instead of a department space. Off → legacy model
+  // (one task per Garely task, all assignees, department routing).
+  personalRouting: boolean;
 }
 
 /** One AI task (parent or subtask) to mirror into ClickUp. */
@@ -91,8 +96,13 @@ export function dedupeKeyFor(
   title: string,
   departmentId: string | null,
   parentTitle: string | null,
+  assigneeUserId?: string | null,
 ): string {
   const parts = [meetingId, normName(title), departmentId || '-', normName(parentTitle) || '-'];
+  // Per-user split: append the assignee so each of a task's N copies has its own
+  // stable key. Omitted (legacy 4-arg calls) → identical key to before, so
+  // existing links keep matching and nothing re-duplicates.
+  if (assigneeUserId) parts.push(`u:${assigneeUserId}`);
   return createHash('sha256').update(parts.join('|')).digest('hex');
 }
 
@@ -119,7 +129,7 @@ export function listIdForDepartment(
 export async function getClickUpConfig(): Promise<ClickUpConfig | null> {
   const m = await readConfig([
     'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_TEAM_ID',
-    'CLICKUP_LIST_MAP', 'CLICKUP_FALLBACK_LIST_ID', 'CLICKUP_ROUTING_MODE',
+    'CLICKUP_LIST_MAP', 'CLICKUP_FALLBACK_LIST_ID', 'CLICKUP_ROUTING_MODE', 'CLICKUP_PERSONAL_ROUTING',
   ]);
   if (m.CLICKUP_ENABLED !== 'true') return null;
   const token = decodeToken(m.CLICKUP_TOKEN);
@@ -132,6 +142,7 @@ export async function getClickUpConfig(): Promise<ClickUpConfig | null> {
     routingMode: m.CLICKUP_ROUTING_MODE === 'inbox' ? 'inbox' : 'department',
     listMap,
     fallbackListId: (m.CLICKUP_FALLBACK_LIST_ID || '').trim(),
+    personalRouting: m.CLICKUP_PERSONAL_ROUTING === 'true',
   };
 }
 
@@ -289,6 +300,178 @@ async function markRowOwned(rowId: string, clickupTaskId: string, clickupUrl: st
     .catch((e) => console.error('[clickup] mark row owned failed:', rowId, (e as Error).message));
 }
 
+// ─────────────────────────── per-user routing (opt-in) ───────────────────────────
+
+const PERSONAL_SPACE_NAME = 'Garely Personal';
+
+/** Garely user ids that belong to 2+ departments → route them to a personal list. */
+async function multiDeptUserIds(userIds: string[]): Promise<Set<string>> {
+  if (!userIds.length) return new Set();
+  const rows = await prisma.departmentMember
+    .findMany({ where: { userId: { in: userIds } }, select: { userId: true } })
+    .catch(() => [] as { userId: string }[]);
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.userId, (counts.get(r.userId) || 0) + 1);
+  return new Set([...counts.entries()].filter(([, c]) => c >= 2).map(([u]) => u));
+}
+
+interface PersonalRouter {
+  /** Resolve (create + cache) the personal list id for a user; null on failure. */
+  listForUser(email: string, displayName: string): Promise<string | null>;
+  /** Persist any newly-created space/list ids back to config. */
+  persist(): Promise<void>;
+}
+
+/** Auto-creates & caches a "Garely Personal" space + one list per user (by email). */
+async function makePersonalRouter(cfg: ClickUpConfig, teamId: string): Promise<PersonalRouter> {
+  const m = await readConfig(['CLICKUP_PERSONAL_SPACE_ID', 'CLICKUP_PERSONAL_LISTS']);
+  let spaceId = (m.CLICKUP_PERSONAL_SPACE_ID || '').trim() || null;
+  let cache: Record<string, string> = {};
+  try { if (m.CLICKUP_PERSONAL_LISTS) cache = JSON.parse(m.CLICKUP_PERSONAL_LISTS); } catch { cache = {}; }
+  let dirty = false;
+
+  // Lowest-id "Garely Personal" space, so concurrent creators converge on ONE.
+  const findSpaceByName = async (): Promise<string | null> => {
+    const spaces = await cuJson<{ spaces?: { id: string; name: string }[] }>(cfg.token, `/team/${teamId}/space?archived=false`);
+    const ids = (spaces.spaces || []).filter((s) => normName(s.name) === normName(PERSONAL_SPACE_NAME)).map((s) => s.id);
+    return ids.length ? ids.sort((a, b) => Number(a) - Number(b))[0] : null;
+  };
+  const ensureSpace = async (): Promise<string | null> => {
+    if (spaceId) return spaceId;
+    try {
+      const found = await findSpaceByName();
+      if (found) { spaceId = found; dirty = true; return spaceId; }
+      await cuJson<{ id: string }>(cfg.token, `/team/${teamId}/space`, { method: 'POST', body: JSON.stringify({ name: PERSONAL_SPACE_NAME, multiple_assignees: true }) });
+      // Re-resolve by name so a duplicate created by a concurrent push converges here.
+      spaceId = await findSpaceByName();
+      dirty = !!spaceId;
+      return spaceId;
+    } catch (e) {
+      console.error('[clickup] personal space ensure failed:', (e as Error).message);
+      return null;
+    }
+  };
+
+  return {
+    async listForUser(email, displayName) {
+      const key = email.toLowerCase();
+      if (cache[key]) return cache[key];
+      const sp = await ensureSpace();
+      if (!sp) return null;
+      const name = displayName || email.split('@')[0] || email; // avoid naming a list by a raw email
+      try {
+        const created = await cuJson<{ id: string }>(cfg.token, `/space/${sp}/list`, { method: 'POST', body: JSON.stringify({ name }) });
+        cache[key] = created.id; dirty = true; return created.id;
+      } catch (e) {
+        console.error('[clickup] personal list create failed for', email, (e as Error).message);
+        return null;
+      }
+    },
+    async persist() {
+      if (!dirty) return;
+      await writeConfig({ CLICKUP_PERSONAL_SPACE_ID: spaceId || '', CLICKUP_PERSONAL_LISTS: JSON.stringify(cache) }).catch(() => {});
+    },
+  };
+}
+
+interface AssigneeTarget { garelyUserId: string; clickupUserId: number; listId: string }
+
+/** Per-assignee destinations for a task: personal list for a multi-department user,
+ *  else the task's department list. Assignees not in ClickUp are dropped. */
+async function resolveAssigneeTargets(
+  assigneeUserIds: string[],
+  ctx: {
+    members: Map<string, number>;
+    emailById: Map<string, string>;
+    nameById: Map<string, string>;
+    multiDept: Set<string>;
+    deptListId: string | null;
+    personal: PersonalRouter;
+  },
+): Promise<AssigneeTarget[]> {
+  const out: AssigneeTarget[] = [];
+  const seen = new Set<string>();
+  for (const uid of assigneeUserIds) {
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+    const email = ctx.emailById.get(uid);
+    if (!email) continue;
+    const clickupUserId = ctx.members.get(email);
+    if (!clickupUserId) continue; // not in ClickUp → skip (no task for them)
+    // Multi-dept user → personal list; on failure fall back to the department list.
+    let listId = ctx.deptListId;
+    if (ctx.multiDept.has(uid)) {
+      const personalList = await ctx.personal.listForUser(email, ctx.nameById.get(uid) || '');
+      if (personalList) listId = personalList;
+    }
+    if (!listId) { console.warn('[clickup] no destination list for assignee', uid, '— skipped'); continue; }
+    out.push({ garelyUserId: uid, clickupUserId, listId });
+  }
+  // Deterministic order → the "lead" copy (row.clickupTaskId anchor) is stable across
+  // regenerations regardless of the incoming assignee order.
+  out.sort((a, b) => (a.garelyUserId < b.garelyUserId ? -1 : a.garelyUserId > b.garelyUserId ? 1 : 0));
+  return out;
+}
+
+interface SplitMeetingTask {
+  meetingId: string;
+  rowId: string;
+  title: string;
+  departmentId: string | null;
+  parentTitle: string | null;
+  priority: number | null;
+  dueDateMs: number | null;
+  statusName?: string | null; // migrate carries the current status name for done/in-progress
+}
+
+/**
+ * Create/update one ClickUp task PER assignee target for a meeting task, keyed by a
+ * per-(row × assignee) dedupe link so regeneration updates instead of duplicating.
+ * Marks the Garely row owned via the first copy. One target failing doesn't stop the rest.
+ */
+async function syncSplitMeetingTask(
+  cfg: ClickUpConfig,
+  fieldCache: Map<string, { fieldId: string; optionId: string } | null>,
+  item: SplitMeetingTask,
+  targets: AssigneeTarget[],
+): Promise<{ created: number; updated: number }> {
+  let created = 0;
+  let updated = 0;
+  let lead: { id: string; url: string } | null = null;
+  for (const t of targets) {
+    try {
+      const dedupeKey = dedupeKeyFor(item.meetingId, item.title, item.departmentId, item.parentTitle, t.garelyUserId);
+      const existing = await prisma.clickUpTaskLink.findUnique({ where: { meetingId_dedupeKey: { meetingId: item.meetingId, dedupeKey } } });
+      if (existing) {
+        // Update content only (preserve human status/assignee changes on the ClickUp side).
+        const body: Record<string, unknown> = { name: item.title };
+        if (item.priority != null) body.priority = item.priority;
+        if (item.dueDateMs != null) { body.due_date = item.dueDateMs; body.due_date_time = false; }
+        await cuJson(cfg.token, `/task/${existing.clickupTaskId}`, { method: 'PUT', body: JSON.stringify(body) });
+        await prisma.clickUpTaskLink.update({ where: { id: existing.id }, data: { syncedAt: new Date(), title: item.title, listId: t.listId, rowId: item.rowId, assigneeUserId: t.garelyUserId } });
+        await applyClickUpEvent('taskStatusUpdated', existing.clickupTaskId);
+        if (!lead) lead = { id: existing.clickupTaskId, url: existing.clickupUrl };
+        updated++;
+      } else {
+        const source = await resolveSourceField(cfg.token, t.listId, fieldCache);
+        const body: CreateBody = { name: item.title, assignees: [t.clickupUserId] };
+        if (item.priority != null) body.priority = item.priority;
+        if (item.dueDateMs != null) { body.due_date = item.dueDateMs; body.due_date_time = false; }
+        if (item.statusName) body.status = item.statusName;
+        if (source) body.custom_fields = [{ id: source.fieldId, value: source.optionId }];
+        const res = await createClickUpTask(cfg.token, t.listId, body);
+        await prisma.clickUpTaskLink.create({ data: { meetingId: item.meetingId, dedupeKey, clickupTaskId: res.id, clickupUrl: res.url, listId: t.listId, title: item.title, rowId: item.rowId, assigneeUserId: t.garelyUserId } });
+        if (!lead) lead = { id: res.id, url: res.url };
+        created++;
+      }
+    } catch (e) {
+      console.error('[clickup] split task sync failed for row', item.rowId, 'assignee', t.garelyUserId, (e as Error).message);
+    }
+  }
+  if (lead) await markRowOwned(item.rowId, lead.id, lead.url);
+  return { created, updated };
+}
+
 // ─────────────────────────── orchestrator (called from regenerate.ts) ───────────────────────────
 
 /**
@@ -318,10 +501,15 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
     const userIds = [...new Set(items.flatMap((i) => i.assigneeUserIds).filter(Boolean))];
     const [depts, users] = await Promise.all([
       deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
-      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } }) : Promise.resolve([]),
+      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } }) : Promise.resolve([]),
     ]);
     const deptName = new Map(depts.map((d) => [d.id, d.name]));
     const emailById = new Map(users.map((u) => [u.id, (u.email || '').toLowerCase()]));
+    const nameById = new Map(users.map((u) => [u.id, u.name || '']));
+
+    // Per-user routing prerequisites (only when the mode is on).
+    const personal = cfg.personalRouting ? await makePersonalRouter(cfg, teamId) : null;
+    const multiDept = cfg.personalRouting ? await multiDeptUserIds(userIds) : new Set<string>();
 
     const fieldCache = new Map<string, { fieldId: string; optionId: string } | null>();
     let created = 0;
@@ -334,6 +522,27 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
         }
         const dName = item.departmentId ? deptName.get(item.departmentId) || null : null;
         const listId = listIdForDepartment(cfg, listMap, dName);
+
+        // Per-user split path: one task per assignee, personal list for multi-dept users.
+        if (cfg.personalRouting && personal) {
+          const targets = await resolveAssigneeTargets(item.assigneeUserIds, {
+            members, emailById, nameById, multiDept, deptListId: listId, personal,
+          });
+          if (!targets.length) {
+            // Nobody resolves to ClickUp now → release the row if it was owned before,
+            // so it isn't stuck read-only pointing at a stale/removed copy.
+            await prisma.taskRow.updateMany({ where: { rowId: item.rowId, clickupTaskId: { not: null } }, data: { clickupTaskId: null, clickupUrl: null, clickupStatus: null, clickupSyncedAt: null } }).catch(() => {});
+            continue;
+          }
+          const c = await syncSplitMeetingTask(cfg, fieldCache, {
+            meetingId, rowId: item.rowId, title: item.title, departmentId: item.departmentId,
+            parentTitle: item.parentTitle, priority: mapPriority(item.priority),
+            dueDateMs: item.dueDate ? item.dueDate.getTime() : null,
+          }, targets);
+          created += c.created; updated += c.updated;
+          continue;
+        }
+
         if (!listId) {
           console.error('[clickup] no destination list for task (no match + no fallback):', item.title);
           continue;
@@ -400,6 +609,7 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
         console.error('[clickup] push failed for task:', item.title, '·', (e as Error).message);
       }
     }
+    await personal?.persist(); // save any newly-created personal space/list ids
     console.log(`[clickup] meeting ${meetingId}: ${created} created, ${updated} updated, ${items.length} total`);
   } catch (e) {
     console.error('[clickup] push aborted:', (e as Error).message);
@@ -495,14 +705,40 @@ export async function verifyClickUpSignature(rawBody: string, signature: string 
  */
 export async function applyClickUpEvent(event: string, clickupTaskId: string): Promise<void> {
   try {
-    const tr = await prisma.taskRow.findFirst({ where: { clickupTaskId }, select: { rowId: true } });
-    if (!tr) return; // not a task Garely pushed → ignore
+    // Resolve the Garely row: a per-user split copy carries rowId on its link;
+    // a legacy/lead task resolves via TaskRow.clickupTaskId.
+    const link = await prisma.clickUpTaskLink.findFirst({ where: { clickupTaskId }, select: { rowId: true } });
+    let rowId = link?.rowId ?? null;
+    if (!rowId) {
+      const tr = await prisma.taskRow.findFirst({ where: { clickupTaskId }, select: { rowId: true } });
+      rowId = tr?.rowId ?? null;
+    }
+    if (!rowId) return; // not a task Garely pushed → ignore
 
     if (event === 'taskDeleted') {
-      const subs = await prisma.taskRow.findMany({ where: { parentRowId: tr.rowId }, select: { rowId: true } });
-      const ids = [tr.rowId, ...subs.map((s) => s.rowId)];
+      // Drop this ClickUp task's link(s), then decide by what's LEFT for the row:
+      // any OTHER ClickUp copy still bound to this row (split copies carry rowId) → keep
+      // the row; none left → this was the sole/last copy → remove the row. Deleting one
+      // admin's split copy must never nuke the task for everyone else. Counting by rowId
+      // (not by link.rowId presence) is robust to a mixed legacy+split link state.
+      await prisma.clickUpTaskLink.deleteMany({ where: { clickupTaskId } });
+      const remaining = await prisma.clickUpTaskLink.findMany({
+        where: { rowId, NOT: { clickupTaskId } },
+        select: { clickupTaskId: true, clickupUrl: true }, take: 1,
+      });
+      if (remaining.length) {
+        // Re-point the row's lead pointer only if we just deleted the lead.
+        await prisma.taskRow.updateMany({
+          where: { rowId, clickupTaskId },
+          data: { clickupTaskId: remaining[0].clickupTaskId, clickupUrl: remaining[0].clickupUrl },
+        }).catch(() => {});
+        console.log('[clickup] taskDeleted → detached one copy, row kept', rowId);
+        return;
+      }
+      const subs = await prisma.taskRow.findMany({ where: { parentRowId: rowId }, select: { rowId: true } });
+      const ids = [rowId, ...subs.map((s) => s.rowId)];
       await prisma.row.deleteMany({ where: { id: { in: ids } } }); // cascades TaskRow + Row*
-      console.log('[clickup] taskDeleted → removed Garely row', tr.rowId);
+      console.log('[clickup] taskDeleted → removed Garely row', rowId);
       return;
     }
 
@@ -523,7 +759,7 @@ export async function applyClickUpEvent(event: string, clickupTaskId: string): P
     const gStatus = clickUpStatusToGarely(statusType, statusName);
 
     const row = await prisma.row.findUnique({
-      where: { id: tr.rowId },
+      where: { id: rowId },
       select: { data: true, table: { select: { base: { select: { orgId: true } } } } },
     });
     if (!row) return;
@@ -531,9 +767,9 @@ export async function applyClickUpEvent(event: string, clickupTaskId: string): P
     if (!prov) return;
     const data = { ...((row.data as Record<string, unknown>) ?? {}), [prov.fieldIds.status]: gStatus };
     await prisma.$transaction([
-      prisma.row.update({ where: { id: tr.rowId }, data: { data: data as Prisma.InputJsonValue } }),
+      prisma.row.update({ where: { id: rowId }, data: { data: data as Prisma.InputJsonValue } }),
       prisma.taskRow.update({
-        where: { rowId: tr.rowId },
+        where: { rowId },
         data: { clickupStatus: statusName || null, clickupSyncedAt: new Date(), completedAt: gStatus === 'done' ? new Date() : null },
       }),
     ]);
@@ -591,20 +827,52 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
     const deptIds = [...new Set(rows.map((r) => r.taskMeta?.departmentId).filter((x): x is string => !!x))];
     const parentIds = [...new Set(rows.map((r) => r.taskMeta?.parentRowId).filter((x): x is string => !!x))];
     const [users, depts, parents] = await Promise.all([
-      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } }) : Promise.resolve([]),
+      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } }) : Promise.resolve([]),
       deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
       parentIds.length ? prisma.row.findMany({ where: { id: { in: parentIds } }, select: { id: true, data: true } }) : Promise.resolve([]),
     ]);
     const emailById = new Map(users.map((u) => [u.id, (u.email || '').toLowerCase()]));
+    const nameById = new Map(users.map((u) => [u.id, u.name || '']));
     const deptName = new Map(depts.map((d) => [d.id, d.name]));
     const parentTitle = new Map(parents.map((p) => [p.id, str((p.data as Record<string, unknown>)?.[f.title]) || null]));
     const fieldCache = new Map<string, { fieldId: string; optionId: string } | null>();
+
+    // Per-user routing prerequisites (only when the mode is on).
+    const personal = cfg.personalRouting ? await makePersonalRouter(cfg, teamId) : null;
+    const multiDept = cfg.personalRouting ? await multiDeptUserIds(userIds) : new Set<string>();
 
     let i = 0;
     for (const row of rows) {
       i++;
       try {
         const data = (row.data ?? {}) as Record<string, unknown>;
+
+        // Per-user split path (meeting tasks only — they carry the meetingId the
+        // dedupe link needs; manual tasks keep the legacy single-task path below).
+        if (cfg.personalRouting && personal && row.taskMeta?.meetingId) {
+          const dNameP = row.taskMeta.departmentId ? deptName.get(row.taskMeta.departmentId) || null : null;
+          const deptListId = listIdForDepartment(cfg, listMap, dNameP);
+          const targets = await resolveAssigneeTargets(row.assignments.map((a) => a.userId), {
+            members, emailById, nameById, multiDept, deptListId, personal,
+          });
+          if (!targets.length) { skipped++; continue; }
+          const dueStr = str(data[f.dueDate]);
+          const dueMs = dueStr ? (Number.isNaN(Date.parse(dueStr)) ? null : Date.parse(dueStr)) : null;
+          const c = await syncSplitMeetingTask(cfg, fieldCache, {
+            meetingId: row.taskMeta.meetingId, rowId: row.id, title: str(data[f.title]) || '(untitled)',
+            departmentId: row.taskMeta.departmentId ?? null,
+            parentTitle: row.taskMeta.parentRowId ? parentTitle.get(row.taskMeta.parentRowId) ?? null : null,
+            priority: mapPriority(str(data[f.priority])), dueDateMs: dueMs,
+            statusName: garelyStatusToClickUp(str(data[f.status])) ?? null,
+          }, targets);
+          if (c.created || c.updated) migrated++; else skipped++;
+          if (i % 20 === 0) {
+            await writeConfig({ CLICKUP_MIGRATION: JSON.stringify({ state: 'running', total: rows.length, migrated }) });
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          continue;
+        }
+
         // Assignees: matched ClickUp ids + unmatched notes.
         const assignees: number[] = [];
         const unmatched: string[] = [];
@@ -654,6 +922,7 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
         await new Promise((r) => setTimeout(r, 1500));
       }
     }
+    await personal?.persist(); // save any newly-created personal space/list ids
     await writeConfig({ CLICKUP_MIGRATION: JSON.stringify({ state: 'done', total: rows.length, migrated, skipped }) });
     console.log(`[clickup] migration done: ${migrated} migrated, ${skipped} skipped of ${rows.length}`);
   } catch (e) {
@@ -678,5 +947,7 @@ export async function disableClickUpSync(): Promise<void> {
     where: { clickupTaskId: { not: null } },
     data: { clickupTaskId: null, clickupUrl: null, clickupStatus: null, clickupSyncedAt: null },
   });
-  await writeConfig({ CLICKUP_MIGRATION: '' });
+  // Clear the per-user routing cache too — a reconnect to a DIFFERENT workspace must
+  // re-resolve the personal space/lists rather than reuse stale ids.
+  await writeConfig({ CLICKUP_MIGRATION: '', CLICKUP_PERSONAL_SPACE_ID: '', CLICKUP_PERSONAL_LISTS: '' });
 }

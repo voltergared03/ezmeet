@@ -65,11 +65,17 @@ describe('dedupeKeyFor', () => {
     expect(dedupeKeyFor('m1', 'Task', 'dHR', null)).not.toBe(base);
     expect(dedupeKeyFor('m1', 'Task', 'dIT', 'Parent')).not.toBe(base); // subtask vs parent
   });
+  it('appends the assignee so split copies get distinct keys — legacy calls unchanged', () => {
+    const base = dedupeKeyFor('m1', 'Task', 'dIT', null);
+    expect(dedupeKeyFor('m1', 'Task', 'dIT', null, 'u1')).not.toBe(base);
+    expect(dedupeKeyFor('m1', 'Task', 'dIT', null, 'u1')).not.toBe(dedupeKeyFor('m1', 'Task', 'dIT', null, 'u2'));
+    expect(dedupeKeyFor('m1', 'Task', 'dIT', null, undefined)).toBe(base); // omitted → backward-compatible
+  });
 });
 
 describe('listIdForDepartment', () => {
   const cfg = (over: Partial<ClickUpConfig> = {}): ClickUpConfig => ({
-    token: 'pk_x', teamId: 'team1', routingMode: 'department', listMap: {}, fallbackListId: '', ...over,
+    token: 'pk_x', teamId: 'team1', routingMode: 'department', listMap: {}, fallbackListId: '', personalRouting: false, ...over,
   });
   const listMap = {
     byDept: new Map([['account management', 'L_AM'], ['it', 'L_IT'], ['call inbox', 'L_INBOX']]),
@@ -96,6 +102,7 @@ describe('listIdForDepartment', () => {
 // URL-routed fetch mock (robust to call order).
 function installFetch() {
   const calls: { url: string; method: string; body: any }[] = [];
+  let personalSpaceCreated = false; // stateful: the re-search after create must see it
   const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }) as Response;
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
@@ -103,7 +110,12 @@ function installFetch() {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ url: u, method, body });
     if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }, { user: { id: 222, email: 'b@x.com' } }] }] });
-    if (u.includes('/team/team1/space')) return json({ spaces: [{ id: 'sp1', name: 'IT' }, { id: 'sp2', name: 'Call Inbox' }] });
+    // Per-user routing: create the personal space + a per-user list, then push into it.
+    if (u.includes('/team/team1/space') && method === 'POST') { personalSpaceCreated = true; return json({ id: 'spPersonal' }); }
+    if (u.includes('/space/spPersonal/list') && method === 'POST') return json({ id: 'LP_u1' });
+    if (u.includes('/list/LP_u1/field')) return json({ fields: [] });
+    if (u.includes('/list/LP_u1/task') && method === 'POST') return json({ id: 'CUp1', url: 'https://app.clickup.com/t/CUp1' });
+    if (u.includes('/team/team1/space')) return json({ spaces: [{ id: 'sp1', name: 'IT' }, { id: 'sp2', name: 'Call Inbox' }, ...(personalSpaceCreated ? [{ id: 'spPersonal', name: 'Garely Personal' }] : [])] });
     if (u.includes('/space/sp1/list')) return json({ lists: [{ id: 'L_IT', name: 'Tasks' }] });
     if (u.includes('/space/sp2/list')) return json({ lists: [{ id: 'L_INBOX', name: 'New Tasks' }] });
     if (u.includes('/list/L_IT/field')) return json({ fields: [{ id: 'fSrc', name: 'Source', type: 'drop_down', type_config: { options: [{ id: 'optTg', name: 'Telegram' }, { id: 'optGC', name: 'Garely Call' }] } }] });
@@ -218,6 +230,66 @@ describe('pushMeetingTasksToClickUp', () => {
     expect(post!.body.assignees).toEqual([111]); // only the matched assignee
     expect(post!.body.description).toContain('ghost@x.com'); // unmatched noted
   });
+
+  // ── per-user routing (opt-in) ──
+  const personalConfig = { ...enabledConfig, CLICKUP_PERSONAL_ROUTING: 'true', CLICKUP_PERSONAL_SPACE_ID: '', CLICKUP_PERSONAL_LISTS: '' };
+
+  it('personal routing: a 2+ department assignee → own auto-created list (not the dept list)', async () => {
+    mockReadConfig.mockResolvedValue(personalConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com', name: 'Denys' }] as any);
+    prismaMock.departmentMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u1' }] as any); // 2 depts
+    prismaMock.clickUpTaskLink.findUnique.mockResolvedValue(null as any);
+    prismaMock.clickUpTaskLink.create.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    const { calls } = installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/team/team1/space'))).toBe(true); // space auto-created
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/space/spPersonal/list'))).toBe(true); // personal list created
+    const post = calls.find((c) => c.method === 'POST' && c.url.includes('/list/LP_u1/task'));
+    expect(post).toBeTruthy();
+    expect(post!.body.assignees).toEqual([111]);
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_IT/task'))).toBe(false); // NOT the dept list
+    const linkArgs = prismaMock.clickUpTaskLink.create.mock.calls[0][0] as any;
+    expect(linkArgs.data.rowId).toBe('r1');
+    expect(linkArgs.data.assigneeUserId).toBe('u1');
+  });
+
+  it('personal routing: a single-department assignee stays in the department list', async () => {
+    mockReadConfig.mockResolvedValue(personalConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com', name: 'Bob' }] as any);
+    prismaMock.departmentMember.findMany.mockResolvedValue([{ userId: 'u1' }] as any); // 1 dept
+    prismaMock.clickUpTaskLink.findUnique.mockResolvedValue(null as any);
+    prismaMock.clickUpTaskLink.create.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    const { calls } = installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_IT/task'))).toBe(true); // dept list
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/team/team1/space'))).toBe(false); // no personal space needed
+  });
+
+  it('personal routing: splits a task into one ClickUp task per assignee', async () => {
+    mockReadConfig.mockResolvedValue(personalConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com', name: 'A' }, { id: 'u2', email: 'b@x.com', name: 'B' }] as any);
+    prismaMock.departmentMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }] as any); // both single-dept
+    prismaMock.clickUpTaskLink.findUnique.mockResolvedValue(null as any);
+    prismaMock.clickUpTaskLink.create.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    const { calls } = installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [{ ...itTask, assigneeUserIds: ['u1', 'u2'] }]);
+
+    const posts = calls.filter((c) => c.method === 'POST' && c.url.includes('/list/L_IT/task'));
+    expect(posts.length).toBe(2); // one task per assignee
+    expect(posts.map((p) => p.body.assignees[0]).sort()).toEqual([111, 222]);
+    expect(prismaMock.clickUpTaskLink.create).toHaveBeenCalledTimes(2);
+  });
 });
 
 // ─────────────────────────── reverse sync (ClickUp → Garely) ───────────────────────────
@@ -257,8 +329,11 @@ describe('verifyClickUpSignature', () => {
 describe('applyClickUpEvent', () => {
   const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
 
-  it('taskDeleted removes the owning Garely row + its subtasks', async () => {
+  it('taskDeleted removes the owning Garely row + its subtasks (legacy single task)', async () => {
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue(null as any); // no split link
     prismaMock.taskRow.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.clickUpTaskLink.deleteMany.mockResolvedValue({ count: 1 } as any);
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([] as any); // no other copies for the row
     prismaMock.taskRow.findMany.mockResolvedValue([{ rowId: 'r1sub' }] as any);
     prismaMock.row.deleteMany.mockResolvedValue({ count: 2 } as any);
     await applyClickUpEvent('taskDeleted', 'CU1');
@@ -283,9 +358,41 @@ describe('applyClickUpEvent', () => {
   });
 
   it('is a no-op when the ClickUp task id is not a Garely-owned task', async () => {
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue(null as any);
     prismaMock.taskRow.findFirst.mockResolvedValue(null as any);
     await applyClickUpEvent('taskDeleted', 'UNKNOWN');
     expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deleting ONE split copy keeps the Garely row while other copies remain', async () => {
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any); // a split copy
+    prismaMock.clickUpTaskLink.deleteMany.mockResolvedValue({ count: 1 } as any);
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([{ clickupTaskId: 'CUother', clickupUrl: 'https://x' }] as any); // a copy remains
+    prismaMock.taskRow.updateMany.mockResolvedValue({} as any);
+    await applyClickUpEvent('taskDeleted', 'CUgone');
+    expect(prismaMock.clickUpTaskLink.deleteMany).toHaveBeenCalled();
+    expect(prismaMock.taskRow.updateMany).toHaveBeenCalled(); // lead pointer re-pointed
+    expect(prismaMock.row.deleteMany).not.toHaveBeenCalled(); // row kept
+  });
+
+  it('deleting the LAST split copy removes the Garely row', async () => {
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.clickUpTaskLink.deleteMany.mockResolvedValue({ count: 1 } as any);
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([] as any); // no copies remain
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any); // no subtasks
+    prismaMock.row.deleteMany.mockResolvedValue({ count: 1 } as any);
+    await applyClickUpEvent('taskDeleted', 'CUlast');
+    expect(prismaMock.row.deleteMany).toHaveBeenCalled();
+  });
+
+  it('deleting an orphaned legacy copy of a now-split-managed row is a safe no-op', async () => {
+    // Mixed state: the legacy link has rowId=null and TaskRow.clickupTaskId points at
+    // the split lead (a different id), so this delete resolves to no row → untouched.
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: null } as any);
+    prismaMock.taskRow.findFirst.mockResolvedValue(null as any);
+    await applyClickUpEvent('taskDeleted', 'CUlegacyOrphan');
+    expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+    expect(prismaMock.clickUpTaskLink.deleteMany).not.toHaveBeenCalled();
   });
 });
 

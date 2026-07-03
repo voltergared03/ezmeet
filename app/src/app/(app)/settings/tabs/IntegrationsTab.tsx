@@ -60,7 +60,7 @@ export function IntegrationsTab() {
   const [s3Test, setS3Test] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // ClickUp integration config (paste token → it works)
-  const [clickup, setClickup] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; teamId: string; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department', teamId: '' });
+  const [clickup, setClickup] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; teamId: string; personalRouting: boolean; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department', teamId: '', personalRouting: false });
   const [clickupToken, setClickupToken] = useState('');
   const [clickupSaving, setClickupSaving] = useState(false);
   const [clickupSaved, setClickupSaved] = useState(false);
@@ -163,6 +163,7 @@ export function IntegrationsTab() {
         if (!d.error) setClickup({
           enabled: !!d.enabled, tokenSet: !!d.tokenSet,
           routingMode: d.routingMode === 'inbox' ? 'inbox' : 'department', teamId: d.teamId || '',
+          personalRouting: !!d.personalRouting,
           migration: d.migration ?? null,
         });
       })
@@ -252,7 +253,7 @@ export function IntegrationsTab() {
   const saveClickup = async () => {
     setClickupSaving(true); setClickupSaved(false);
     try {
-      const payload: any = { enabled: clickup.enabled, routingMode: clickup.routingMode };
+      const payload: any = { enabled: clickup.enabled, routingMode: clickup.routingMode, personalRouting: clickup.personalRouting };
       if (clickupToken.trim()) payload.token = clickupToken.trim();
       const res = await fetch('/api/settings/clickup', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (res.ok) {
@@ -745,6 +746,8 @@ export function IntegrationsTab() {
           <option value="inbox">{t('settings.clickupRoutingInbox')}</option>
         </select>
       </FieldWrapper>
+      <Toggle label={t('settings.clickupPersonalRouting')} value={clickup.personalRouting} onChange={v => setClickup(c => ({ ...c, personalRouting: v }))} />
+      <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupPersonalHint')}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupHint')}</div>
       {clickup.migration?.state && (
         <div style={{ fontSize: 12, color: clickup.migration.state === 'error' ? '#f87171' : 'var(--muted)' }}>
