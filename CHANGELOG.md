@@ -4,6 +4,15 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.20.0-beta.1] — 2026-07-03
+
+### Added
+- **ClickUp fallback insight.** Settings → Integrations → ClickUp now shows how
+  many tasks landed in the fallback list (“Call Inbox”) in the last 30 days (and
+  all-time), so you can tell at a glance whether the fallback is still catching
+  unrouted tasks before deciding to remove it. Loaded on demand when the modal
+  opens.
+
 ## [1.19.0-beta.1] — 2026-07-03
 
 Per-user ClickUp routing, and sharper AI task extraction.
