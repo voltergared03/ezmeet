@@ -4,6 +4,31 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.19.0-beta.1] — 2026-07-03
+
+Per-user ClickUp routing, and sharper AI task extraction.
+
+### Added
+- **Per-user ClickUp routing.** Settings → Integrations → ClickUp → “Personal
+  lists for cross-department people”. When on, a meeting task is created as one
+  ClickUp task **per assignee**, and anyone who belongs to 2+ departments (e.g.
+  admins) gets their tasks in their **own auto-created list** under a “Garely
+  Personal” space instead of a department space — so cross-department admins’
+  tasks no longer clutter department spaces. Single-department members keep their
+  department routing. Status still syncs both ways (last change wins). Off by
+  default; existing behaviour is unchanged. Enable it before the first connect for
+  a clean rollout — tasks already pushed in the old mode aren’t moved.
+
+### Fixed
+- **The AI no longer records in-meeting logistics as tasks.** In-call requests
+  like “share your screen”, “unmute”, “next slide”, and anything done on the spot
+  during the call are excluded from task extraction — only genuine follow-up work
+  that outlives the meeting becomes a task. Applies to newly generated reports;
+  regenerate an older report to re-apply.
+
+### Notes
+- Additive schema change (`ClickUpTaskLink.rowId` + `assigneeUserId`) applied ahead of the deploy.
+
 ## [1.18.0-beta.1] — 2026-06-23
 
 HubSpot CRM integration — turn finished meetings into CRM activity.
