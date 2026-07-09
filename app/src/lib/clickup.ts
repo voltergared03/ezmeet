@@ -71,6 +71,11 @@ export interface ClickUpPushItem {
   departmentId: string | null;
   assigneeUserIds: string[]; // Garely user ids
   parentTitle: string | null; // set for subtasks (disambiguates dedupe)
+  // "Unconfirmed" task: the AI routed it to a department with NOBODY from the meeting
+  // present, so we can't confirm ownership. Force it to the shared Call Inbox as ONE
+  // triage task assigned to all attendees, via the single-task path — bypassing the
+  // per-user split even when personal routing is on. Set from regenerate.ts.
+  forceFallback?: boolean;
 }
 
 // ─────────────────────────── pure mappers (unit-tested) ───────────────────────────
@@ -547,10 +552,15 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           console.warn('[clickup] department not found, routing to fallback:', item.departmentId, '· task:', item.title);
         }
         const dName = item.departmentId ? deptName.get(item.departmentId) || null : null;
-        const listId = listIdForDepartment(cfg, listMap, dName);
+        // Unconfirmed tasks (routed to a department with nobody from the meeting present)
+        // are forced to the shared Call Inbox and handled by the legacy single-task path
+        // below (one triage task, all attendees), NOT the per-user split.
+        const listId = item.forceFallback
+          ? listMap.fallbackListId
+          : listIdForDepartment(cfg, listMap, dName);
 
         // Per-user split path: one task per assignee, personal list for multi-dept users.
-        if (cfg.personalRouting && personal) {
+        if (cfg.personalRouting && personal && !item.forceFallback) {
           const targets = await resolveAssigneeTargets(item.assigneeUserIds, {
             members, emailById, nameById, multiDept, deptListId: listId, personal,
           });

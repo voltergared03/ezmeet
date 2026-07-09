@@ -262,6 +262,21 @@ async function generateReportInner(
   // Registered attendees by id (for notify preferences during persistence).
   const attendeeById = new Map<string, Attendee>();
   for (const a of attendees) if (a.id) attendeeById.set(a.id, a);
+  // Registered attendee ids (guests have no account → can't be ClickUp assignees).
+  // Used to (a) reassign an "unconfirmed" task to everyone who was in the call, and
+  // (b) detect when the AI routed a task to a department nobody present belongs to.
+  const attendeeIds = [...attendeeById.keys()];
+  const attendeeIdSet = new Set(attendeeIds);
+  const deptHasAttendee = new Map<string, boolean>();
+  for (const d of departments) {
+    deptHasAttendee.set(d.id, d.members.some((m) => attendeeIdSet.has(m.userId)));
+  }
+  // "Unconfirmed" = routed to a real department that had NO meeting attendee. We can't
+  // confirm ownership (nobody from that dept was in the call), so instead of dumping it
+  // on that department's (often private) list we send it to Call Inbox for the attendees
+  // to triage. A null department, or one whose members include an attendee, is confirmed.
+  const isUnconfirmedDept = (deptId: string | null): boolean =>
+    !!deptId && deptHasAttendee.get(deptId) === false;
   // Attendee list with a [department] hint so the model can route tasks; the
   // model is told to use the bare name (without the suffix) as the assignee.
   const attendeeLabels = attendees
@@ -547,9 +562,14 @@ ${numbered}`;
         regIds: leadFirst(r.leadId, r.regIds),
         cells: r.cells,
       });
+      // Unconfirmed (dept with nobody present) → Call Inbox + assign all attendees.
+      // Subtasks inherit the parent's department, so they inherit this status too.
+      const unconfirmed = isUnconfirmedDept(r.departmentId);
       clickupItems.push({
         rowId: parentRowId, title: r.title, priority: r.priority ?? null, dueDate: r.dueDate,
-        departmentId: r.departmentId, assigneeUserIds: leadFirst(r.leadId, r.regIds), parentTitle: null,
+        departmentId: r.departmentId,
+        assigneeUserIds: unconfirmed ? attendeeIds : leadFirst(r.leadId, r.regIds),
+        parentTitle: null, forceFallback: unconfirmed,
       });
       // Subtasks: child rows under the parent, inheriting its department.
       for (const s of r.subtasks) {
@@ -568,7 +588,9 @@ ${numbered}`;
         });
         clickupItems.push({
           rowId: subRowId, title: s.title, priority: s.priority ?? null, dueDate: s.dueDate,
-          departmentId: r.departmentId, assigneeUserIds: leadFirst(s.leadId, s.regIds), parentTitle: r.title,
+          departmentId: r.departmentId,
+          assigneeUserIds: unconfirmed ? attendeeIds : leadFirst(s.leadId, s.regIds),
+          parentTitle: r.title, forceFallback: unconfirmed,
         });
       }
     }
