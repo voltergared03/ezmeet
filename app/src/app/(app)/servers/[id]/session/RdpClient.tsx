@@ -135,25 +135,6 @@ function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// Force-release every keyboard modifier on the remote. macOS SWALLOWS the keyup when
-// the OS grabs a system shortcut (e.g. ⌘⇧5 screenshot), so the matching keydown was
-// forwarded but its keyup never arrives → Shift (or Alt/Ctrl) is stranded "down" on the
-// server, mangling every later keystroke. Dispatching synthetic keyups clears it — the
-// component forwards synthetic key events, and releasing an already-up modifier is a
-// harmless no-op. window.blur keeps the canvas as activeElement, so the release still
-// forwards through the component's focus gate.
-const MODIFIER_KEYUPS: Array<{ code: string; key: string }> = [
-  { code: 'ShiftLeft', key: 'Shift' }, { code: 'ShiftRight', key: 'Shift' },
-  { code: 'ControlLeft', key: 'Control' }, { code: 'ControlRight', key: 'Control' },
-  { code: 'AltLeft', key: 'Alt' }, { code: 'AltRight', key: 'Alt' },
-  { code: 'MetaLeft', key: 'Meta' }, { code: 'MetaRight', key: 'Meta' },
-];
-function releaseAllModifiers() {
-  for (const m of MODIFIER_KEYUPS) {
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: m.code, key: m.key, bubbles: true, cancelable: true }));
-  }
-}
-
 // Stream a downloaded blob to the user's machine (server → client file transfer).
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -803,41 +784,28 @@ export default function RdpClient(props: RdpClientProps) {
     };
   }, [phase]);
 
-  /* ─── Heal stuck modifiers (Shift/Alt/Ctrl/⌘) ─────────────────────────────────
-   * A system shortcut that steals focus (⌘⇧5 screenshot, ⌘Tab, Spotlight…) can eat a
-   * modifier's keyUP, leaving it "down" on the server. Releasing on blur/focus alone
-   * doesn't work: while the window is unfocused the component's focus gate is CLOSED,
-   * so a forwarded keyup never reaches the server. The reliable moment is the NEXT
-   * real keystroke — the user is typing, so the canvas is focused and the gate is
-   * open. On every real key event we force-release any modifier the OS reports as UP
-   * (except the one being pressed now): a synthetic keyup for an already-up key is a
-   * no-op, but it clears a stranded one. `e.<mod>Key` is the OS's accurate live state,
-   * so we never release a modifier the user is genuinely holding. */
+  /* ─── Heal a stranded Shift ────────────────────────────────────────────────────
+   * macOS eats the keyUP when the OS grabs a shortcut (⌘⇧5 screenshot…), leaving Shift
+   * "down" on the server. Releasing on blur/focus doesn't work (the component's focus
+   * gate is closed while unfocused). The reliable moment is the NEXT real keystroke —
+   * the user is typing, so the canvas is focused and the gate is open. On a real,
+   * non-⌘ keystroke, if the OS says Shift is UP, force-release it (a keyup for an
+   * already-up key is a no-op). SCOPED TO SHIFT and SKIPPED while ⌘ is held: the Mac
+   * ⌘ effect above owns Ctrl/⌘ (its ⌘C/⌘V remap uses a synthetic Ctrl), so touching
+   * those here previously broke ⌘V paste. `e.shiftKey` is the OS's accurate live
+   * state, so we never release Shift while the user is genuinely holding it. */
   useEffect(() => {
     if (phase !== 'connected') return;
-    const MODS: Array<{ codes: string[]; held: (e: KeyboardEvent) => boolean; code: string; key: string }> = [
-      { codes: ['ShiftLeft', 'ShiftRight'], held: (e) => e.shiftKey, code: 'ShiftLeft', key: 'Shift' },
-      { codes: ['ControlLeft', 'ControlRight'], held: (e) => e.ctrlKey, code: 'ControlLeft', key: 'Control' },
-      { codes: ['AltLeft', 'AltRight'], held: (e) => e.altKey, code: 'AltLeft', key: 'Alt' },
-      { codes: ['MetaLeft', 'MetaRight'], held: (e) => e.metaKey, code: 'MetaLeft', key: 'Meta' },
-    ];
-    const reconcile = (e: KeyboardEvent) => {
-      if (!e.isTrusted) return; // ignore our own synthetic events (no recursion)
-      for (const m of MODS) {
-        if (m.codes.includes(e.code)) continue; // the modifier being pressed/released right now
-        if (!m.held(e)) window.dispatchEvent(new KeyboardEvent('keyup', { code: m.code, key: m.key, bubbles: true, cancelable: true }));
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.isTrusted || e.metaKey) return;                 // ignore synthetic + any ⌘-combo
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') return; // Shift being pressed now
+      if (!e.shiftKey) {
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft', key: 'Shift', bubbles: true, cancelable: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftRight', key: 'Shift', bubbles: true, cancelable: true }));
       }
     };
-    const releaseAll = () => releaseAllModifiers();
-    // Capture phase so we run before the component forwards the real key.
-    window.addEventListener('keydown', reconcile, true);
-    window.addEventListener('blur', releaseAll);   // best-effort, complements the keydown heal
-    window.addEventListener('focus', releaseAll);
-    return () => {
-      window.removeEventListener('keydown', reconcile, true);
-      window.removeEventListener('blur', releaseAll);
-      window.removeEventListener('focus', releaseAll);
-    };
+    window.addEventListener('keydown', onKeyDown, true); // capture: run before the component forwards the key
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [phase]);
 
   // Dynamic resolution — match the remote desktop to the browser window and re-negotiate
