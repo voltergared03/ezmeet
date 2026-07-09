@@ -4,6 +4,27 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.21.0-beta.1] — 2026-07-09
+
+In-browser RDP (Remote Access) reliability.
+
+### Added
+- **File-clipboard toggle in the session pill.** Turn the shared file clipboard off
+  to work with files INSIDE the server without server-side file copies auto-downloading
+  to your machine (and without drag-drop upload). The text clipboard is a separate
+  channel and always stays on.
+
+### Fixed
+- **Sessions no longer drop after ~5 minutes in a background tab.** An inaudible
+  keepalive stops the browser from freezing the backgrounded tab (which severed the
+  WebSocket); auto-reconnect-on-focus remains the fallback.
+- **Stuck Shift after a macOS system shortcut.** ⌘⇧5 (screenshot) and similar could
+  strand Shift “down” on the server; it's now released on your next keystroke. Scoped
+  to Shift so it never disturbs ⌘C / ⌘V paste.
+- **Horizontal touchpad scroll.** Two-finger horizontal swipes now scroll the remote
+  desktop — the client previously dropped horizontal wheel deltas (rebuilt the vendored
+  IronRDP web component to send each axis independently).
+
 ## [1.20.0-beta.1] — 2026-07-03
 
 ### Added
