@@ -1502,6 +1502,8 @@
     "fileUploadHint": "File is on the server clipboard. Click into a Windows folder or the Desktop, then press Ctrl+V (⌘V) to drop it there. To bring files back, copy them on the server (Ctrl+C).",
     "fileError": "File transfer failed. The server may block clipboard file copy.",
     "uploadFiles": "Send files to the server clipboard",
+    "fileClipOff": "File clipboard: ON — click to stop server file copies from downloading here",
+    "fileClipOn": "File clipboard: OFF — click to share files with the server again",
     "inUseBy": "In use: {name}",
     "inUseByYou": "You're connected",
     "someone": "someone",

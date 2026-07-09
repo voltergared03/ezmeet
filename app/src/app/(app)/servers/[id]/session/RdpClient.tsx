@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Loader2, Power, RefreshCw, AlertTriangle, Upload, Download, GripVertical } from 'lucide-react';
+import { Loader2, Power, RefreshCw, AlertTriangle, Upload, Download, GripVertical, FolderSync } from 'lucide-react';
 
 /* ─── Minimal structural types for the dynamically-imported IronRDP API ───────
  * The real types live in @devolutions/iron-remote-desktop(.rdp), but those modules
@@ -106,6 +106,15 @@ const hiDpiEnabled = () => {
 };
 const dprFactor = () => (hiDpiEnabled() ? Math.min(Math.max(window.devicePixelRatio || 1, 1), 2) : 1);
 
+// Shared FILE clipboard (CLIPRDR file copy), toggleable from the pill. When off, a
+// server-side file copy no longer auto-downloads to the local machine and drag-drop
+// upload is paused — so a user can work with files INSIDE the server. The TEXT
+// clipboard is a separate channel and always stays on. Default ON.
+const FILECLIP_KEY = 'garely-rdp-fileclip';
+const fileClipEnabled = () => {
+  try { return localStorage.getItem(FILECLIP_KEY) !== '0'; } catch { return true; }
+};
+
 
 // IronError isn't a JS Error — it exposes kind()/backtrace(). Surface the real
 // reason instead of the "[object Object]" you get from String(an opaque object).
@@ -124,6 +133,25 @@ function describeError(err: unknown): string {
     if (typeof e.message === 'string' && e.message) return e.message;
   }
   return err instanceof Error ? err.message : String(err);
+}
+
+// Force-release every keyboard modifier on the remote. macOS SWALLOWS the keyup when
+// the OS grabs a system shortcut (e.g. ⌘⇧5 screenshot), so the matching keydown was
+// forwarded but its keyup never arrives → Shift (or Alt/Ctrl) is stranded "down" on the
+// server, mangling every later keystroke. Dispatching synthetic keyups clears it — the
+// component forwards synthetic key events, and releasing an already-up modifier is a
+// harmless no-op. window.blur keeps the canvas as activeElement, so the release still
+// forwards through the component's focus gate.
+const MODIFIER_KEYUPS: Array<{ code: string; key: string }> = [
+  { code: 'ShiftLeft', key: 'Shift' }, { code: 'ShiftRight', key: 'Shift' },
+  { code: 'ControlLeft', key: 'Control' }, { code: 'ControlRight', key: 'Control' },
+  { code: 'AltLeft', key: 'Alt' }, { code: 'AltRight', key: 'Alt' },
+  { code: 'MetaLeft', key: 'Meta' }, { code: 'MetaRight', key: 'Meta' },
+];
+function releaseAllModifiers() {
+  for (const m of MODIFIER_KEYUPS) {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: m.code, key: m.key, bubbles: true, cancelable: true }));
+  }
 }
 
 // Stream a downloaded blob to the user's machine (server → client file transfer).
@@ -324,6 +352,19 @@ export default function RdpClient(props: RdpClientProps) {
    * the connect-time core data, so a live switch is not possible. */
   const [hiDpi, setHiDpi] = useState(hiDpiEnabled);
   const dprCapable = typeof window !== 'undefined' && (window.devicePixelRatio || 1) > 1.05;
+
+  /* Shared FILE clipboard toggle — takes effect live (no reconnect): gates the
+   * server→local auto-download and the local→server drag-drop upload. */
+  const [fileClipboard, setFileClipboard] = useState(fileClipEnabled);
+  const fileClipboardRef = useRef(fileClipboard);
+  useEffect(() => { fileClipboardRef.current = fileClipboard; }, [fileClipboard]);
+  const toggleFileClipboard = useCallback(() => {
+    setFileClipboard((v) => {
+      const next = !v;
+      try { localStorage.setItem(FILECLIP_KEY, next ? '1' : '0'); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
   const toggleHiDpi = useCallback(() => {
     const next = !hiDpi;
     try {
@@ -403,6 +444,41 @@ export default function RdpClient(props: RdpClientProps) {
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [phase]);
+
+  /* ─── Keep a backgrounded tab awake while connected ───────────────────────────
+   * Chrome/Safari freeze a tab backgrounded for ~5 min, severing the RDP WebSocket
+   * (the desktop is static, so nothing keeps the socket busy). A tab that is playing
+   * audio is EXEMPT from freezing, so we run one inaudible WebAudio loop for the life
+   * of the session — a very low frequency at a tiny gain, below what hardware can
+   * reproduce, but enough to keep the tab "audible". Best-effort: if the AudioContext
+   * is blocked, the auto-reconnect-on-focus effect above is the fallback. */
+  useEffect(() => {
+    if (phase !== 'connected') return;
+    let ctx: AudioContext | null = null;
+    let osc: OscillatorNode | null = null;
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      ctx = new AC();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0015; // effectively silent, non-zero so the tab counts as audible
+      osc = ctx.createOscillator();
+      osc.frequency.value = 30; // sub-audible; laptop/most speakers can't reproduce it
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+      // Autoplay policy may re-suspend on background; nudge it back on return.
+      const resume = () => { if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {}); };
+      document.addEventListener('visibilitychange', resume);
+      return () => {
+        document.removeEventListener('visibilitychange', resume);
+        try { osc?.stop(); } catch { /* ignore */ }
+        try { void ctx?.close(); } catch { /* ignore */ }
+      };
+    } catch {
+      return () => { try { osc?.stop(); } catch { /* ignore */ } try { void ctx?.close(); } catch { /* ignore */ } };
+    }
   }, [phase]);
 
   /* ─── Mount the web component + run the session lifecycle (once) ─── */
@@ -498,6 +574,9 @@ export default function RdpClient(props: RdpClientProps) {
           // pushes — it can't get stuck and never blocks text clipboard for long.
           const provider = new rdp.RdpFileTransferProvider({ chunkSize: 64 * 1024 });
           provider.on('files-available', async (files) => {
+            // File clipboard off → don't auto-download server-copied files to the local
+            // machine, so the user can copy/move files INSIDE the server undisturbed.
+            if (!fileClipboardRef.current) return;
             for (let i = 0; i < files.length; i++) {
               try {
                 const blob = await provider.downloadFile(files[i], i).completion;
@@ -724,6 +803,23 @@ export default function RdpClient(props: RdpClientProps) {
     };
   }, [phase]);
 
+  /* ─── Release stuck modifiers when focus leaves/returns ───────────────────────
+   * A system shortcut that steals focus (⌘⇧5 screenshot, ⌘Tab, Spotlight…) can eat a
+   * modifier's keyup, leaving Shift/Alt/Ctrl "down" on the server. Force-release them
+   * whenever the window blurs or refocuses (and on visibility change). All platforms. */
+  useEffect(() => {
+    if (phase !== 'connected') return;
+    const release = () => releaseAllModifiers();
+    window.addEventListener('blur', release);
+    window.addEventListener('focus', release);
+    document.addEventListener('visibilitychange', release);
+    return () => {
+      window.removeEventListener('blur', release);
+      window.removeEventListener('focus', release);
+      document.removeEventListener('visibilitychange', release);
+    };
+  }, [phase]);
+
   // Dynamic resolution — match the remote desktop to the browser window and re-negotiate
   // it (DisplayControl channel, ui.resize) whenever the window settles after a resize,
   // like the native RDP client. DEBOUNCED so the legacy-bitmap codec redraws once per
@@ -843,7 +939,7 @@ export default function RdpClient(props: RdpClientProps) {
 
   // Bidirectional file transfer via drag & drop onto the canvas.
   const onDragOver = (e: React.DragEvent) => {
-    if (phase !== 'connected' || !fileProviderRef.current) return;
+    if (phase !== 'connected' || !fileProviderRef.current || !fileClipboardRef.current) return;
     e.preventDefault();
     try {
       fileProviderRef.current.handleDragOver(e.nativeEvent);
@@ -860,7 +956,7 @@ export default function RdpClient(props: RdpClientProps) {
   const onDrop = async (e: React.DragEvent) => {
     setDragOver(false);
     const provider = fileProviderRef.current;
-    if (phase !== 'connected' || !provider) return;
+    if (phase !== 'connected' || !provider || !fileClipboardRef.current) return;
     e.preventDefault();
     try {
       const files = await provider.handleDrop(e.nativeEvent);
@@ -1125,6 +1221,13 @@ export default function RdpClient(props: RdpClientProps) {
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: liveControls ? '#10b981' : phase === 'error' ? '#f87171' : 'var(--accent)' }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{props.serverName}</span>
         </span>
+        {liveControls && canUpload &&
+          toolBtn(
+            toggleFileClipboard,
+            t(fileClipboard ? 'fileClipOff' : 'fileClipOn'),
+            <FolderSync size={15} />,
+            { active: fileClipboard },
+          )}
         {liveControls && dprCapable &&
           toolBtn(
             toggleHiDpi,
