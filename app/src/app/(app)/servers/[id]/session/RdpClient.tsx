@@ -803,20 +803,40 @@ export default function RdpClient(props: RdpClientProps) {
     };
   }, [phase]);
 
-  /* ─── Release stuck modifiers when focus leaves/returns ───────────────────────
+  /* ─── Heal stuck modifiers (Shift/Alt/Ctrl/⌘) ─────────────────────────────────
    * A system shortcut that steals focus (⌘⇧5 screenshot, ⌘Tab, Spotlight…) can eat a
-   * modifier's keyup, leaving Shift/Alt/Ctrl "down" on the server. Force-release them
-   * whenever the window blurs or refocuses (and on visibility change). All platforms. */
+   * modifier's keyUP, leaving it "down" on the server. Releasing on blur/focus alone
+   * doesn't work: while the window is unfocused the component's focus gate is CLOSED,
+   * so a forwarded keyup never reaches the server. The reliable moment is the NEXT
+   * real keystroke — the user is typing, so the canvas is focused and the gate is
+   * open. On every real key event we force-release any modifier the OS reports as UP
+   * (except the one being pressed now): a synthetic keyup for an already-up key is a
+   * no-op, but it clears a stranded one. `e.<mod>Key` is the OS's accurate live state,
+   * so we never release a modifier the user is genuinely holding. */
   useEffect(() => {
     if (phase !== 'connected') return;
-    const release = () => releaseAllModifiers();
-    window.addEventListener('blur', release);
-    window.addEventListener('focus', release);
-    document.addEventListener('visibilitychange', release);
+    const MODS: Array<{ codes: string[]; held: (e: KeyboardEvent) => boolean; code: string; key: string }> = [
+      { codes: ['ShiftLeft', 'ShiftRight'], held: (e) => e.shiftKey, code: 'ShiftLeft', key: 'Shift' },
+      { codes: ['ControlLeft', 'ControlRight'], held: (e) => e.ctrlKey, code: 'ControlLeft', key: 'Control' },
+      { codes: ['AltLeft', 'AltRight'], held: (e) => e.altKey, code: 'AltLeft', key: 'Alt' },
+      { codes: ['MetaLeft', 'MetaRight'], held: (e) => e.metaKey, code: 'MetaLeft', key: 'Meta' },
+    ];
+    const reconcile = (e: KeyboardEvent) => {
+      if (!e.isTrusted) return; // ignore our own synthetic events (no recursion)
+      for (const m of MODS) {
+        if (m.codes.includes(e.code)) continue; // the modifier being pressed/released right now
+        if (!m.held(e)) window.dispatchEvent(new KeyboardEvent('keyup', { code: m.code, key: m.key, bubbles: true, cancelable: true }));
+      }
+    };
+    const releaseAll = () => releaseAllModifiers();
+    // Capture phase so we run before the component forwards the real key.
+    window.addEventListener('keydown', reconcile, true);
+    window.addEventListener('blur', releaseAll);   // best-effort, complements the keydown heal
+    window.addEventListener('focus', releaseAll);
     return () => {
-      window.removeEventListener('blur', release);
-      window.removeEventListener('focus', release);
-      document.removeEventListener('visibilitychange', release);
+      window.removeEventListener('keydown', reconcile, true);
+      window.removeEventListener('blur', releaseAll);
+      window.removeEventListener('focus', releaseAll);
     };
   }, [phase]);
 
