@@ -4,6 +4,17 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.23.0-beta.4] — 2026-07-17
+
+### Changed
+- **RDP v2 scale is now a −/+ stepper.** The pill's binary HD toggle is replaced by a
+  live scale stepper (1.0×–2.5×, 0.25 steps) so you can dial the exact size: lower for a
+  bigger UI, higher for sharper text. The choice persists per browser. guacd can't scale
+  the Windows UI (unlike v1's IronRDP, which used DesktopScaleFactor), so the render
+  resolution is the only lever — this hands that lever to the user. For fully crisp text
+  at a normal UI size on a Retina display, set the Windows target's display scale to 200%
+  and raise the stepper to 2×.
+
 ## [1.23.0-beta.3] — 2026-07-17
 
 ### Fixed
@@ -639,6 +650,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.23.0-beta.4]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.4
 [1.23.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.3
 [1.23.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.2
 [1.23.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.1
