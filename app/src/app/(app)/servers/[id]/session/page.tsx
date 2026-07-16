@@ -88,13 +88,13 @@ export default function ServerSessionPage() {
     if (!id) return;
     setStage('connecting');
     try {
-      // For v2, tell guacd our real viewport × devicePixelRatio so it starts the RDP session
-      // at the right (crisp) resolution instead of the 1280×800 default.
+      // For v2, start guacd at our CSS viewport size (NOT ×dpr): guacd can't scale the remote
+      // Windows UI (it sets no DesktopScaleFactor), so a HiDPI resolution renders everything
+      // tiny on Retina. CSS size gives normal-size UI; the trade-off is mild softness on Retina.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const w = Math.round((window.innerWidth || 1280) * dpr);
-        const h = Math.round((window.innerHeight || 800) * dpr);
+        const w = Math.round(window.innerWidth || 1280);
+        const h = Math.round(window.innerHeight || 800);
         url += `?v=2&w=${w}&h=${h}`;
       }
       const res = await fetch(url, { method: 'POST' });

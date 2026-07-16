@@ -58,13 +58,12 @@ export default function GuacamoleClient({
       hostRef.current.appendChild(el);
       el.style.transformOrigin = '0 0'; // scale from top-left so it aligns with the sized host
 
-      const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
-      // Ask guacd to render at frame×dpr (crisp HiDPI). Debounced by callers.
+      // Ask guacd to render at the frame's CSS size (NO ×dpr): guacd can't scale the remote
+      // Windows UI, so a HiDPI resolution would make everything tiny. Debounced by callers.
       const pushSize = () => {
         const box = frameRef.current;
         if (!box) return;
-        const d = dpr();
-        try { client.sendSize(Math.max(640, Math.round(box.clientWidth * d)), Math.max(480, Math.round(box.clientHeight * d))); } catch { /* noop */ }
+        try { client.sendSize(Math.max(640, Math.round(box.clientWidth)), Math.max(480, Math.round(box.clientHeight))); } catch { /* noop */ }
       };
       // Fit the rendered display into the frame. display.scale() is a CSS transform, so
       // the element's LAYOUT box stays at full remote resolution — the host must be sized
