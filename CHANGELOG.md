@@ -4,6 +4,56 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.22.0-beta.1] — 2026-07-16
+
+Security hardening (credential exposure), plus meeting/ClickUp and screen-share
+improvements. The security work came out of an incident-response assessment of how
+credentials could be extracted from Garely or a managed RDP host.
+
+### Security
+- **Revocable sessions.** Garely sessions were stateless 30-day JWTs with no
+  server-side revocation — a stolen session cookie survived password changes for
+  weeks, and the only way to invalidate all sessions was to rotate the master secret
+  (which also destroys every encrypted credential, since it is the same key). A new
+  per-user `sessionEpoch` lets you sign a user (or everyone) out everywhere WITHOUT
+  touching `AUTH_SECRET`. Existing sessions are grandfathered, so the change logs
+  nobody out on deploy.
+- **Throttled the RDP credential reveal.** `POST /servers/[id]/connect` returns the
+  server password to the browser (the in-browser client performs NLA itself); it is
+  now rate-limited per user so a compromised session cannot iterate it to dump the
+  whole fleet's credentials in a burst. Corrected a misleading code comment.
+- **Per-IP login throttle** on password sign-in (on top of the existing per-email
+  bucket), fail-open on an unknown IP so a proxy misconfig never locks anyone out.
+- **SMTP credential re-point guard.** Changing the SMTP host to a different server
+  without supplying a new password now clears the stored password, so it can't be
+  transmitted to an attacker-controlled server via "send test".
+- **Ops:** tightened the production `.env` to mode 0600 (was world-readable).
+
+### Added
+- **Unconfirmed meeting tasks route to the ClickUp Call Inbox.** When the AI routes a
+  task to a department that had nobody from the meeting present, it now goes to the
+  shared Call Inbox as one triage task assigned to all attendees, instead of landing
+  unassigned in that department's list.
+
+### Fixed
+- **Sharper screen sharing.** Screen share ran on SDK defaults (VP8, 1080p@15,
+  2.5 Mbps, no content hint), so text smeared on scroll. Added a `text` content hint,
+  raised the bitrate ceiling to 4 Mbps, and trimmed the simulcast ladder — all scoped
+  to the screen-share track (camera untouched).
+- **Stale RDP audit sessions are reaped.** The disconnect beacon is best-effort, so a
+  killed tab left audit rows stuck "active" forever; the cleanup cron now closes them
+  with a real end time (never affecting live-presence, which keys on heartbeats).
+
+### Changed
+- The RDP gateway compose overlay is now tracked in git and pinned to a tested image
+  version, instead of living only on the production host.
+
+### Deferred (documented, not shipped)
+- Separating the encryption key from the session-signing key, key-rotation tooling,
+  encrypting three provider secrets at rest, mandatory 2FA, and splitting the internal
+  API secret — each carries prod-migration or live-integration risk and is tracked for
+  supervised rollout.
+
 ## [1.21.0-beta.1] — 2026-07-09
 
 In-browser RDP (Remote Access) reliability.
