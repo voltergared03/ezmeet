@@ -41,6 +41,9 @@ cat > /var/spool/cron/crontabs/root <<'EOF'
 */10 * * * * /usr/local/bin/run-cron-job calendar-sync >/proc/1/fd/1 2>&1
 */30 * * * * /usr/local/bin/run-cron-job clickup-health >/proc/1/fd/1 2>&1
 */30 * * * * /usr/local/bin/run-cron-job linear-health >/proc/1/fd/1 2>&1
+# Prune RDP-v2 file-transfer drive: delete staged files older than 7 days so the shared
+# host disk (pgdata/recordings/backups) can't be exhausted by accumulated transfers.
+30 4 * * *  find /guac-drive -type f -mtime +7 -exec rm -f {} \; >/proc/1/fd/1 2>&1
 EOF
 
 echo "[cron] scheduler started — jobs target ${APP_URL}"

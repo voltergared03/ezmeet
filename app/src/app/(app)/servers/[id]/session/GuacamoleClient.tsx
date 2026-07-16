@@ -1,7 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Power, Loader2, Maximize2, GripVertical } from 'lucide-react';
+import { Power, Loader2, Maximize2, GripVertical, Upload, HardDrive, Download, X, RotateCw } from 'lucide-react';
+
+// Anchor-download a Blob to the user's local machine (generic browser, no library).
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name || 'download';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 
 // Mac ⌘ reaches Guacamole.Keyboard as the Meta/Win keysym, which does nothing on Windows;
 // a capture-phase handler (below) intercepts ⌘ and sends Control (0xFFE3) + the key instead.
@@ -46,6 +58,26 @@ export default function GuacamoleClient({
   const [status, setStatus] = useState('connecting');
   const [hd, setHd] = useState<boolean>(readHd);
   const renderScaleRef = useRef(hd ? HD_SCALE : 1); // read by pushSize; toggled live via HD button
+
+  // ── two-way file transfer (RDP drive redirection). Functions that need the guac client +
+  // the dynamically-imported Guacamole namespace are built inside the effect and exposed here. ──
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fsObjectRef = useRef<any>(null); // the redirected-drive Guacamole.Object
+  const uploadFilesRef = useRef<((files: File[]) => void) | null>(null);
+  const browseRef = useRef<(() => void) | null>(null);
+  const downloadRef = useRef<((path: string, name: string) => void) | null>(null);
+  const [transfer, setTransfer] = useState<{ dir: 'up' | 'down'; name: string; pct: number | null } | null>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [fileList, setFileList] = useState<Array<{ path: string; name: string; dir: boolean }> | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragDepth = useRef(0); // enter/leave bubble through child elements — count depth, not target identity
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flash = useCallback((msg: string, ms = 7000) => {
+    setNotice(msg);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), ms);
+  }, []);
 
   // ── guac connection ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -269,6 +301,83 @@ export default function GuacamoleClient({
       if (frameRef.current) ro.observe(frameRef.current);
       cleanups.push(() => ro.disconnect());
 
+      // ── two-way file transfer via RDP drive redirection (the "Garely" drive) ──
+      const STREAM_INDEX_MIME = 'application/vnd.glyptodon.guacamole.stream-index+json';
+      // guacd hands us the redirected drive as a filesystem Object; keep it for browse/download.
+      client.onfilesystem = (object: any) => { fsObjectRef.current = object; };
+      // Server-pushed file (rare) → save it locally.
+      client.onfile = (stream: any, mimetype: string, filename: string) => {
+        try {
+          const reader = new Guacamole.BlobReader(stream, mimetype || 'application/octet-stream');
+          setTransfer({ dir: 'down', name: filename, pct: null });
+          reader.onend = () => { saveBlob(reader.getBlob(), filename); setTransfer(null); };
+        } catch { setTransfer(null); }
+      };
+      // Local → server: stream each File to the drive via a "file" output stream (BlobWriter
+      // has built-in ack back-pressure; call sendEnd on complete).
+      // Upload files SEQUENTIALLY (a queue): one BlobWriter at a time keeps the single
+      // `transfer` indicator accurate — concurrent writers would overwrite each other's
+      // progress and the first completion would hide the pill while others were still going.
+      uploadFilesRef.current = (files: File[]) => {
+        const queue = [...files];
+        const total = queue.length;
+        let index = 0;
+        const next = () => {
+          const f = queue.shift();
+          if (!f) { setTransfer(null); return; }
+          index += 1;
+          const label = total > 1 ? `${f.name} (${index}/${total})` : f.name;
+          let done = false;
+          const advance = () => { if (done) return; done = true; next(); };
+          try {
+            const stream = client.createFileStream(f.type || 'application/octet-stream', f.name);
+            const writer = new Guacamole.BlobWriter(stream);
+            setTransfer({ dir: 'up', name: label, pct: 0 });
+            writer.onprogress = (_blob: Blob, offset: number) => setTransfer({ dir: 'up', name: label, pct: Math.min(100, Math.round((offset / Math.max(1, f.size)) * 100)) });
+            writer.oncomplete = () => { try { writer.sendEnd(); } catch { /* noop */ } advance(); };
+            // BlobWriter only fires onerror on a LOCAL read failure; a guacd rejection (drive
+            // full / read-only) surfaces ONLY via onack with an error status — without this the
+            // upload would stall forever and leak a half-open stream.
+            writer.onack = (status: any) => { if (status?.isError?.()) { try { writer.sendEnd(); } catch { /* noop */ } flash('Не вдалося надіслати файл (диск сервера недоступний або переповнений).'); advance(); } };
+            writer.onerror = () => { try { stream.sendEnd(); } catch { /* noop */ } flash('Не вдалося надіслати файл.'); advance(); };
+            writer.sendBlob(f);
+          } catch { advance(); }
+        };
+        next();
+      };
+      // List the drive root (a JSON stream-index of { path: mimetype }).
+      browseRef.current = () => {
+        const obj = fsObjectRef.current;
+        if (!obj) { setFileList([]); return; }
+        setFileList(null);
+        obj.requestInputStream(Guacamole.Object.ROOT_STREAM, (stream: any, mimetype: string) => {
+          if (mimetype !== STREAM_INDEX_MIME) { try { stream.sendAck('Unexpected', 0x030f); } catch { /* noop */ } setFileList([]); return; }
+          const reader = new Guacamole.StringReader(stream);
+          let json = '';
+          reader.ontext = (t: string) => { json += t; try { stream.sendAck('OK', 0x0000); } catch { /* noop */ } };
+          reader.onend = () => {
+            try {
+              const entries = JSON.parse(json) as Record<string, string>;
+              const list = Object.keys(entries).map((path) => ({ path, name: path.replace(/^.*\//, ''), dir: entries[path] === STREAM_INDEX_MIME }));
+              list.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+              setFileList(list);
+            } catch { setFileList([]); }
+          };
+        });
+      };
+      // Server → local: read a named stream to a Blob (BlobReader auto-acks) and save it.
+      downloadRef.current = (path: string, name: string) => {
+        const obj = fsObjectRef.current;
+        if (!obj) return;
+        obj.requestInputStream(path, (stream: any, mimetype: string) => {
+          try {
+            const reader = new Guacamole.BlobReader(stream, mimetype || 'application/octet-stream');
+            setTransfer({ dir: 'down', name, pct: null });
+            reader.onend = () => { saveBlob(reader.getBlob(), name); setTransfer(null); };
+          } catch { setTransfer(null); }
+        });
+      };
+
       client.connect('token=' + encodeURIComponent(token));
     })().catch(() => setStatus('error'));
 
@@ -385,6 +494,14 @@ export default function GuacamoleClient({
     onReconnect?.();
   };
 
+  const doUpload = (files: File[]) => {
+    if (!files.length) return;
+    if (!uploadFilesRef.current) { flash('Сесія ще не готова — спробуй за мить.'); return; }
+    uploadFilesRef.current(files);
+    flash('Файли надсилаються на диск «Garely». Відкрий диск «Garely» у Провіднику Windows, щоб дістати їх.', 10000);
+  };
+  const toggleFiles = () => setFilesOpen((o) => { const n = !o; if (n) browseRef.current?.(); return n; });
+
   const toolBtn = (onClick: () => void, label: string, icon: React.ReactNode, opts?: { danger?: boolean; active?: boolean }) => (
     <button
       type="button" onClick={onClick} title={label} aria-label={label} className="gc-tool"
@@ -395,7 +512,14 @@ export default function GuacamoleClient({
   );
 
   return (
-    <div ref={frameRef} style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000' }}>
+    <div
+      ref={frameRef}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000' }}
+      onDragEnter={(e) => { e.preventDefault(); dragDepth.current += 1; setDragOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); }}
+      onDragLeave={(e) => { e.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragOver(false); }}
+      onDrop={(e) => { e.preventDefault(); dragDepth.current = 0; setDragOver(false); doUpload(Array.from(e.dataTransfer?.files || [])); }}
+    >
       <style>{`
         @keyframes gc-spin { to { transform: rotate(360deg); } }
         .gc-spin { animation: gc-spin 1s linear infinite; }
@@ -403,10 +527,69 @@ export default function GuacamoleClient({
         @media (prefers-reduced-motion: reduce) { .gc-spin { animation: none; } }
       `}</style>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={(e) => { const files = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; doUpload(files); }}
+        style={{ display: 'none' }}
+        aria-hidden
+      />
+
       {/* display fills the viewport; hostRef holds ONLY the guac element */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <div ref={hostRef} tabIndex={0} style={{ outline: 'none', overflow: 'hidden' }} />
       </div>
+
+      {dragOver && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 25, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(4,7,12,.62)', border: '3px dashed rgba(255,255,255,.35)', color: '#fff', fontSize: 16, fontWeight: 600, pointerEvents: 'none', textAlign: 'center', padding: 24 }}>
+          Відпусти, щоб надіслати файли на диск «Garely»
+        </div>
+      )}
+
+      {transfer && (
+        <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 22, display: 'flex', alignItems: 'center', gap: 9, padding: '8px 13px', borderRadius: 999, background: 'rgba(5,7,10,.92)', border: '1px solid rgba(255,255,255,.1)', color: '#e7e9ee', fontSize: 12 }}>
+          {transfer.dir === 'up' ? <Upload size={14} /> : <Download size={14} />}
+          <span style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{transfer.name}</span>
+          {transfer.pct !== null ? <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{transfer.pct}%</strong> : <Loader2 size={13} className="gc-spin" />}
+        </div>
+      )}
+
+      {notice && (
+        <div style={{ position: 'absolute', left: '50%', bottom: 16, transform: 'translateX(-50%)', zIndex: 22, maxWidth: 'min(560px, 92vw)', padding: '9px 14px', borderRadius: 10, background: 'rgba(5,7,10,.94)', border: '1px solid rgba(255,255,255,.12)', color: '#e7e9ee', fontSize: 12.5, textAlign: 'center', lineHeight: 1.4 }}>
+          {notice}
+        </div>
+      )}
+
+      {filesOpen && (
+        <div style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 24, width: 'min(460px, 92vw)', maxHeight: '62vh', display: 'flex', flexDirection: 'column', background: 'rgba(10,13,18,.97)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, boxShadow: '0 24px 70px -22px rgba(0,0,0,.85)', color: '#e7e9ee', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+            <HardDrive size={15} /> <strong style={{ fontSize: 13 }}>Диск «Garely»</strong>
+            <span style={{ flex: 1 }} />
+            <button type="button" className="gc-tool" style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 6, borderRadius: 8, display: 'inline-flex' }} onClick={() => browseRef.current?.()} title="Оновити"><RotateCw size={14} /></button>
+            <button type="button" className="gc-tool" style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 6, borderRadius: 8, display: 'inline-flex' }} onClick={() => setFilesOpen(false)} title="Закрити"><X size={15} /></button>
+          </div>
+          <div style={{ padding: '8px 12px', fontSize: 11.5, color: 'var(--muted)', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+            Щоб забрати файл із сервера — скопіюй його на диск «Garely» у Провіднику Windows, тоді натисни <RotateCw size={11} style={{ verticalAlign: '-1px' }} /> і завантаж тут.
+          </div>
+          <div style={{ overflow: 'auto', padding: 4 }}>
+            {fileList === null ? (
+              <div style={{ padding: 16, color: 'var(--muted)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 size={14} className="gc-spin" /> Завантаження…</div>
+            ) : fileList.length === 0 ? (
+              <div style={{ padding: 16, color: 'var(--muted)', fontSize: 12 }}>Порожньо. Скопіюй файли на диск «Garely» на сервері й натисни оновити.</div>
+            ) : (
+              fileList.map((f) => (
+                <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 8 }}>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5 }}>{f.dir ? '📁 ' : ''}{f.name}</span>
+                  {!f.dir && (
+                    <button type="button" className="gc-tool" style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 6, borderRadius: 8, display: 'inline-flex' }} onClick={() => downloadRef.current?.(f.path, f.name)} title="Завантажити"><Download size={15} /></button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {!connected && !dead && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'rgba(231,233,238,.7)', pointerEvents: 'none' }}>
@@ -444,6 +627,8 @@ export default function GuacamoleClient({
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: connected ? '#10b981' : dead ? '#f87171' : 'var(--accent)' }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{serverName}</span>
         </span>
+        {toolBtn(() => fileInputRef.current?.click(), 'Надіслати файли на диск «Garely»', <Upload size={15} />)}
+        {toolBtn(toggleFiles, 'Диск «Garely» — завантажити файли з сервера', <HardDrive size={15} />, { active: filesOpen })}
         {toolBtn(toggleHd, hd ? 'HD увімкнено — чіткіше, дрібніший UI' : 'HD — чіткіша картинка', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
         {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}

@@ -50,6 +50,9 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
     // resize that doesn't reliably apply (looked "soft" until a manual fullscreen toggle).
     const sp = req.nextUrl.searchParams;
     const clampInt = (v: string | null, lo: number, hi: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? Math.min(hi, Math.max(lo, n)) : undefined; };
+    // Per-user drive path → each user's redirected "Garely" drive is isolated; one user's
+    // uploaded/staged files are never visible inside another user's session.
+    const driveUser = r.session.user.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'anon';
     const gtoken = mintGuacToken({
       hostname: conn.host,
       port: conn.port,
@@ -59,6 +62,7 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
       width: clampInt(sp.get('w'), 640, 5120),
       height: clampInt(sp.get('h'), 480, 2880),
       dpi: clampInt(sp.get('dpi'), 96, 240),
+      drivePath: `/guac-drive/${driveUser}`,
     });
     return NextResponse.json({ method: 'guac', tunnelUrl: guacTunnelUrl(), token: gtoken, sessionId: sess.id });
   }

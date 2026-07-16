@@ -39,6 +39,12 @@ export interface GuacRdpParams {
    *  copy-rect already fixes the v1 motion lag WITHOUT loading GPU-less targets with a
    *  software H.264 encode. Flip per-target once a target proves it can afford it. */
   gfx?: boolean;
+  /** RDP drive redirection for two-way file transfer. When set, guacd mounts this path as a
+   *  redirected drive (named driveName). Pass a PER-USER path so one user's uploads/downloads
+   *  are never visible inside another user's session. Requires the path to be writable inside
+   *  the guacd container (a mounted volume). */
+  drivePath?: string;
+  driveName?: string;
 }
 
 /**
@@ -68,6 +74,12 @@ export function mintGuacToken(p: GuacRdpParams): string {
   };
   if (p.password) settings.password = p.password;
   if (p.domain) settings.domain = p.domain;
+  if (p.drivePath) {
+    settings['enable-drive'] = true;
+    settings['drive-name'] = p.driveName ?? 'Garely';
+    settings['drive-path'] = p.drivePath;
+    settings['create-drive-path'] = true; // guacd mkdir -p's the per-user path on first use
+  }
 
   const payload = { connection: { type: 'rdp', settings } };
   const iv = randomBytes(16);

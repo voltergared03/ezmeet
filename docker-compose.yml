@@ -122,6 +122,10 @@ services:
       eam-meet:
         condition: service_healthy
     mem_limit: 64m
+    # Mount the RDP drive-redirection volume so the scheduler can prune stale transfer files
+    # (guacd is the only other mount; without a retention job the drive grows unbounded).
+    volumes:
+      - eam-meet-guac-drive:/guac-drive
     logging: *default-logging
     networks:
       - eam-meet
@@ -218,6 +222,10 @@ services:
     profiles: ["rdp2"]
     restart: unless-stopped
     mem_limit: 512m
+    # Writable target for RDP drive redirection (two-way file transfer). guacd creates a
+    # per-user subdir under here (create-drive-path) and mounts it as the "Garely" drive.
+    volumes:
+      - eam-meet-guac-drive:/guac-drive
     logging: *default-logging
     networks:
       - eam-meet
@@ -249,6 +257,7 @@ volumes:
   eam-meet-task-files:
   eam-meet-base-files:
   eam-meet-backups:
+  eam-meet-guac-drive:
 
 networks:
   eam-meet:
