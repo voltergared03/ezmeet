@@ -51,30 +51,40 @@ export default function GuacamoleClient({
       const el = display.getElement();
       while (hostRef.current.firstChild) hostRef.current.removeChild(hostRef.current.firstChild);
       hostRef.current.appendChild(el);
+      el.style.transformOrigin = '0 0'; // scale from top-left so it aligns with the sized host
 
       const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+      // Ask guacd to render at frame×dpr (crisp HiDPI). Debounced by callers.
       const pushSize = () => {
         const box = frameRef.current;
         if (!box) return;
         const d = dpr();
         try { client.sendSize(Math.max(640, Math.round(box.clientWidth * d)), Math.max(480, Math.round(box.clientHeight * d))); } catch { /* noop */ }
       };
+      // Fit the rendered display into the frame. display.scale() is a CSS transform, so
+      // the element's LAYOUT box stays at full remote resolution — the host must be sized
+      // to the SCALED box, else the centering flex parent offsets/clips it. That mismatch
+      // is what looked "broken" on entry until a fullscreen toggle forced a re-fit.
+      const fit = () => {
+        const box = frameRef.current, host = hostRef.current;
+        const w = display.getWidth(), h = display.getHeight();
+        if (!box || !host || !w || !h) return;
+        const scale = Math.min(box.clientWidth / w, box.clientHeight / h);
+        display.scale(scale);
+        host.style.width = Math.floor(w * scale) + 'px';
+        host.style.height = Math.floor(h * scale) + 'px';
+      };
 
       const STATES = ['idle', 'connecting', 'waiting', 'connected', 'disconnecting', 'disconnected'];
       client.onstatechange = (s: number) => {
         const name = STATES[s] ?? String(s);
         setStatus(name);
-        if (name === 'connected') pushSize();
+        if (name === 'connected') { pushSize(); requestAnimationFrame(fit); }
       };
       client.onerror = () => setStatus('error');
       tunnel.onerror = () => setStatus('tunnel-error');
 
-      display.onresize = () => {
-        const box = frameRef.current;
-        const w = display.getWidth();
-        if (!box || !w) return;
-        display.scale(box.clientWidth / w);
-      };
+      display.onresize = fit;
 
       // Mouse via getBoundingClientRect (transform/fullscreen-safe) → remote pixels.
       el.style.cursor = 'none';
@@ -120,12 +130,19 @@ export default function GuacamoleClient({
       keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, k);
       keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, k);
 
-      const onWinResize = () => { if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(pushSize, 300); };
-      const onFsChange = () => pushSize();
+      const onWinResize = () => { fit(); if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(pushSize, 250); };
+      const onFsChange = () => { pushSize(); requestAnimationFrame(fit); };
       window.addEventListener('resize', onWinResize);
       document.addEventListener('fullscreenchange', onFsChange);
       cleanups.push(() => window.removeEventListener('resize', onWinResize));
       cleanups.push(() => document.removeEventListener('fullscreenchange', onFsChange));
+
+      // Catch the initial layout settle + any frame size change, uniformly re-fitting
+      // without waiting for a manual fullscreen toggle. fit() is cheap (local rescale);
+      // the remote renegotiation (pushSize) stays debounced.
+      const ro = new ResizeObserver(() => { fit(); if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(pushSize, 250); });
+      if (frameRef.current) ro.observe(frameRef.current);
+      cleanups.push(() => ro.disconnect());
 
       client.connect('token=' + encodeURIComponent(token));
     })().catch(() => setStatus('error'));
@@ -228,7 +245,7 @@ export default function GuacamoleClient({
 
       {/* display fills the viewport; hostRef holds ONLY the guac element */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <div ref={hostRef} tabIndex={0} style={{ outline: 'none' }} />
+        <div ref={hostRef} tabIndex={0} style={{ outline: 'none', overflow: 'hidden' }} />
       </div>
 
       {!connected && !dead && (
