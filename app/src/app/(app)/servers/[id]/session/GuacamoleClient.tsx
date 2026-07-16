@@ -20,11 +20,12 @@ function saveBlob(blob: Blob, name: string) {
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
 const CTRL_KEYSYM = 0xffe3; // Control_L
 
-// HD mode renders the remote at viewport × HD_SCALE for sharper text. guacd can't scale the
-// Windows UI, so higher resolution = smaller UI — HD_SCALE stays a moderate 1.5 (UI ~67%),
-// deliberately below devicePixelRatio (×2 on Retina made the UI too tiny). Owned by the session
-// page (default OFF per fresh connection); not persisted, so a new session starts comfortable.
-const HD_SCALE = 1.5;
+// guacd can't scale the Windows UI, so resolution alone sets BOTH sharpness and UI size.
+// Normal mode = viewport × BASE_SCALE (1.5 — the comfortable sweet spot; 1× is too soft AND
+// too large). HD toggle = viewport × HD_SCALE (2.0 — full device-pixel sharpness, smaller UI,
+// opt-in for reading fine text). Owned by the session page; default = normal, not persisted.
+const BASE_SCALE = 1.5;
+const HD_SCALE = 2.0;
 
 /**
  * RDP v2 (Apache Guacamole) client. Full-viewport takeover (native-client feel) with a
@@ -57,7 +58,7 @@ export default function GuacamoleClient({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const clientRef = useRef<any>(null);
   const [status, setStatus] = useState('connecting');
-  const renderScaleRef = useRef(hd ? HD_SCALE : 1); // read by pushSize; fixed for this mount (hd change → remount)
+  const renderScaleRef = useRef(hd ? HD_SCALE : BASE_SCALE); // read by pushSize; fixed for this mount (hd change → remount)
 
   // ── two-way file transfer (RDP drive redirection). Functions that need the guac client +
   // the dynamically-imported Guacamole namespace are built inside the effect and exposed here. ──
@@ -618,7 +619,7 @@ export default function GuacamoleClient({
         </span>
         {toolBtn(() => fileInputRef.current?.click(), 'Надіслати файли на диск «Garely»', <Upload size={15} />)}
         {toolBtn(toggleFiles, 'Диск «Garely» — завантажити файли з сервера', <HardDrive size={15} />, { active: filesOpen })}
-        {toolBtn(() => onToggleHd?.(), hd ? 'HD (чіткіше) — натисни для більшого UI' : 'Більший UI — натисни для HD (чіткіше)', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
+        {toolBtn(() => onToggleHd?.(), hd ? 'HD (макс. чіткість, дрібніший UI) — натисни для звичайного' : 'Звичайний — натисни для HD (макс. чіткість)', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
         {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}
       </div>

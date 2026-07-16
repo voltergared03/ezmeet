@@ -63,12 +63,12 @@ export default function ServerSessionPage() {
   const [conn, setConn] = useState<ConnectInfo | null>(null);
   const [password, setPassword] = useState('');
   const [livePhase, setLivePhase] = useState<Phase>('init');
-  // HD (v2) is per-connection, default ON (viewport × 1.5) — the sharper level users preferred;
-  // guacd can't scale the Windows UI, so 1.5× is the sweet spot (crisper than 1×, UI not tiny
-  // like ×dpr). Toggle in the pill drops to 1× for a bigger UI. Not persisted → stable default.
+  // v2 resolution scale. Normal (default) = viewport × 1.5 — the comfortable sweet spot (1× is
+  // too soft AND too large; guacd can't scale the Windows UI, so resolution is the only lever).
+  // The pill's HD toggle bumps to × 2 (max sharpness, smaller UI) on demand. Not persisted.
   // hdRef is what doConnect reads (avoids a stale closure); hd state drives the pill's button.
-  const hdRef = useRef(true);
-  const [hd, setHd] = useState(true);
+  const hdRef = useRef(false);
+  const [hd, setHd] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -100,7 +100,7 @@ export default function ServerSessionPage() {
       // by 1.5× (sharper, UI ~67%); default OFF so a fresh connection starts comfortable.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
-        const scale = hdRef.current ? 1.5 : 1;
+        const scale = hdRef.current ? 2 : 1.5; // keep in sync with GuacamoleClient HD_SCALE/BASE_SCALE
         const w = Math.round((window.innerWidth || 1280) * scale);
         const h = Math.round((window.innerHeight || 800) * scale);
         url += `?v=2&w=${w}&h=${h}`;
