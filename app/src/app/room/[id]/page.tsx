@@ -19,7 +19,7 @@ import {
   TrackLoop,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track, RoomEvent } from 'livekit-client';
+import { Track, RoomEvent, ScreenSharePresets } from 'livekit-client';
 import { Logo } from '@/components/ui/logo';
 import {
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff,
@@ -380,10 +380,38 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
     await localParticipant.setCameraEnabled(!camOn);
     setCamOn(!camOn);
   };
+  // Screen share is tuned for TEXT (spreadsheets, dashboards, code), not motion.
+  // Publish options are per-track, so none of this touches the camera.
   const toggleScreen = async () => {
     try {
-      await localParticipant.setScreenShareEnabled(!screenOn);
-      setScreenOn(!screenOn);
+      if (screenOn) {
+        await localParticipant.setScreenShareEnabled(false);
+        setScreenOn(false);
+        return;
+      }
+      await localParticipant.setScreenShareEnabled(
+        true,
+        // Deliberately no `resolution` here: passing one defeats the SDK's Safari-17
+        // guard (WebKit 263015 captures at a fraction of the real size) and pins
+        // capture to 15fps.
+        { contentHint: 'text' },
+        {
+          // Pinned, not cosmetic. For an SVC codec (vp9/av1) the SDK overwrites
+          // contentHint with 'motion' at publish time, silently undoing the line
+          // above — so a "better codec" here would make text worse, not better.
+          videoCodec: 'vp8',
+          // A ceiling, not a target: congestion control still backs off on weak
+          // uplinks, so this only spends bits on transients (scroll, window switch)
+          // — exactly when text smears. 15fps is deliberate: h1080fps30 costs 2x
+          // uplink and CPU for the same bits-per-pixel.
+          screenShareEncoding: { maxBitrate: 4_000_000, maxFramerate: 15, priority: 'medium' },
+          // Layers are additive, not a split, so this buys the 1080p layer nothing —
+          // it just trims the spare 540p/625kbps layer we never switch down to
+          // (adaptiveStream and dynacast are both off).
+          screenShareSimulcastLayers: [ScreenSharePresets.h360fps3],
+        },
+      );
+      setScreenOn(true);
     } catch { /* user cancelled */ }
   };
   const leaveMeeting = () => {
