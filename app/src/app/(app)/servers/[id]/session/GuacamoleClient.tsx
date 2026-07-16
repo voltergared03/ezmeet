@@ -75,11 +75,25 @@ export default function GuacamoleClient({
         host.style.height = Math.floor(h * scale) + 'px';
       };
 
+      // Re-negotiate size a few times over the first ~2.5s after connect. guacd's
+      // display-update resize and the browser's final layout/DPR settle a beat late, so a
+      // single push at 'connected' can leave the remote at guacd's default resolution
+      // (soft, less content on screen) until something forces a re-fit — which is why a
+      // fullscreen toggle "fixed" it. Repeated pushes converge on the correct size
+      // automatically; sendSize is a no-op once the remote already matches, so no flicker.
+      const settle = () => { pushSize(); requestAnimationFrame(fit); };
+      const settleTimers: Array<ReturnType<typeof setTimeout>> = [];
+      cleanups.push(() => settleTimers.forEach(clearTimeout));
+
       const STATES = ['idle', 'connecting', 'waiting', 'connected', 'disconnecting', 'disconnected'];
       client.onstatechange = (s: number) => {
         const name = STATES[s] ?? String(s);
         setStatus(name);
-        if (name === 'connected') { pushSize(); requestAnimationFrame(fit); }
+        if (name === 'connected') {
+          settleTimers.forEach(clearTimeout);
+          settleTimers.length = 0;
+          [0, 150, 400, 800, 1500, 2500].forEach((ms) => settleTimers.push(setTimeout(settle, ms)));
+        }
       };
       client.onerror = () => setStatus('error');
       tunnel.onerror = () => setStatus('tunnel-error');
