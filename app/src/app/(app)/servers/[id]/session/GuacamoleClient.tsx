@@ -3,14 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Power, Loader2, Maximize2, GripVertical } from 'lucide-react';
 
+// Mac ⌘ arrives from Guacamole.Keyboard as a Super/Meta keysym; the Windows target treats
+// that as the Win key, so ⌘C/⌘V/⌘A do nothing. Substitute Control at the keysym level.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+const META_KEYSYMS = new Set([0xffe7, 0xffe8, 0xffeb, 0xffec]); // Meta_L/R, Super_L/R (⌘)
+const CTRL_KEYSYM = 0xffe3; // Control_L
+
 /**
  * RDP v2 (Apache Guacamole) client. Full-viewport takeover (native-client feel) with a
  * draggable floating pill for controls, mirroring v1's RdpClient. guacd does the native
  * decode; the display is sized to the viewport × devicePixelRatio for a crisp HiDPI
  * render, then scaled to CSS size, and re-negotiated on resize/fullscreen. Mouse
- * coordinates come from getBoundingClientRect (transform/fullscreen-safe). Clipboard +
- * file transfer are the remaining parity items. The RDP password is inside the opaque
- * `token`; it never reaches here.
+ * coordinates come from getBoundingClientRect (transform/fullscreen-safe). Bidirectional
+ * text clipboard + Mac ⌘→Ctrl remap are wired below; two-way file transfer is the
+ * remaining parity item. The RDP password is inside the opaque `token`; it never reaches here.
  *
  * hostRef holds ONLY the manually-appended guac element (NO JSX children) — mixing
  * manual DOM with React children in one node throws removeChild on reconcile.
@@ -140,9 +146,49 @@ export default function GuacamoleClient({
         el.removeEventListener('wheel', onWheel);
       });
 
+      // Keyboard with a Mac ⌘→Ctrl remap (see module constants): every ⌘-combo lands as the
+      // matching Ctrl-combo on the Windows target.
       keyboard = new Guacamole.Keyboard(document);
-      keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, k);
-      keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, k);
+      const remapKey = (k: number) => (IS_MAC && META_KEYSYMS.has(k) ? CTRL_KEYSYM : k);
+      keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, remapKey(k));
+      keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, remapKey(k));
+      // Release held keys when the tab loses focus, so a ⌘/Shift keyup swallowed by a macOS
+      // system shortcut (⌘Space, ⌘⇧5) can't leave a modifier stuck down on the remote.
+      const releaseAll = () => { try { keyboard.reset(); } catch { /* noop */ } try { client.sendKeyEvent(0, CTRL_KEYSYM); } catch { /* noop */ } };
+      const onVis = () => { if (document.hidden) releaseAll(); };
+      window.addEventListener('blur', releaseAll);
+      document.addEventListener('visibilitychange', onVis);
+      cleanups.push(() => window.removeEventListener('blur', releaseAll));
+      cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
+
+      // Bidirectional text clipboard. Remote→local: guacd streams the server clipboard via
+      // onclipboard → write it to navigator.clipboard (StringReader does NOT auto-ack — ack
+      // manually). Local→remote: push navigator.clipboard to the server on focus / canvas-enter
+      // (gated by focus + the clipboard-read grant), so a following ⌘V pastes the local text.
+      let lastClip = '';
+      client.onclipboard = (stream: any, mimetype: string) => {
+        if (typeof mimetype !== 'string' || mimetype.indexOf('text/') !== 0) { try { stream.sendAck('Unsupported', 0x030f); } catch { /* noop */ } return; }
+        const reader = new Guacamole.StringReader(stream);
+        let data = '';
+        reader.ontext = (text: string) => { data += text; try { stream.sendAck('OK', 0x0000); } catch { /* noop */ } };
+        reader.onend = () => { lastClip = data; try { void navigator.clipboard?.writeText(data); } catch { /* noop */ } };
+      };
+      const pushLocalClip = async () => {
+        try {
+          if (!navigator.clipboard?.readText) return;
+          const text = await navigator.clipboard.readText();
+          if (text === lastClip) return; // don't echo what we just pulled, or re-push unchanged text
+          lastClip = text;
+          const s = client.createClipboardStream('text/plain');
+          const w = new Guacamole.StringWriter(s);
+          w.sendText(text); w.sendEnd();
+        } catch { /* no focus / no permission / empty — best effort */ }
+      };
+      const onFocusClip = () => void pushLocalClip();
+      window.addEventListener('focus', onFocusClip);
+      el.addEventListener('mouseenter', onFocusClip);
+      cleanups.push(() => window.removeEventListener('focus', onFocusClip));
+      cleanups.push(() => el.removeEventListener('mouseenter', onFocusClip));
 
       const onWinResize = () => { fit(); if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(pushSize, 250); };
       const onFsChange = () => { pushSize(); requestAnimationFrame(fit); };
@@ -172,6 +218,30 @@ export default function GuacamoleClient({
 
   const connected = status === 'connected';
   const dead = status === 'disconnected' || status === 'error' || status === 'tunnel-error';
+
+  // Keepalive: a backgrounded tab is frozen after ~5 min, killing the tunnel WebSocket. A tab
+  // playing audio is exempt, so run one inaudible oscillator for the life of the session.
+  useEffect(() => {
+    if (!connected) return;
+    let ctx: AudioContext | null = null;
+    let osc: OscillatorNode | null = null;
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      ctx = new AC();
+      const gain = ctx.createGain(); gain.gain.value = 0.0015; // effectively silent, non-zero → tab counts as audible
+      osc = ctx.createOscillator(); osc.frequency.value = 30;  // sub-audible
+      osc.connect(gain).connect(ctx.destination); osc.start();
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+      const resume = () => { if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {}); };
+      document.addEventListener('visibilitychange', resume);
+      return () => {
+        document.removeEventListener('visibilitychange', resume);
+        try { osc?.stop(); } catch { /* noop */ }
+        try { void ctx?.close(); } catch { /* noop */ }
+      };
+    } catch { /* AudioContext blocked — session still works, just not freeze-proof */ }
+  }, [connected]);
 
   // ── draggable floating pill (mirrors v1 RdpClient) ────────────────────────────
   const PILL_KEY = 'garely-guac-pill-pos';
