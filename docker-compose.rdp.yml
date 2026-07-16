@@ -1,0 +1,21 @@
+# RDP-10 go-live override. Prod uses host-nginx (not a compose Caddy) → publish a
+# loopback port for nginx to reverse_proxy /jet/* into. We bypass the image's
+# PowerShell bootstrap (which regenerates keys + writes into the config dir) and
+# run the gateway binary directly against our hand-provisioned gateway.json — the
+# same way the spike validated it. Bring up with:
+#   docker compose -f docker-compose.yml -f docker-compose.rdp.yml up -d garely-rdp-gw
+services:
+  garely-rdp-gw:
+    # PINNED on purpose — never float this to :latest. A silent gateway bump would
+    # land RDCleanPath changes under the vendored IronRDP client with no test pass.
+    image: devolutions/devolutions-gateway:2026.2.2
+    restart: unless-stopped
+    entrypoint: ["/opt/devolutions/gateway/devolutions-gateway"]
+    command: ["--config-path", "/etc/devolutions-gateway"]
+    volumes:
+      - ./rdp-gateway/config:/etc/devolutions-gateway
+    ports:
+      - "127.0.0.1:7171:7171"
+    mem_limit: 512m
+    networks:
+      - eam-meet

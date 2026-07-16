@@ -3,15 +3,18 @@ import { prisma } from '@/lib/prisma';
 import { withRoute } from '@/lib/with-route';
 
 // GET /api/cron/cleanup?secret=XXX — periodic state hygiene (e.g. every 30 min).
-// Backstops two cases where a webhook was lost or a process died:
+// Backstops three cases where a webhook was lost or a process died:
 //   1. Meetings stuck `live` long past their expected end (room_finished never
 //      arrived) → mark ended so they leave the dashboard and enter the archive.
 //   2. Recordings stuck `processing` for hours (egress crashed mid-recording) →
 //      mark failed so the UI can show it instead of hanging.
+//   3. RDP audit sessions stuck `active` (the browser's disconnect beacon never
+//      landed) → close them so the audit trail has a real end time.
 // Purely time-based so it never depends on a live LiveKit/egress API call.
 
 const LIVE_GRACE_MS = 3 * 60 * 60 * 1000;      // 3h past scheduled end
 const REC_STUCK_MS = 6 * 60 * 60 * 1000;       // 6h in "processing"
+const RDP_SESSION_STALE_MS = 10 * 60 * 1000;   // ~20 missed 30s heartbeats
 
 async function getHandler(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
@@ -53,7 +56,22 @@ async function getHandler(req: NextRequest) {
     data: { status: 'failed' },
   });
 
-  return NextResponse.json({ endedMeetings, failedRecordings: failedRecordings.count });
+  // 3. RDP audit sessions stuck "active". /disconnect closes the row, but it is a
+  //    best-effort browser beacon — a killed tab or a dropped network never sends it,
+  //    leaving the row `active` forever so the trail can't answer "how long was X
+  //    connected". Presence is unaffected either way (it keys on heartbeat freshness,
+  //    PRESENCE_STALE_MS), so this only repairs the audit row. endedAt is the last
+  //    proof of life — the final heartbeat, or startedAt when the session never beat —
+  //    NOT `now`, which would invent hours of session time on a long-dead row. Raw SQL
+  //    because endedAt is per-row (COALESCE), which updateMany can't express.
+  const endedSessions = await prisma.$executeRaw`
+    UPDATE "ServerSession"
+    SET status = 'ended', "endedAt" = COALESCE("lastSeenAt", "startedAt")
+    WHERE status = 'active'
+      AND COALESCE("lastSeenAt", "startedAt") < ${new Date(now - RDP_SESSION_STALE_MS)}
+  `;
+
+  return NextResponse.json({ endedMeetings, failedRecordings: failedRecordings.count, endedSessions });
 }
 
 export const GET = withRoute('cron.cleanup', getHandler);

@@ -196,25 +196,15 @@ services:
       - eam-meet
 
   # --- Garely RDP Gateway (adopted Devolutions Gateway) — §15 servers/remote-access pillar ---
-  # OPT-IN: only starts with `docker compose --profile rdp up -d`. Set up first:
+  # NOT defined here on purpose. The gateway is an OPT-IN overlay, pinned + wired for a
+  # host-nginx front (loopback :7171) in `docker-compose.rdp.yml`. Set up first:
   #   ./rdp-gateway/setup-keys.sh        # generates provisioner/delegation/TLS keys
   # then paste the printed RDP_GW_* values into .env (the app signs connection tokens
   # with the provisioner key + JWE-encrypts injected credentials to the delegation key).
-  # The browser reaches it only through Caddy (handle /jet/* -> garely-rdp-gw:7171).
-  garely-rdp-gw:
-    image: devolutions/devolutions-gateway:latest  # TODO: pin a tested version before prod
-    profiles: ["rdp"]
-    restart: unless-stopped
-    environment:
-      - DGATEWAY_CONFIG_PATH=/etc/devolutions-gateway
-    volumes:
-      - ./rdp-gateway/config:/etc/devolutions-gateway:ro
-    # No host port — reachable only via Caddy on the internal network.
-    # SECURITY: in prod, restrict this service's egress to the allowed RDP target subnets.
-    mem_limit: 512m
-    logging: *default-logging
-    networks:
-      - eam-meet
+  # Bring it up with:
+  #   docker compose -f docker-compose.yml -f docker-compose.rdp.yml up -d garely-rdp-gw
+  # Keep it out of THIS file: a second definition would merge with the overlay's (compose
+  # APPENDS volume lists), producing two mounts on the same container path.
 
 volumes:
   eam-meet-pgdata:
