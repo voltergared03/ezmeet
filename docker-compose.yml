@@ -206,6 +206,39 @@ services:
   # Keep it out of THIS file: a second definition would merge with the overlay's (compose
   # APPENDS volume lists), producing two mounts on the same container path.
 
+  # --- RDP v2 (Apache Guacamole) — coexists with v1; OPT-IN via `--profile rdp2` ---
+  # guacd does the native, multi-threaded FreeRDP decode; guac-tunnel (guacamole-lite)
+  # bridges the browser WebSocket to guacd with a Garely-minted token (creds injected
+  # server-side, never sent to the browser). Neither starts unless the profile is
+  # requested, so v1 (Devolutions Gateway) is untouched. Bring up with:
+  #   docker compose --profile rdp2 up -d --build guacd guac-tunnel
+  # Needs GUAC_TOKEN_KEY (32 bytes) in .env; expose guac-tunnel via host-nginx at /guac2.
+  guacd:
+    image: guacamole/guacd:1.6.0
+    profiles: ["rdp2"]
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: *default-logging
+    networks:
+      - eam-meet
+
+  guac-tunnel:
+    build: ./rdp-gw2
+    profiles: ["rdp2"]
+    restart: unless-stopped
+    environment:
+      - GUACD_HOST=guacd
+      - GUACD_PORT=4822
+      - GUAC_TOKEN_KEY=${GUAC_TOKEN_KEY}
+    # No host port — reached only via host-nginx (/guac2 -> guac-tunnel:8080) on the
+    # internal network, same posture as the Devolutions Gateway.
+    mem_limit: 256m
+    logging: *default-logging
+    depends_on:
+      - guacd
+    networks:
+      - eam-meet
+
 volumes:
   eam-meet-pgdata:
   eam-meet-redis-data:
