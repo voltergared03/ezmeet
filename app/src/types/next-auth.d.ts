@@ -31,5 +31,6 @@ declare module 'next-auth/jwt' {
     orgRole?: string;
     locale?: 'en' | 'uk';
     seenAt?: number;
+    epoch?: number; // frozen sessionEpoch — mismatch vs DB revokes the session
   }
 }

@@ -7,12 +7,16 @@ import { userCanAccessServer } from '@/lib/server-access';
 import { decryptServerSecret } from '@/lib/server-credentials';
 import { rdpGatewayEnabled, rdpGatewayUrl } from '@/lib/rdp-gateway';
 import { mintConnectionToken } from '@/lib/rdp-token';
+import { rateLimit } from '@/lib/rate-limit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/servers/[id]/connect — issue a short-lived gateway connection token for
-// a server the caller may access. The vault password is decrypted server-side and
-// injected via the (JWE-encrypted) token; it never reaches the browser in the clear.
+// a server the caller may access. NOTE: because the in-browser IronRDP client performs
+// CredSSP/NLA itself, the vault password is decrypted server-side and returned to the
+// (already access-checked) caller's browser in the response — it is NOT injected into the
+// gateway token on this path. That reveal is throttled + audited below; a stolen session
+// must not be able to dump the whole fleet's credentials in a burst.
 export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: Ctx) => {
   const r = await requireOrg();
   if (r instanceof Response) return r;
@@ -21,6 +25,11 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
   if (!conn) return jsonError('not_found', 404);
   if (!(await userCanAccessServer(id, r.session.user.id, r.session.user.role))) {
     return jsonError('forbidden', 403);
+  }
+  // Throttle the cleartext-credential reveal per caller: a compromised session can no
+  // longer iterate connect to exfiltrate every server's password at machine speed.
+  if (!(await rateLimit(`connect:${r.session.user.id}`, 8, 60_000)).ok) {
+    return jsonError('rate_limited', 429);
   }
   if (!rdpGatewayEnabled()) return jsonError('gateway_unconfigured', 503);
 

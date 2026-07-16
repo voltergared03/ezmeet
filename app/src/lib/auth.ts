@@ -106,8 +106,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
         if (token.id) {
           const dbUser = (await prisma.user.findUnique({
             where: { id: token.id as string },
-            select: { role: true, totpEnabled: true, status: true, mustChangePassword: true, preferences: true, memberships: { orderBy: { createdAt: 'asc' }, take: 1, select: { orgId: true, role: true } } } as any,
+            select: { role: true, totpEnabled: true, status: true, mustChangePassword: true, sessionEpoch: true, preferences: true, memberships: { orderBy: { createdAt: 'asc' }, take: 1, select: { orgId: true, role: true } } } as any,
           })) as any;
+
+          // Session revocation: the token freezes the user's sessionEpoch at sign-in;
+          // if the DB epoch has since moved (an admin/incident "sign out everywhere"
+          // bumped it), this cookie is stale → return null so @auth/core clears it.
+          // Grandfather tokens minted before this field existed by adopting the current
+          // epoch (avoids logging everyone out on deploy). Never invalidate on a missing
+          // dbUser (defensive: only a positive mismatch revokes).
+          const dbEpoch: number = dbUser?.sessionEpoch ?? 0;
+          if (user || typeof token.epoch !== 'number') {
+            token.epoch = dbEpoch;
+          } else if (dbUser && token.epoch !== dbEpoch) {
+            return null;
+          }
+
           token.role = dbUser?.role || 'member';
           token.totpEnabled = !!dbUser?.totpEnabled;
           token.status = dbUser?.status || 'active';

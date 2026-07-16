@@ -58,6 +58,10 @@ model User {
   // Credentials auth (optional — null for SSO-only users)
   passwordHash       String? // scrypt: scrypt$N$r$p$salt$hash (base64url)
   mustChangePassword Boolean   @default(false)
+  // Bumping this invalidates all of the user's existing JWT sessions (stolen-cookie
+  // revocation) WITHOUT rotating AUTH_SECRET. The token freezes the epoch at sign-in;
+  // the jwt callback returns null (clears the cookie) when it no longer matches.
+  sessionEpoch       Int       @default(0)
   // 2FA (TOTP)
   totpSecret         String? // AES-256-GCM encrypted at rest
   totpEnabled        Boolean   @default(false)
