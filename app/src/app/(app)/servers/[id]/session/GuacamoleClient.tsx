@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Power, Loader2, Maximize2, GripVertical, Upload, HardDrive, Download, X, RotateCw } from 'lucide-react';
+import { Power, Loader2, Maximize2, GripVertical, Upload, HardDrive, Download, X, RotateCw, Minus, Plus } from 'lucide-react';
 
 // Anchor-download a Blob to the user's local machine (generic browser, no library).
 function saveBlob(blob: Blob, name: string) {
@@ -20,12 +20,10 @@ function saveBlob(blob: Blob, name: string) {
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
 const CTRL_KEYSYM = 0xffe3; // Control_L
 
-// guacd can't scale the Windows UI, so resolution alone sets BOTH sharpness and UI size.
-// Normal mode = viewport × BASE_SCALE (1.5 — the comfortable sweet spot; 1× is too soft AND
-// too large). HD toggle = viewport × HD_SCALE (2.0 — full device-pixel sharpness, smaller UI,
-// opt-in for reading fine text). Owned by the session page; default = normal, not persisted.
-const BASE_SCALE = 1.5;
-const HD_SCALE = 2.0;
+// guacd can't scale the Windows UI (no DesktopScaleFactor — unlike v1's IronRDP), so the
+// render resolution alone sets BOTH sharpness and UI size: LOWER scale = bigger UI but softer,
+// HIGHER scale = crisper but smaller UI. The exact sweet spot is display/taste-dependent, so
+// the pill exposes a −/+ scale stepper. `scale` is owned by the session page (persisted).
 
 /**
  * RDP v2 (Apache Guacamole) client. Full-viewport takeover (native-client feel) with a
@@ -43,22 +41,22 @@ export default function GuacamoleClient({
   tunnelUrl,
   token,
   serverName,
-  hd = false,
-  onToggleHd,
+  scale = 1.5,
+  onScaleChange,
   onExit,
 }: {
   tunnelUrl: string;
   token: string;
   serverName: string;
-  hd?: boolean; // owned by the session page; a change remounts this component at the new resolution
-  onToggleHd?: () => void;
+  scale?: number; // render multiplier, owned by the session page; a change remounts at the new resolution
+  onScaleChange?: (delta: number) => void;
   onExit?: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const clientRef = useRef<any>(null);
   const [status, setStatus] = useState('connecting');
-  const renderScaleRef = useRef(hd ? HD_SCALE : BASE_SCALE); // read by pushSize; fixed for this mount (hd change → remount)
+  const renderScaleRef = useRef(scale); // read by pushSize; fixed for this mount (scale change → remount)
 
   // ── two-way file transfer (RDP drive redirection). Functions that need the guac client +
   // the dynamically-imported Guacamole namespace are built inside the effect and exposed here. ──
@@ -619,7 +617,11 @@ export default function GuacamoleClient({
         </span>
         {toolBtn(() => fileInputRef.current?.click(), 'Надіслати файли на диск «Garely»', <Upload size={15} />)}
         {toolBtn(toggleFiles, 'Диск «Garely» — завантажити файли з сервера', <HardDrive size={15} />, { active: filesOpen })}
-        {toolBtn(() => onToggleHd?.(), hd ? 'HD (макс. чіткість, дрібніший UI) — натисни для звичайного' : 'Звичайний — натисни для HD (макс. чіткість)', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          {toolBtn(() => onScaleChange?.(-0.25), 'Більший UI (менша роздільність)', <Minus size={14} />)}
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', minWidth: 34, textAlign: 'center', fontVariantNumeric: 'tabular-nums', userSelect: 'none' }} title="Масштаб зображення">{scale}×</span>
+          {toolBtn(() => onScaleChange?.(0.25), 'Чіткіше (більша роздільність)', <Plus size={14} />)}
+        </span>
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
         {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}
       </div>

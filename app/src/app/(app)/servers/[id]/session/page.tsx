@@ -63,12 +63,18 @@ export default function ServerSessionPage() {
   const [conn, setConn] = useState<ConnectInfo | null>(null);
   const [password, setPassword] = useState('');
   const [livePhase, setLivePhase] = useState<Phase>('init');
-  // v2 resolution scale. Normal (default) = viewport × 1.5 — the comfortable sweet spot (1× is
-  // too soft AND too large; guacd can't scale the Windows UI, so resolution is the only lever).
-  // The pill's HD toggle bumps to × 2 (max sharpness, smaller UI) on demand. Not persisted.
-  // hdRef is what doConnect reads (avoids a stale closure); hd state drives the pill's button.
-  const hdRef = useRef(false);
-  const [hd, setHd] = useState(false);
+  // v2 render scale (viewport × scale). guacd can't scale the Windows UI, so scale sets BOTH
+  // sharpness and UI size: lower = bigger UI/softer, higher = crisper/smaller. Adjusted via the
+  // pill's −/+ stepper and persisted (garely-guac-scale). scaleRef is what doConnect reads
+  // (avoids a stale closure); scale state drives the pill readout. Default 1.5.
+  const scaleRef = useRef(1.5);
+  const [scale, setScale] = useState(1.5);
+  useEffect(() => {
+    try {
+      const v = parseFloat(localStorage.getItem('garely-guac-scale') || '');
+      if (v >= 1 && v <= 2.5) { const s = Math.round(v / 0.25) * 0.25; scaleRef.current = s; setScale(s); }
+    } catch { /* keep default 1.5 */ }
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -100,9 +106,9 @@ export default function ServerSessionPage() {
       // by 1.5× (sharper, UI ~67%); default OFF so a fresh connection starts comfortable.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
-        const scale = hdRef.current ? 2 : 1.5; // keep in sync with GuacamoleClient HD_SCALE/BASE_SCALE
-        const w = Math.round((window.innerWidth || 1280) * scale);
-        const h = Math.round((window.innerHeight || 800) * scale);
+        const s = scaleRef.current;
+        const w = Math.round((window.innerWidth || 1280) * s);
+        const h = Math.round((window.innerHeight || 800) * s);
         url += `?v=2&w=${w}&h=${h}`;
       }
       const res = await fetch(url, { method: 'POST' });
@@ -191,8 +197,15 @@ export default function ServerSessionPage() {
             tunnelUrl={conn.tunnelUrl || ''}
             token={conn.token}
             serverName={server.name}
-            hd={hd}
-            onToggleHd={() => { hdRef.current = !hdRef.current; setHd(hdRef.current); void doConnect(); }}
+            scale={scale}
+            onScaleChange={(delta) => {
+              const next = Math.min(2.5, Math.max(1, Math.round((scaleRef.current + delta) / 0.25) * 0.25));
+              if (next === scaleRef.current) return;
+              scaleRef.current = next;
+              setScale(next);
+              try { localStorage.setItem('garely-guac-scale', String(next)); } catch { /* noop */ }
+              void doConnect();
+            }}
             onExit={() => {
               setConn(null);
               setLivePhase('init');
