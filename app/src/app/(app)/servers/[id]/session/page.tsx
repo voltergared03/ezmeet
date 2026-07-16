@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2, ShieldAlert, Cpu, MonitorPlay, Lock } from 'lucide-react';
 import type { ServerView, ActiveServerSession } from '../../lib/types';
 import RdpClient, { type Phase } from './RdpClient';
+import GuacamoleClient from './GuacamoleClient';
 
 const STYLES = `
 @keyframes sess-ring { 0% { transform: scale(.62); opacity:.6; } 100% { transform: scale(2.3); opacity:0; } }
@@ -19,6 +20,8 @@ const STYLES = `
 `;
 
 interface ConnectInfo {
+  method?: 'guac'; // RDP v2 (Guacamole); absent → v1 (IronRDP/DGW)
+  tunnelUrl?: string; // v2 only — the guac-tunnel wss base
   gatewayUrl: string;
   token: string;
   sessionId: string;
@@ -39,6 +42,8 @@ export default function ServerSessionPage() {
   const t = useTranslations('servers');
   const params = useParams<{ id: string }>();
   const id = params?.id;
+  const search = useSearchParams();
+  const useV2 = search?.get('v') === '2'; // opt-in RDP v2 (Guacamole) via ?v=2
 
   const [server, setServer] = useState<ServerView | null>(null);
   const [stage, setStage] = useState<Stage>('loading');
@@ -70,7 +75,7 @@ export default function ServerSessionPage() {
     if (!id) return;
     setStage('connecting');
     try {
-      const res = await fetch(`/api/servers/${id}/connect`, { method: 'POST' });
+      const res = await fetch(`/api/servers/${id}/connect${useV2 ? '?v=2' : ''}`, { method: 'POST' });
       if (res.status === 403 || res.status === 404) return setStage('denied');
       if (res.status === 503) return setStage('gatewayPending');
       if (!res.ok) return setStage('error');
@@ -79,7 +84,7 @@ export default function ServerSessionPage() {
     } catch {
       setStage('error');
     }
-  }, [id]);
+  }, [id, useV2]);
 
   // Connect entry: re-check live occupancy (so the warning is accurate at click time),
   // warn if someone else is already connected (RDP bumps the prior session for the same
@@ -149,8 +154,23 @@ export default function ServerSessionPage() {
           </span>
         </div>
 
-        {/* live session */}
-        {stage === 'live' && conn && server && (
+        {/* live session — RDP v2 (Guacamole) when the connect route returned method:'guac' */}
+        {stage === 'live' && conn && server && conn.method === 'guac' && (
+          <GuacamoleClient
+            key={conn.sessionId}
+            tunnelUrl={conn.tunnelUrl || ''}
+            token={conn.token}
+            serverName={server.name}
+            onExit={() => {
+              setConn(null);
+              setLivePhase('init');
+              setStage('idle');
+            }}
+          />
+        )}
+
+        {/* live session — v1 (IronRDP / Devolutions Gateway) */}
+        {stage === 'live' && conn && server && conn.method !== 'guac' && (
           <RdpClient
             key={conn.sessionId}
             connectionId={id!}

@@ -8,6 +8,7 @@ import { decryptServerSecret } from '@/lib/server-credentials';
 import { rdpGatewayEnabled, rdpGatewayUrl } from '@/lib/rdp-gateway';
 import { mintConnectionToken } from '@/lib/rdp-token';
 import { rateLimit } from '@/lib/rate-limit';
+import { guacEnabled, guacTunnelUrl, mintGuacToken } from '@/lib/guac';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -31,6 +32,30 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
   if (!(await rateLimit(`connect:${r.session.user.id}`, 8, 60_000)).ok) {
     return jsonError('rate_limited', 429);
   }
+
+  const clientIp =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || null;
+
+  // ── RDP v2 (Apache Guacamole) — opt-in via ?v=2, coexists with v1 below. guacd does
+  // native decode; the vault password is injected server-side into the encrypted guac
+  // token and, unlike v1, is NEVER returned to the browser (closes finding F-01).
+  if (req.nextUrl.searchParams.get('v') === '2') {
+    if (!guacEnabled()) return jsonError('guac_unconfigured', 503);
+    const sess = await prisma.serverSession.create({
+      data: { connectionId: conn.id, userId: r.session.user.id, orgId: r.orgId, status: 'active', clientIp, lastSeenAt: new Date() },
+      select: { id: true },
+    });
+    const gtoken = mintGuacToken({
+      hostname: conn.host,
+      port: conn.port,
+      username: conn.username,
+      password: decryptServerSecret(conn.secretCipher),
+      domain: conn.domain,
+    });
+    return NextResponse.json({ method: 'guac', tunnelUrl: guacTunnelUrl(), token: gtoken, sessionId: sess.id });
+  }
+
+  // ── v1 (Devolutions Gateway / in-browser IronRDP) ──
   if (!rdpGatewayEnabled()) return jsonError('gateway_unconfigured', 503);
 
   const password = decryptServerSecret(conn.secretCipher); // '' when no stored secret
@@ -44,8 +69,6 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
   const token = await mintConnectionToken({ host: conn.host, port: conn.port });
 
   // Audit: open a session row (the gateway closes it with byte counts + end time).
-  const clientIp =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || null;
   const sess = await prisma.serverSession.create({
     data: {
       connectionId: conn.id,
