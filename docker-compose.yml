@@ -230,8 +230,10 @@ services:
       - GUACD_HOST=guacd
       - GUACD_PORT=4822
       - GUAC_TOKEN_KEY=${GUAC_TOKEN_KEY}
-    # No host port — reached only via host-nginx (/guac2 -> guac-tunnel:8080) on the
-    # internal network, same posture as the Devolutions Gateway.
+    ports:
+      # Loopback-only, same posture as the Devolutions Gateway (:7171). host-nginx
+      # reverse-proxies /guac2/ -> 127.0.0.1:8088. Never exposed publicly.
+      - "127.0.0.1:8088:8080"
     mem_limit: 256m
     logging: *default-logging
     depends_on:
