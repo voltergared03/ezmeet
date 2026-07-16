@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Power, Loader2, Maximize2, GripVertical } from 'lucide-react';
 
-// Mac ⌘ arrives from Guacamole.Keyboard as a Super/Meta keysym; the Windows target treats
-// that as the Win key, so ⌘C/⌘V/⌘A do nothing. Substitute Control at the keysym level.
+// Mac ⌘ reaches Guacamole.Keyboard as the Meta/Win keysym, which does nothing on Windows;
+// a capture-phase handler (below) intercepts ⌘ and sends Control (0xFFE3) + the key instead.
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
-const META_KEYSYMS = new Set([0xffe7, 0xffe8, 0xffeb, 0xffec]); // Meta_L/R, Super_L/R (⌘)
 const CTRL_KEYSYM = 0xffe3; // Control_L
 
 /**
@@ -146,25 +145,10 @@ export default function GuacamoleClient({
         el.removeEventListener('wheel', onWheel);
       });
 
-      // Keyboard with a Mac ⌘→Ctrl remap (see module constants): every ⌘-combo lands as the
-      // matching Ctrl-combo on the Windows target.
-      keyboard = new Guacamole.Keyboard(document);
-      const remapKey = (k: number) => (IS_MAC && META_KEYSYMS.has(k) ? CTRL_KEYSYM : k);
-      keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, remapKey(k));
-      keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, remapKey(k));
-      // Release held keys when the tab loses focus, so a ⌘/Shift keyup swallowed by a macOS
-      // system shortcut (⌘Space, ⌘⇧5) can't leave a modifier stuck down on the remote.
-      const releaseAll = () => { try { keyboard.reset(); } catch { /* noop */ } try { client.sendKeyEvent(0, CTRL_KEYSYM); } catch { /* noop */ } };
-      const onVis = () => { if (document.hidden) releaseAll(); };
-      window.addEventListener('blur', releaseAll);
-      document.addEventListener('visibilitychange', onVis);
-      cleanups.push(() => window.removeEventListener('blur', releaseAll));
-      cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
-
       // Bidirectional text clipboard. Remote→local: guacd streams the server clipboard via
       // onclipboard → write it to navigator.clipboard (StringReader does NOT auto-ack — ack
       // manually). Local→remote: push navigator.clipboard to the server on focus / canvas-enter
-      // (gated by focus + the clipboard-read grant), so a following ⌘V pastes the local text.
+      // / ⌘-down (gated by focus + the clipboard-read grant), so a following ⌘V pastes it.
       let lastClip = '';
       client.onclipboard = (stream: any, mimetype: string) => {
         if (typeof mimetype !== 'string' || mimetype.indexOf('text/') !== 0) { try { stream.sendAck('Unsupported', 0x030f); } catch { /* noop */ } return; }
@@ -189,6 +173,75 @@ export default function GuacamoleClient({
       el.addEventListener('mouseenter', onFocusClip);
       cleanups.push(() => window.removeEventListener('focus', onFocusClip));
       cleanups.push(() => el.removeEventListener('mouseenter', onFocusClip));
+
+      // Standard keyboard: Guacamole.Keyboard maps browser keys → X11 keysyms → guacd. On
+      // non-Mac, Ctrl/Alt/Shift pass through natively. reset() on blur/hidden clears any key
+      // the OS left held.
+      keyboard = new Guacamole.Keyboard(document);
+      keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, k);
+      keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, k);
+      const releaseAll = () => { try { keyboard.reset(); } catch { /* noop */ } };
+      const onVis = () => { if (document.hidden) releaseAll(); };
+      window.addEventListener('blur', releaseAll);
+      document.addEventListener('visibilitychange', onVis);
+      cleanups.push(() => window.removeEventListener('blur', releaseAll));
+      cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
+
+      // Mac ⌘→Ctrl: Guacamole.Keyboard forwards ⌘ as the Meta/Win keysym and its deferred-Meta
+      // heuristic drops many ⌘ combos, so ⌘A/⌘Z/⌘X/⌘S do nothing on Windows. Intercept ⌘ in the
+      // CAPTURE phase on window (before Guacamole's document listener), stop it reaching
+      // Guacamole, and drive Ctrl+<key> straight to guacd. ⌘C/⌘V ride the same path (Ctrl+C/V),
+      // with ⌘V first syncing the local clipboard to the server so the paste has the text.
+      if (IS_MAC) {
+        let metaDown = false;
+        const isMetaCode = (c: string) => c === 'MetaLeft' || c === 'MetaRight';
+        const isModifierCode = (c: string) => c === 'ShiftLeft' || c === 'ShiftRight' || c === 'AltLeft' || c === 'AltRight' || c === 'ControlLeft' || c === 'ControlRight';
+        const pressCtrl = () => { if (!metaDown) { metaDown = true; try { client.sendKeyEvent(1, CTRL_KEYSYM); } catch { /* noop */ } } };
+        const releaseCtrl = () => { if (metaDown) { metaDown = false; try { client.sendKeyEvent(0, CTRL_KEYSYM); } catch { /* noop */ } } };
+        const NAMED: Record<string, number> = { ArrowLeft: 0xff51, ArrowUp: 0xff52, ArrowRight: 0xff53, ArrowDown: 0xff54, Backspace: 0xff08, Delete: 0xffff, Enter: 0xff0d, Tab: 0xff09, Escape: 0xff1b, Home: 0xff50, End: 0xff57 };
+        const keysymForKey = (e: KeyboardEvent): number => {
+          if (e.key && e.key.length === 1) { const c = e.key.toLowerCase().charCodeAt(0); return c >= 0x20 && c <= 0x7e ? c : 0; }
+          return NAMED[e.key] ?? 0;
+        };
+        const tap = (ks: number) => { try { client.sendKeyEvent(1, ks); client.sendKeyEvent(0, ks); } catch { /* noop */ } };
+        const onKeyDownCap = (e: KeyboardEvent) => {
+          if (!e.isTrusted) return;
+          if (metaDown && !e.metaKey && !isMetaCode(e.code)) releaseCtrl(); // self-heal a ⌘ whose keyup was swallowed (⌘Space)
+          if (isMetaCode(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); pressCtrl(); void pushLocalClip(); return; }
+          if (metaDown || e.metaKey) {
+            e.preventDefault(); e.stopImmediatePropagation();
+            // Swallow Shift/Alt/Ctrl while ⌘ is held (else Guacamole leaks Meta/Win to the
+            // remote); re-synthesize them around the tap from the event's live modifier flags.
+            if (isModifierCode(e.code)) return;
+            pressCtrl();
+            const ks = keysymForKey(e);
+            if (!ks) return;
+            const mods: number[] = [];
+            if (e.shiftKey) mods.push(0xffe1); // Shift_L
+            if (e.altKey) mods.push(0xffe9);   // Alt_L
+            const send = () => {
+              for (const m of mods) { try { client.sendKeyEvent(1, m); } catch { /* noop */ } }
+              tap(ks);
+              for (let i = mods.length - 1; i >= 0; i--) { try { client.sendKeyEvent(0, mods[i]); } catch { /* noop */ } }
+            };
+            if ((e.key || '').toLowerCase() === 'v') {
+              void pushLocalClip().finally(() => setTimeout(send, 60)); // ensure local clip reached the server, then paste
+            } else {
+              send();
+            }
+          }
+        };
+        const onKeyUpCap = (e: KeyboardEvent) => {
+          if (!e.isTrusted) return;
+          if (isMetaCode(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); releaseCtrl(); }
+        };
+        window.addEventListener('keydown', onKeyDownCap, true);
+        window.addEventListener('keyup', onKeyUpCap, true);
+        window.addEventListener('blur', releaseCtrl);
+        cleanups.push(() => window.removeEventListener('keydown', onKeyDownCap, true));
+        cleanups.push(() => window.removeEventListener('keyup', onKeyUpCap, true));
+        cleanups.push(() => window.removeEventListener('blur', releaseCtrl));
+      }
 
       const onWinResize = () => { fit(); if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(pushSize, 250); };
       const onFsChange = () => { pushSize(); requestAnimationFrame(fit); };
