@@ -4,6 +4,39 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.23.0-beta.1] — 2026-07-17
+
+RDP v2 — a second, opt-in way to reach managed servers, built on Apache Guacamole
+(native `guacd` decode) to fix the motion lag and input bugs of the v1 in-browser
+IronRDP client. v2 runs alongside v1: users pick **Standard** or **V2 (beta)** on the
+connect screen (or `?v=2`), and v1 stays the default until v2 is proven, so nothing
+about the existing flow changes.
+
+### Added
+- **RDP v2 on Apache Guacamole (opt-in, coexists with v1).** `guacd` 1.6 +
+  guacamole-lite tunnel + guacamole-common-js client, isolated behind a compose
+  profile so v1 (Devolutions Gateway) is untouched. Native multi-threaded decode +
+  copy-rect scrolling fixes the v1 sluggishness on remote scroll/redraw.
+- **Client parity with v1.** Draggable floating control pill (position persisted);
+  full-viewport takeover with correct scaling from the first frame; transform- and
+  fullscreen-safe mouse; bidirectional text clipboard; Mac ⌘→Ctrl shortcuts
+  (⌘A/⌘C/⌘V/⌘X/⌘Z/⌘S and ⌘⇧ combos) that actually reach the Windows target; and a
+  keepalive that stops a backgrounded tab from freezing the session.
+- **Two-way file transfer** via RDP drive redirection: an Upload button and drag-drop
+  send files to a per-user "Garely" drive on the server; a drive panel browses and
+  downloads files copied there from the server side. A nightly job prunes staged
+  files older than 7 days so the shared host disk can't be exhausted.
+- **HD toggle.** Comfortable resolution by default (normal-size Windows UI, since
+  guacd can't scale the remote UI); an optional per-session HD mode renders 1.5× for
+  sharper text.
+
+### Security
+- The v2 RDP password is injected into the AES-256-CBC guac token **server-side and
+  never returned to the browser** — a strict improvement over v1's connect, which
+  hands the cleartext password to the in-browser client for NLA.
+- Per-user redirected-drive path, so one user's uploaded or staged files are never
+  visible inside another user's session.
+
 ## [1.22.0-beta.1] — 2026-07-16
 
 Security hardening (credential exposure), plus meeting/ClickUp and screen-share
@@ -580,6 +613,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.23.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.1
 [1.10.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.10.0-beta.1
 [1.5.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.5.0-beta.1
 [1.4.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.4.0-beta.1
