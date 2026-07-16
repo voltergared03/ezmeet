@@ -32,11 +32,13 @@ export default function GuacamoleClient({
   token,
   serverName,
   onExit,
+  onReconnect,
 }: {
   tunnelUrl: string;
   token: string;
   serverName: string;
   onExit?: () => void;
+  onReconnect?: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -371,20 +373,16 @@ export default function GuacamoleClient({
     else void box.requestFullscreen?.();
   };
   const exit = () => { try { clientRef.current?.disconnect(); } catch { /* noop */ } onExit?.(); };
-  // Toggle HD live: change the render scale and renegotiate the size via display-update — no
-  // reconnect. Persisted so the next connect's initial resolution matches.
+  // Toggle HD by RECONNECTING at the new resolution (via the token), not a live sendSize —
+  // guacd's display-update resize is unreliable, especially when shrinking, and left the
+  // remote at a stale small resolution that fit() then stretched. Persist first so the
+  // reconnect's doConnect reads the new scale.
   const toggleHd = () => {
-    setHd((prev) => {
-      const next = !prev;
-      renderScaleRef.current = next ? HD_SCALE : 1;
-      try { localStorage.setItem(HD_KEY, next ? '1' : '0'); } catch { /* noop */ }
-      const box = frameRef.current, client = clientRef.current;
-      if (box && client) {
-        const s = renderScaleRef.current;
-        try { client.sendSize(Math.max(640, Math.round(box.clientWidth * s)), Math.max(480, Math.round(box.clientHeight * s))); } catch { /* noop */ }
-      }
-      return next;
-    });
+    const next = !hd;
+    setHd(next);
+    renderScaleRef.current = next ? HD_SCALE : 1;
+    try { localStorage.setItem(HD_KEY, next ? '1' : '0'); } catch { /* noop */ }
+    onReconnect?.();
   };
 
   const toolBtn = (onClick: () => void, label: string, icon: React.ReactNode, opts?: { danger?: boolean; active?: boolean }) => (

@@ -186,6 +186,7 @@ export default function ServerSessionPage() {
             tunnelUrl={conn.tunnelUrl || ''}
             token={conn.token}
             serverName={server.name}
+            onReconnect={() => void doConnect()}
             onExit={() => {
               setConn(null);
               setLivePhase('init');
