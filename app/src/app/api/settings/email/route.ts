@@ -47,7 +47,18 @@ async function patchHandler(req: NextRequest) {
   if (typeof body.from === 'string') updates.SMTP_FROM = body.from.trim();
   if (typeof body.fromName === 'string') updates.SMTP_FROM_NAME = body.fromName.trim();
   // Only overwrite the password when a non-empty new value is provided.
-  if (typeof body.pass === 'string' && body.pass.length > 0) updates.SMTP_PASS = body.pass;
+  const providedPass = typeof body.pass === 'string' && body.pass.length > 0;
+  if (providedPass) updates.SMTP_PASS = body.pass;
+
+  // Security: changing the SMTP host to a DIFFERENT server without supplying a new
+  // password clears the stored one. Otherwise an admin could re-point SMTP_HOST at a
+  // server they control and trigger "send test", making Garely transmit the saved
+  // password to it (SMTP AUTH is cleartext under the peer's TLS). A legitimate mail-
+  // server change means new credentials anyway, so re-entry is expected.
+  if (updates.SMTP_HOST !== undefined && !providedPass) {
+    const cur = await prisma.systemConfig.findUnique({ where: { key: 'SMTP_HOST' }, select: { value: true } });
+    if ((cur?.value || '') !== updates.SMTP_HOST) updates.SMTP_PASS = '';
+  }
 
   for (const [key, value] of Object.entries(updates)) {
     await prisma.systemConfig.upsert({

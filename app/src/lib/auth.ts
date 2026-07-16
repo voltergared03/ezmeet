@@ -56,12 +56,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           email: { label: 'Email', type: 'email' },
           password: { label: 'Password', type: 'password' },
         },
-        async authorize(creds) {
+        async authorize(creds, req) {
           const email = String(creds?.email || '').trim().toLowerCase();
           const password = String(creds?.password || '');
           if (!email || !password) return null;
 
-          // Brute-force throttle (in-process; single-container deployment).
+          // Per-IP throttle (defense-in-depth on top of the per-email bucket below):
+          // caps password-spray from one source across many accounts. Generous limit
+          // + fail-open when the IP is unknown, so a proxy misconfig can never lock out
+          // legitimate users.
+          const xff = (req as Request | undefined)?.headers?.get('x-forwarded-for') || '';
+          const ip = xff.split(',')[0].trim();
+          if (ip && !(await rateLimit(`login-ip:${ip}`, 50, 5 * 60_000)).ok) return null;
+
+          // Per-email brute-force throttle.
           const key = `login:${email}`;
           if (!(await rateLimit(key, 10, 5 * 60_000)).ok) return null;
 
