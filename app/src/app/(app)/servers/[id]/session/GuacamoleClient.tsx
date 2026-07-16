@@ -1,19 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Power, Loader2 } from 'lucide-react';
+import { Power, Loader2, Maximize2 } from 'lucide-react';
 
 /**
- * RDP v2 (Apache Guacamole) client — MINIMAL validation build. Renders guacd's display
- * stream via guacamole-common-js (display + keyboard + mouse only). Clipboard, file
- * transfer, dynamic resize and the Mac ⌘-remap are deliberately NOT here yet — this
- * exists to validate motion/quality on a real target before investing in full parity.
- * The RDP password is inside the opaque `token`; it never reaches this component.
+ * RDP v2 (Apache Guacamole) client — validation build. Renders guacd's display via
+ * guacamole-common-js with HiDPI-correct sizing: it sends guacd the container's native
+ * pixel size (× devicePixelRatio) so the remote renders crisp, then scales the display
+ * back down to CSS size. Dynamic resize (guacd resize-method=display-update) re-fits on
+ * window/fullscreen changes. Display + keyboard + mouse only — clipboard/files/⌘-remap
+ * come later. The RDP password is inside the opaque `token`; it never reaches here.
  *
- * IMPORTANT: `hostRef` is left EMPTY from React's view (no JSX children) — the guac
- * display element is appended manually. Mixing manual DOM ops with React-rendered
- * children in the same node throws "removeChild: node is not a child" on reconcile, so
- * the loading overlay is a SEPARATE sibling, never a child of hostRef.
+ * hostRef holds ONLY the manually-appended guac element (NO JSX children) — mixing
+ * manual DOM with React children in one node throws removeChild on reconcile.
  */
 export default function GuacamoleClient({
   tunnelUrl,
@@ -26,7 +25,8 @@ export default function GuacamoleClient({
   serverName: string;
   onExit?: () => void;
 }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null); // fullscreen target + size source
+  const hostRef = useRef<HTMLDivElement | null>(null); // holds only the guac display element
   const clientRef = useRef<any>(null);
   const [status, setStatus] = useState('connecting');
 
@@ -34,55 +34,88 @@ export default function GuacamoleClient({
     let disposed = false;
     let client: any = null;
     let keyboard: any = null;
-    let onWinResize: (() => void) | null = null;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const cleanups: Array<() => void> = [];
 
     (async () => {
       const Guacamole = (await import('guacamole-common-js')).default as any;
       if (disposed || !hostRef.current) return;
 
-      const base = tunnelUrl.replace(/\/$/, '') + '/';
-      const tunnel = new Guacamole.WebSocketTunnel(base);
+      const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl.replace(/\/$/, '') + '/');
       client = new Guacamole.Client(tunnel);
       clientRef.current = client;
 
       const display = client.getDisplay();
       const el = display.getElement();
-      // hostRef holds ONLY this element (React never renders children into it).
       while (hostRef.current.firstChild) hostRef.current.removeChild(hostRef.current.firstChild);
       hostRef.current.appendChild(el);
 
+      const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+      const pushSize = () => {
+        const box = frameRef.current;
+        if (!box) return;
+        const d = dpr();
+        const w = Math.max(640, Math.round(box.clientWidth * d));
+        const h = Math.max(480, Math.round(box.clientHeight * d));
+        try { client.sendSize(w, h); } catch { /* noop */ }
+      };
+
       const STATES = ['idle', 'connecting', 'waiting', 'connected', 'disconnecting', 'disconnected'];
-      client.onstatechange = (s: number) => setStatus(STATES[s] ?? String(s));
+      client.onstatechange = (s: number) => {
+        const name = STATES[s] ?? String(s);
+        setStatus(name);
+        if (name === 'connected') pushSize(); // negotiate the real container resolution
+      };
       client.onerror = () => setStatus('error');
       tunnel.onerror = () => setStatus('tunnel-error');
 
-      // Scale the display to fit the container width (keeps the whole remote visible).
-      const fit = () => {
+      // Scale the (dpr-resolution) display down to CSS size → crisp HiDPI, correct fit.
+      display.onresize = () => {
+        const box = frameRef.current;
         const w = display.getWidth();
-        if (!w || !hostRef.current) return;
-        display.scale(Math.min(1, hostRef.current.clientWidth / w));
+        if (!box || !w) return;
+        display.scale(box.clientWidth / w);
       };
-      display.onresize = fit;
-      onWinResize = fit;
-      window.addEventListener('resize', onWinResize);
 
-      // Input.
+      // Mouse coords are in rendered (CSS) px; the remote wants remote px → divide by scale.
       const mouse = new Guacamole.Mouse(el);
-      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = (st: any) => client.sendMouseState(st);
+      const send = (state: any) => {
+        const sc = display.getScale() || 1;
+        state.x = Math.round(state.x / sc);
+        state.y = Math.round(state.y / sc);
+        client.sendMouseState(state);
+      };
+      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = send;
+
       keyboard = new Guacamole.Keyboard(document);
       keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, k);
       keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, k);
+
+      const onWinResize = () => { if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(pushSize, 300); };
+      const onFsChange = () => pushSize();
+      window.addEventListener('resize', onWinResize);
+      document.addEventListener('fullscreenchange', onFsChange);
+      cleanups.push(() => window.removeEventListener('resize', onWinResize));
+      cleanups.push(() => document.removeEventListener('fullscreenchange', onFsChange));
 
       client.connect('token=' + encodeURIComponent(token));
     })().catch(() => setStatus('error'));
 
     return () => {
       disposed = true;
-      if (onWinResize) window.removeEventListener('resize', onWinResize);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      cleanups.forEach((c) => c());
       try { keyboard?.reset(); } catch { /* noop */ }
       try { client?.disconnect(); } catch { /* noop */ }
     };
   }, [tunnelUrl, token]);
+
+  const goFullscreen = () => {
+    const box = frameRef.current;
+    if (!box) return;
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void box.requestFullscreen?.();
+  };
 
   const connected = status === 'connected';
   const dead = status === 'disconnected' || status === 'error' || status === 'tunnel-error';
@@ -95,12 +128,15 @@ export default function GuacamoleClient({
           {serverName} · <span style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', color: 'var(--muted)' }}>Guacamole (v2 beta) — {status}</span>
         </span>
         <span style={{ flex: 1 }} />
+        <button className="btn btn-ghost" style={{ padding: '5px 10px' }} onClick={goFullscreen} title="Fullscreen">
+          <Maximize2 size={15} style={{ marginRight: 6 }} /> Fullscreen
+        </button>
         <button className="btn btn-ghost" style={{ padding: '5px 10px' }} onClick={() => { try { clientRef.current?.disconnect(); } catch { /* noop */ } onExit?.(); }}>
           <Power size={15} style={{ marginRight: 6 }} /> Disconnect
         </button>
       </div>
-      {/* relative wrapper: hostRef (manual DOM) + the loader overlay are SIBLINGS */}
-      <div style={{ position: 'relative', minHeight: 'min(72vh, 720px)', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+      {/* frame: fullscreen target + size source. hostRef and the loader overlay are SIBLINGS. */}
+      <div ref={frameRef} style={{ position: 'relative', minHeight: 'min(74vh, 760px)', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000' }}>
         <div ref={hostRef} tabIndex={0} style={{ outline: 'none' }} />
         {!connected && !dead && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', pointerEvents: 'none' }}>
