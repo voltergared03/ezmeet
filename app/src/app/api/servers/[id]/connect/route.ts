@@ -45,12 +45,20 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
       data: { connectionId: conn.id, userId: r.session.user.id, orgId: r.orgId, status: 'active', clientIp, lastSeenAt: new Date() },
       select: { id: true },
     });
+    // Start guacd at the client's real viewport × devicePixelRatio so the first frame is
+    // crisp — without this it defaults to 1280×800 and relies on a post-connect display-update
+    // resize that doesn't reliably apply (looked "soft" until a manual fullscreen toggle).
+    const sp = req.nextUrl.searchParams;
+    const clampInt = (v: string | null, lo: number, hi: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? Math.min(hi, Math.max(lo, n)) : undefined; };
     const gtoken = mintGuacToken({
       hostname: conn.host,
       port: conn.port,
       username: conn.username,
       password: decryptServerSecret(conn.secretCipher),
       domain: conn.domain,
+      width: clampInt(sp.get('w'), 640, 5120),
+      height: clampInt(sp.get('h'), 480, 2880),
+      dpi: clampInt(sp.get('dpi'), 96, 240),
     });
     return NextResponse.json({ method: 'guac', tunnelUrl: guacTunnelUrl(), token: gtoken, sessionId: sess.id });
   }

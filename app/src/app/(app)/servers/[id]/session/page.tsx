@@ -88,7 +88,16 @@ export default function ServerSessionPage() {
     if (!id) return;
     setStage('connecting');
     try {
-      const res = await fetch(`/api/servers/${id}/connect${v2 ? '?v=2' : ''}`, { method: 'POST' });
+      // For v2, tell guacd our real viewport × devicePixelRatio so it starts the RDP session
+      // at the right (crisp) resolution instead of the 1280×800 default.
+      let url = `/api/servers/${id}/connect`;
+      if (v2) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = Math.round((window.innerWidth || 1280) * dpr);
+        const h = Math.round((window.innerHeight || 800) * dpr);
+        url += `?v=2&w=${w}&h=${h}`;
+      }
+      const res = await fetch(url, { method: 'POST' });
       if (res.status === 403 || res.status === 404) return setStage('denied');
       if (res.status === 503) return setStage('gatewayPending');
       if (!res.ok) return setStage('error');
