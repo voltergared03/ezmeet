@@ -77,15 +77,49 @@ export default function GuacamoleClient({
         display.scale(box.clientWidth / w);
       };
 
-      // Mouse coords are in rendered (CSS) px; the remote wants remote px → divide by scale.
-      const mouse = new Guacamole.Mouse(el);
-      const send = (state: any) => {
-        const sc = display.getScale() || 1;
-        state.x = Math.round(state.x / sc);
-        state.y = Math.round(state.y / sc);
-        client.sendMouseState(state);
+      // Mouse: compute coordinates ourselves from getBoundingClientRect (transform- AND
+      // fullscreen-safe) mapped to the remote pixel space. Guacamole.Mouse walks the
+      // offsetParent chain instead, which misplaces clicks under CSS scale / fullscreen
+      // (the reported "clicks land in the wrong / multiple places"). Hide the local
+      // cursor so only guacd's remote cursor shows (no double cursor).
+      el.style.cursor = 'none';
+      const btn = { left: false, middle: false, right: false, up: false, down: false };
+      const remoteXY = (clientX: number, clientY: number) => {
+        const rect = el.getBoundingClientRect();
+        if (!rect.width || !rect.height) return { x: 0, y: 0 };
+        return {
+          x: Math.round(((clientX - rect.left) / rect.width) * display.getWidth()),
+          y: Math.round(((clientY - rect.top) / rect.height) * display.getHeight()),
+        };
       };
-      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = send;
+      const sendAt = (clientX: number, clientY: number) => {
+        const { x, y } = remoteXY(clientX, clientY);
+        client.sendMouseState(new Guacamole.Mouse.State({ x, y, ...btn }));
+      };
+      const BTN: Record<number, 'left' | 'middle' | 'right'> = { 0: 'left', 1: 'middle', 2: 'right' };
+      const onMove = (e: MouseEvent) => sendAt(e.clientX, e.clientY);
+      const onDown = (e: MouseEvent) => { const b = BTN[e.button]; if (b) btn[b] = true; sendAt(e.clientX, e.clientY); };
+      const onUp = (e: MouseEvent) => { const b = BTN[e.button]; if (b) btn[b] = false; sendAt(e.clientX, e.clientY); };
+      const onCtx = (e: Event) => e.preventDefault();
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        const { x, y } = remoteXY(e.clientX, e.clientY);
+        const dir = e.deltaY < 0 ? 'up' : 'down';
+        client.sendMouseState(new Guacamole.Mouse.State({ x, y, ...btn, [dir]: true }));
+        client.sendMouseState(new Guacamole.Mouse.State({ x, y, ...btn, [dir]: false }));
+      };
+      el.addEventListener('mousemove', onMove);
+      el.addEventListener('mousedown', onDown);
+      el.addEventListener('mouseup', onUp);
+      el.addEventListener('contextmenu', onCtx);
+      el.addEventListener('wheel', onWheel, { passive: false });
+      cleanups.push(() => {
+        el.removeEventListener('mousemove', onMove);
+        el.removeEventListener('mousedown', onDown);
+        el.removeEventListener('mouseup', onUp);
+        el.removeEventListener('contextmenu', onCtx);
+        el.removeEventListener('wheel', onWheel);
+      });
 
       keyboard = new Guacamole.Keyboard(document);
       keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, k);
