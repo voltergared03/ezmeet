@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2, ShieldAlert, Cpu, MonitorPlay, Lock } from 'lucide-react';
@@ -42,14 +42,17 @@ export default function ServerSessionPage() {
   const t = useTranslations('servers');
   const params = useParams<{ id: string }>();
   const id = params?.id;
-  const search = useSearchParams();
   // Opt-in RDP v2 (Guacamole). Seeds from ?v=2 or a saved choice; the toggle persists it.
+  // Read the URL client-side (NOT useSearchParams — that needs a Suspense boundary in
+  // Next 15 and crashed the whole session page for every user, v1 included).
   const [v2, setV2] = useState(false);
   useEffect(() => {
     let saved = false;
+    let fromUrl = false;
     try { saved = localStorage.getItem('garely-rdp-v2') === '1'; } catch { /* noop */ }
-    setV2(search?.get('v') === '2' || saved);
-  }, [search]);
+    try { fromUrl = new URLSearchParams(window.location.search).get('v') === '2'; } catch { /* noop */ }
+    setV2(fromUrl || saved);
+  }, []);
   const toggleV2 = (on: boolean) => {
     setV2(on);
     try { localStorage.setItem('garely-rdp-v2', on ? '1' : '0'); } catch { /* noop */ }
