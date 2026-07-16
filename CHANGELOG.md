@@ -4,6 +4,21 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.23.0-beta.2] — 2026-07-17
+
+Follow-up fixes to the RDP v2 beta.
+
+### Fixed
+- **Two-way file transfer was silently broken.** `guacd` runs as a non-root user, but
+  the redirected-drive volume was created root-owned, so guacd couldn't create the
+  per-user folder ("Unable to create directory … Permission denied") and every
+  transfer failed. The drive volume is now world-writable (re-asserted on cron start),
+  so uploads/downloads work.
+- **Default resolution too soft on Retina.** v2 now opens at 1.5× the viewport —
+  sharper text at a comfortable UI size — instead of 1×. The pill's HD toggle drops to
+  1× for a larger UI. (guacd sets no Windows scale factor, so resolution is the only
+  lever; 1.5× is the crisp-vs-size sweet spot.)
+
 ## [1.23.0-beta.1] — 2026-07-17
 
 RDP v2 — a second, opt-in way to reach managed servers, built on Apache Guacamole
@@ -613,6 +628,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.23.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.2
 [1.23.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.1
 [1.10.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.10.0-beta.1
 [1.5.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.5.0-beta.1
