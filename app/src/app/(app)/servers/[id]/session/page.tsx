@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -63,6 +63,10 @@ export default function ServerSessionPage() {
   const [conn, setConn] = useState<ConnectInfo | null>(null);
   const [password, setPassword] = useState('');
   const [livePhase, setLivePhase] = useState<Phase>('init');
+  // HD (v2) is per-connection, default OFF — a fresh session starts at comfortable resolution.
+  // hdRef is what doConnect reads (avoids a stale closure); hd state drives the pill's button.
+  const hdRef = useRef(false);
+  const [hd, setHd] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -90,12 +94,11 @@ export default function ServerSessionPage() {
     try {
       // For v2, start guacd at our CSS viewport size (NOT ×dpr): guacd can't scale the remote
       // Windows UI (it sets no DesktopScaleFactor), so a HiDPI resolution renders everything
-      // tiny on Retina. CSS size gives normal-size UI. HD mode bumps it by 1.5× (sharper, UI
-      // ~67%) — kept in sync with the pill's HD toggle via the garely-guac-hd flag.
+      // tiny on Retina. CSS size gives normal-size UI. HD mode (opt-in via the pill) bumps it
+      // by 1.5× (sharper, UI ~67%); default OFF so a fresh connection starts comfortable.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
-        let scale = 1;
-        try { if (localStorage.getItem('garely-guac-hd') === '1') scale = 1.5; } catch { /* default scale */ }
+        const scale = hdRef.current ? 1.5 : 1;
         const w = Math.round((window.innerWidth || 1280) * scale);
         const h = Math.round((window.innerHeight || 800) * scale);
         url += `?v=2&w=${w}&h=${h}`;
@@ -186,7 +189,8 @@ export default function ServerSessionPage() {
             tunnelUrl={conn.tunnelUrl || ''}
             token={conn.token}
             serverName={server.name}
-            onReconnect={() => void doConnect()}
+            hd={hd}
+            onToggleHd={() => { hdRef.current = !hdRef.current; setHd(hdRef.current); void doConnect(); }}
             onExit={() => {
               setConn(null);
               setLivePhase('init');

@@ -22,10 +22,9 @@ const CTRL_KEYSYM = 0xffe3; // Control_L
 
 // HD mode renders the remote at viewport × HD_SCALE for sharper text. guacd can't scale the
 // Windows UI, so higher resolution = smaller UI — HD_SCALE stays a moderate 1.5 (UI ~67%),
-// deliberately below devicePixelRatio (×2 on Retina made the UI too tiny). Persisted in HD_KEY.
+// deliberately below devicePixelRatio (×2 on Retina made the UI too tiny). Owned by the session
+// page (default OFF per fresh connection); not persisted, so a new session starts comfortable.
 const HD_SCALE = 1.5;
-const HD_KEY = 'garely-guac-hd';
-const readHd = () => { try { return localStorage.getItem(HD_KEY) === '1'; } catch { return false; } };
 
 /**
  * RDP v2 (Apache Guacamole) client. Full-viewport takeover (native-client feel) with a
@@ -43,21 +42,22 @@ export default function GuacamoleClient({
   tunnelUrl,
   token,
   serverName,
+  hd = false,
+  onToggleHd,
   onExit,
-  onReconnect,
 }: {
   tunnelUrl: string;
   token: string;
   serverName: string;
+  hd?: boolean; // owned by the session page; a change remounts this component at the new resolution
+  onToggleHd?: () => void;
   onExit?: () => void;
-  onReconnect?: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const clientRef = useRef<any>(null);
   const [status, setStatus] = useState('connecting');
-  const [hd, setHd] = useState<boolean>(readHd);
-  const renderScaleRef = useRef(hd ? HD_SCALE : 1); // read by pushSize; toggled live via HD button
+  const renderScaleRef = useRef(hd ? HD_SCALE : 1); // read by pushSize; fixed for this mount (hd change → remount)
 
   // ── two-way file transfer (RDP drive redirection). Functions that need the guac client +
   // the dynamically-imported Guacamole namespace are built inside the effect and exposed here. ──
@@ -482,17 +482,6 @@ export default function GuacamoleClient({
     else void box.requestFullscreen?.();
   };
   const exit = () => { try { clientRef.current?.disconnect(); } catch { /* noop */ } onExit?.(); };
-  // Toggle HD by RECONNECTING at the new resolution (via the token), not a live sendSize —
-  // guacd's display-update resize is unreliable, especially when shrinking, and left the
-  // remote at a stale small resolution that fit() then stretched. Persist first so the
-  // reconnect's doConnect reads the new scale.
-  const toggleHd = () => {
-    const next = !hd;
-    setHd(next);
-    renderScaleRef.current = next ? HD_SCALE : 1;
-    try { localStorage.setItem(HD_KEY, next ? '1' : '0'); } catch { /* noop */ }
-    onReconnect?.();
-  };
 
   const doUpload = (files: File[]) => {
     if (!files.length) return;
@@ -629,7 +618,7 @@ export default function GuacamoleClient({
         </span>
         {toolBtn(() => fileInputRef.current?.click(), 'Надіслати файли на диск «Garely»', <Upload size={15} />)}
         {toolBtn(toggleFiles, 'Диск «Garely» — завантажити файли з сервера', <HardDrive size={15} />, { active: filesOpen })}
-        {toolBtn(toggleHd, hd ? 'HD увімкнено — чіткіше, дрібніший UI' : 'HD — чіткіша картинка', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
+        {toolBtn(() => onToggleHd?.(), hd ? 'HD увімкнено — чіткіше, дрібніший UI' : 'HD — чіткіша картинка', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
         {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}
       </div>
