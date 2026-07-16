@@ -43,7 +43,17 @@ export default function ServerSessionPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const search = useSearchParams();
-  const useV2 = search?.get('v') === '2'; // opt-in RDP v2 (Guacamole) via ?v=2
+  // Opt-in RDP v2 (Guacamole). Seeds from ?v=2 or a saved choice; the toggle persists it.
+  const [v2, setV2] = useState(false);
+  useEffect(() => {
+    let saved = false;
+    try { saved = localStorage.getItem('garely-rdp-v2') === '1'; } catch { /* noop */ }
+    setV2(search?.get('v') === '2' || saved);
+  }, [search]);
+  const toggleV2 = (on: boolean) => {
+    setV2(on);
+    try { localStorage.setItem('garely-rdp-v2', on ? '1' : '0'); } catch { /* noop */ }
+  };
 
   const [server, setServer] = useState<ServerView | null>(null);
   const [stage, setStage] = useState<Stage>('loading');
@@ -75,7 +85,7 @@ export default function ServerSessionPage() {
     if (!id) return;
     setStage('connecting');
     try {
-      const res = await fetch(`/api/servers/${id}/connect${useV2 ? '?v=2' : ''}`, { method: 'POST' });
+      const res = await fetch(`/api/servers/${id}/connect${v2 ? '?v=2' : ''}`, { method: 'POST' });
       if (res.status === 403 || res.status === 404) return setStage('denied');
       if (res.status === 503) return setStage('gatewayPending');
       if (!res.ok) return setStage('error');
@@ -84,7 +94,7 @@ export default function ServerSessionPage() {
     } catch {
       setStage('error');
     }
-  }, [id, useV2]);
+  }, [id, v2]);
 
   // Connect entry: re-check live occupancy (so the warning is accurate at click time),
   // warn if someone else is already connected (RDP bumps the prior session for the same
@@ -253,9 +263,25 @@ export default function ServerSessionPage() {
                       </div>
                     );
                   })()}
+                  {/* RDP method — v1 (standard) vs v2 (Guacamole, beta) */}
+                  <div style={{ display: 'inline-flex', marginTop: 18, padding: 3, gap: 3, borderRadius: 999, border: '1px solid var(--border)', background: 'rgba(255,255,255,.03)' }}>
+                    {[{ on: false, label: 'Стандарт' }, { on: true, label: 'V2 (beta)' }].map((o) => (
+                      <button
+                        key={String(o.on)}
+                        onClick={() => toggleV2(o.on)}
+                        style={{
+                          padding: '5px 15px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+                          background: v2 === o.on ? 'var(--accent)' : 'transparent',
+                          color: v2 === o.on ? '#fff' : 'var(--muted)',
+                        }}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
                   <div>
-                    <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={() => void onConnectClick()}>
-                      <MonitorPlay size={16} style={{ marginRight: 7 }} /> {t('connect')}
+                    <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => void onConnectClick()}>
+                      <MonitorPlay size={16} style={{ marginRight: 7 }} /> {t('connect')}{v2 ? ' · V2' : ''}
                     </button>
                   </div>
                 </div>
