@@ -8,6 +8,13 @@ import { Power, Loader2, Maximize2, GripVertical } from 'lucide-react';
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
 const CTRL_KEYSYM = 0xffe3; // Control_L
 
+// HD mode renders the remote at viewport × HD_SCALE for sharper text. guacd can't scale the
+// Windows UI, so higher resolution = smaller UI — HD_SCALE stays a moderate 1.5 (UI ~67%),
+// deliberately below devicePixelRatio (×2 on Retina made the UI too tiny). Persisted in HD_KEY.
+const HD_SCALE = 1.5;
+const HD_KEY = 'garely-guac-hd';
+const readHd = () => { try { return localStorage.getItem(HD_KEY) === '1'; } catch { return false; } };
+
 /**
  * RDP v2 (Apache Guacamole) client. Full-viewport takeover (native-client feel) with a
  * draggable floating pill for controls, mirroring v1's RdpClient. guacd does the native
@@ -35,6 +42,8 @@ export default function GuacamoleClient({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const clientRef = useRef<any>(null);
   const [status, setStatus] = useState('connecting');
+  const [hd, setHd] = useState<boolean>(readHd);
+  const renderScaleRef = useRef(hd ? HD_SCALE : 1); // read by pushSize; toggled live via HD button
 
   // ── guac connection ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -58,12 +67,14 @@ export default function GuacamoleClient({
       hostRef.current.appendChild(el);
       el.style.transformOrigin = '0 0'; // scale from top-left so it aligns with the sized host
 
-      // Ask guacd to render at the frame's CSS size (NO ×dpr): guacd can't scale the remote
-      // Windows UI, so a HiDPI resolution would make everything tiny. Debounced by callers.
+      // Ask guacd to render at the frame's CSS size × the current render scale (1 normally,
+      // HD_SCALE in HD mode). No ×dpr: guacd can't scale the Windows UI, so full HiDPI would
+      // make everything tiny. Debounced by callers.
       const pushSize = () => {
         const box = frameRef.current;
         if (!box) return;
-        try { client.sendSize(Math.max(640, Math.round(box.clientWidth)), Math.max(480, Math.round(box.clientHeight))); } catch { /* noop */ }
+        const s = renderScaleRef.current;
+        try { client.sendSize(Math.max(640, Math.round(box.clientWidth * s)), Math.max(480, Math.round(box.clientHeight * s))); } catch { /* noop */ }
       };
       // Fit the rendered display into the frame. display.scale() is a CSS transform, so
       // the element's LAYOUT box stays at full remote resolution — the host must be sized
@@ -360,11 +371,26 @@ export default function GuacamoleClient({
     else void box.requestFullscreen?.();
   };
   const exit = () => { try { clientRef.current?.disconnect(); } catch { /* noop */ } onExit?.(); };
+  // Toggle HD live: change the render scale and renegotiate the size via display-update — no
+  // reconnect. Persisted so the next connect's initial resolution matches.
+  const toggleHd = () => {
+    setHd((prev) => {
+      const next = !prev;
+      renderScaleRef.current = next ? HD_SCALE : 1;
+      try { localStorage.setItem(HD_KEY, next ? '1' : '0'); } catch { /* noop */ }
+      const box = frameRef.current, client = clientRef.current;
+      if (box && client) {
+        const s = renderScaleRef.current;
+        try { client.sendSize(Math.max(640, Math.round(box.clientWidth * s)), Math.max(480, Math.round(box.clientHeight * s))); } catch { /* noop */ }
+      }
+      return next;
+    });
+  };
 
-  const toolBtn = (onClick: () => void, label: string, icon: React.ReactNode, danger?: boolean) => (
+  const toolBtn = (onClick: () => void, label: string, icon: React.ReactNode, opts?: { danger?: boolean; active?: boolean }) => (
     <button
       type="button" onClick={onClick} title={label} aria-label={label} className="gc-tool"
-      style={{ color: danger ? '#f87171' : 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', padding: 6, borderRadius: 8 }}
+      style={{ color: opts?.danger ? '#f87171' : opts?.active ? 'var(--accent)' : 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', padding: 6, borderRadius: 8 }}
     >
       {icon}
     </button>
@@ -420,8 +446,9 @@ export default function GuacamoleClient({
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: connected ? '#10b981' : dead ? '#f87171' : 'var(--accent)' }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{serverName}</span>
         </span>
+        {toolBtn(toggleHd, hd ? 'HD увімкнено — чіткіше, дрібніший UI' : 'HD — чіткіша картинка', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
-        {toolBtn(exit, 'Disconnect', <Power size={15} />, true)}
+        {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}
       </div>
     </div>
   );

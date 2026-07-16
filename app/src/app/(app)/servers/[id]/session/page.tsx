@@ -90,11 +90,14 @@ export default function ServerSessionPage() {
     try {
       // For v2, start guacd at our CSS viewport size (NOT ×dpr): guacd can't scale the remote
       // Windows UI (it sets no DesktopScaleFactor), so a HiDPI resolution renders everything
-      // tiny on Retina. CSS size gives normal-size UI; the trade-off is mild softness on Retina.
+      // tiny on Retina. CSS size gives normal-size UI. HD mode bumps it by 1.5× (sharper, UI
+      // ~67%) — kept in sync with the pill's HD toggle via the garely-guac-hd flag.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
-        const w = Math.round(window.innerWidth || 1280);
-        const h = Math.round(window.innerHeight || 800);
+        let scale = 1;
+        try { if (localStorage.getItem('garely-guac-hd') === '1') scale = 1.5; } catch { /* default scale */ }
+        const w = Math.round((window.innerWidth || 1280) * scale);
+        const h = Math.round((window.innerHeight || 800) * scale);
         url += `?v=2&w=${w}&h=${h}`;
       }
       const res = await fetch(url, { method: 'POST' });
