@@ -63,10 +63,12 @@ export default function ServerSessionPage() {
   const [conn, setConn] = useState<ConnectInfo | null>(null);
   const [password, setPassword] = useState('');
   const [livePhase, setLivePhase] = useState<Phase>('init');
-  // HD (v2) is per-connection, default OFF — a fresh session starts at comfortable resolution.
+  // HD (v2) is per-connection, default ON (viewport × 1.5) — the sharper level users preferred;
+  // guacd can't scale the Windows UI, so 1.5× is the sweet spot (crisper than 1×, UI not tiny
+  // like ×dpr). Toggle in the pill drops to 1× for a bigger UI. Not persisted → stable default.
   // hdRef is what doConnect reads (avoids a stale closure); hd state drives the pill's button.
-  const hdRef = useRef(false);
-  const [hd, setHd] = useState(false);
+  const hdRef = useRef(true);
+  const [hd, setHd] = useState(true);
 
   useEffect(() => {
     if (!id) return;

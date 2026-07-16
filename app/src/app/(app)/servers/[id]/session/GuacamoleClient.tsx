@@ -618,7 +618,7 @@ export default function GuacamoleClient({
         </span>
         {toolBtn(() => fileInputRef.current?.click(), 'Надіслати файли на диск «Garely»', <Upload size={15} />)}
         {toolBtn(toggleFiles, 'Диск «Garely» — завантажити файли з сервера', <HardDrive size={15} />, { active: filesOpen })}
-        {toolBtn(() => onToggleHd?.(), hd ? 'HD увімкнено — чіткіше, дрібніший UI' : 'HD — чіткіша картинка', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
+        {toolBtn(() => onToggleHd?.(), hd ? 'HD (чіткіше) — натисни для більшого UI' : 'Більший UI — натисни для HD (чіткіше)', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
         {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}
       </div>
