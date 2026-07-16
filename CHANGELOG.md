@@ -4,6 +4,17 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.23.0-beta.3] — 2026-07-17
+
+### Fixed
+- **RDP v2 resolution.** Normal mode renders at 1.5× the viewport (the comfortable
+  default); the pill's HD toggle now bumps to 2× for maximum device-pixel sharpness
+  (smaller UI) on demand, replacing the old toggle-off state that dropped to 1× and
+  looked both too large and soft. guacd sets no Windows scale factor, so resolution is
+  the only lever — 1.5× is the crisp-vs-size sweet spot on HiDPI displays. (For fully
+  crisp text at a normal UI size on a Retina display, set the Windows target's display
+  scale to 200% and switch on HD.)
+
 ## [1.23.0-beta.2] — 2026-07-17
 
 Follow-up fixes to the RDP v2 beta.
@@ -628,6 +639,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.23.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.3
 [1.23.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.2
 [1.23.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.1
 [1.10.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.10.0-beta.1
