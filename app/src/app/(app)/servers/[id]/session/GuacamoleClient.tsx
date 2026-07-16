@@ -9,6 +9,11 @@ import { Power, Loader2 } from 'lucide-react';
  * transfer, dynamic resize and the Mac ⌘-remap are deliberately NOT here yet — this
  * exists to validate motion/quality on a real target before investing in full parity.
  * The RDP password is inside the opaque `token`; it never reaches this component.
+ *
+ * IMPORTANT: `hostRef` is left EMPTY from React's view (no JSX children) — the guac
+ * display element is appended manually. Mixing manual DOM ops with React-rendered
+ * children in the same node throws "removeChild: node is not a child" on reconcile, so
+ * the loading overlay is a SEPARATE sibling, never a child of hostRef.
  */
 export default function GuacamoleClient({
   tunnelUrl,
@@ -42,7 +47,8 @@ export default function GuacamoleClient({
 
       const display = client.getDisplay();
       const el = display.getElement();
-      hostRef.current.innerHTML = '';
+      // hostRef holds ONLY this element (React never renders children into it).
+      while (hostRef.current.firstChild) hostRef.current.removeChild(hostRef.current.firstChild);
       hostRef.current.appendChild(el);
 
       const STATES = ['idle', 'connecting', 'waiting', 'connected', 'disconnecting', 'disconnected'];
@@ -54,8 +60,7 @@ export default function GuacamoleClient({
       const fit = () => {
         const w = display.getWidth();
         if (!w || !hostRef.current) return;
-        const factor = Math.min(1, hostRef.current.clientWidth / w);
-        display.scale(factor);
+        display.scale(Math.min(1, hostRef.current.clientWidth / w));
       };
       display.onresize = fit;
       onWinResize = fit;
@@ -63,8 +68,7 @@ export default function GuacamoleClient({
 
       // Input.
       const mouse = new Guacamole.Mouse(el);
-      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = (st: any) =>
-        client.sendMouseState(st);
+      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = (st: any) => client.sendMouseState(st);
       keyboard = new Guacamole.Keyboard(document);
       keyboard.onkeydown = (k: number) => client.sendKeyEvent(1, k);
       keyboard.onkeyup = (k: number) => client.sendKeyEvent(0, k);
@@ -95,9 +99,11 @@ export default function GuacamoleClient({
           <Power size={15} style={{ marginRight: 6 }} /> Disconnect
         </button>
       </div>
-      <div ref={hostRef} tabIndex={0} style={{ minHeight: 'min(72vh, 720px)', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', outline: 'none' }}>
+      {/* relative wrapper: hostRef (manual DOM) + the loader overlay are SIBLINGS */}
+      <div style={{ position: 'relative', minHeight: 'min(72vh, 720px)', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+        <div ref={hostRef} tabIndex={0} style={{ outline: 'none' }} />
         {!connected && !dead && (
-          <div style={{ color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 10, alignSelf: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', pointerEvents: 'none' }}>
             <Loader2 size={18} className="spin" /> connecting…
           </div>
         )}
