@@ -4,6 +4,28 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.24.0-beta.3] — 2026-07-17
+
+The AI can now write meeting content in Russian, chosen by an admin — independent of the
+interface language.
+
+### Added
+- **AI report language (admin toggle).** Settings → Workspace has a new "AI report language"
+  picker (Ukrainian / Russian / English). It sets the language the AI writes in — meeting
+  reports, task titles, decisions, summaries, weekly rollups, the meeting chat, and the live
+  in-call notes — separately from the interface language. A workspace whose interface is
+  Ukrainian can now generate Russian meeting content. Left unset, the AI keeps following the
+  interface language, so nothing changes for existing workspaces.
+- **Russian action-item detection.** The live agent now recognizes Russian task cues
+  ("нужно", "надо", "сделать", "срок", "дедлайн", …). Previously a Russian action item was
+  filtered out before the AI ever looked at it, so live task suggestions were missed on
+  Russian-language calls.
+
+### Changed
+- The AI output language is resolved in one place across the whole app and the live agent,
+  replacing a scattered Ukrainian-or-English choice that silently produced English for any
+  other language. The interface language set (Ukrainian / English) is unchanged.
+
 ## [1.24.0-beta.2] — 2026-07-17
 
 ClickUp routing stops guessing: you now map each department to a ClickUp list by hand, pin
@@ -735,6 +757,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.24.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.3
 [1.24.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.2
 [1.24.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.1
 [1.23.0-beta.4]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.4
