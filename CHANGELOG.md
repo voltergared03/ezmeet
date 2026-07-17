@@ -4,6 +4,47 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.24.0-beta.2] — 2026-07-17
+
+ClickUp routing stops guessing: you now map each department to a ClickUp list by hand, pin
+a person's tasks to their own list, and give the transcription a glossary so it stops
+mangling your product names.
+
+### Added
+- **Manual department → ClickUp list mapping.** Each department's destination list is now
+  chosen by an admin from a live picker in Settings → Departments, stored on the department
+  itself. Routing no longer matches your department names against ClickUp Space names —
+  which broke whenever a name drifted, silently picked whichever list a Space happened to
+  order first, and forced one customer's naming quirk to be hardcoded in the product. A
+  department with no list falls back to the list you pick as the fallback (Settings →
+  Integrations → ClickUp); with no fallback either, its tasks stay in Garely. Unmapped
+  departments show a warning chip so the gaps are visible.
+- **Per-user ClickUp list (C-level routing).** In Settings → Users you can pin one person's
+  tasks to a single ClickUp list, and their tasks go there from *any* call regardless of the
+  task's department. It out-ranks department routing and the automatic personal list, and
+  works whether or not per-assignee routing is on.
+- **Transcription glossary.** Settings → Workspace takes a list of terms the speech-to-text
+  keeps getting wrong — product names, tools, internal jargon. They boost Deepgram
+  recognition (measured on real calls: a product name spoken inside another language was
+  transcribed at 0.99 confidence as a different, wrong word, and the glossary recovers it)
+  and correct the spelling of those exact terms in the AI report, including for meetings
+  already recorded.
+
+### Fixed
+- **Garbled task names.** A task titled from a misheard product name (the transcript said
+  one thing, the recognizer wrote another) is now corrected via the glossary rather than
+  copied verbatim into ClickUp. This was a speech-to-text error, not the AI inventing names.
+- **The re-transcription path ignored your Deepgram model setting** and was pinned to one
+  model, so a re-transcribed speaker could come back sounding different from the rest of the
+  call. It now uses the configured model, with the matching term-boost syntax for it.
+
+### Changed
+- The department→list link changed meaning: the field that used to cache an auto-guessed
+  list is now the admin's explicit choice and is never overwritten automatically. Existing
+  installs are seeded once from the old behavior, then edited in the picker. Already-pushed
+  ClickUp tasks are not relocated (ClickUp can't move a task between lists) — the new mapping
+  applies to new tasks.
+
 ## [1.24.0-beta.1] — 2026-07-17
 
 Meeting tasks stop duplicating and landing on the wrong people, and RDP v2 can finally
@@ -694,6 +735,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.24.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.2
 [1.24.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.1
 [1.23.0-beta.4]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.4
 [1.23.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.3
