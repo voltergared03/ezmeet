@@ -119,10 +119,10 @@ export default function GuacamoleClient({
         const box = frameRef.current, host = hostRef.current;
         const w = display.getWidth(), h = display.getHeight();
         if (!box || !host || !w || !h) return;
-        const scale = Math.min(box.clientWidth / w, box.clientHeight / h);
-        display.scale(scale);
-        host.style.width = Math.floor(w * scale) + 'px';
-        host.style.height = Math.floor(h * scale) + 'px';
+        const fitScale = Math.min(box.clientWidth / w, box.clientHeight / h);
+        display.scale(fitScale);
+        host.style.width = Math.floor(w * fitScale) + 'px';
+        host.style.height = Math.floor(h * fitScale) + 'px';
       };
 
       // Re-negotiate size a few times over the first ~2.5s after connect. guacd's

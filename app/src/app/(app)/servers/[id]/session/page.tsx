@@ -67,10 +67,14 @@ export default function ServerSessionPage() {
   // sharpness and UI size. Two modes only, no picker: normal 1× and HD 1.25× (the levels that
   // read best in practice). Per-connection, default normal, not persisted — hdRef is what
   // doConnect reads (avoids a stale closure); hd state drives the pill's button.
-  const SCALE_NORMAL = 1;
-  const SCALE_HD = 1.25;
+  const SCALE_NORMAL = 1.25;
+  const SCALE_HD = 1.5;
   const hdRef = useRef(false);
   const [hd, setHd] = useState(false);
+  // Guards against racing reconnects: rapid scale/HD changes fire several /connect requests, and
+  // whichever RESPONSE lands last used to win — so the session could end up at an older scale
+  // while the UI showed the newest one (this is what made the on-screen scale label lie).
+  const connectSeq = useRef(0);
 
   useEffect(() => {
     if (!id) return;
@@ -94,6 +98,7 @@ export default function ServerSessionPage() {
 
   const doConnect = useCallback(async () => {
     if (!id) return;
+    const seq = ++connectSeq.current; // only the newest connect may apply its result
     setStage('connecting');
     try {
       // For v2, start guacd at viewport × the chosen scale. guacd can't scale the remote Windows
@@ -106,13 +111,16 @@ export default function ServerSessionPage() {
         url += `?v=2&w=${w}&h=${h}`;
       }
       const res = await fetch(url, { method: 'POST' });
+      if (seq !== connectSeq.current) return; // superseded by a newer connect — drop this response
       if (res.status === 403 || res.status === 404) return setStage('denied');
       if (res.status === 503) return setStage('gatewayPending');
       if (!res.ok) return setStage('error');
-      setConn(await res.json());
+      const info = await res.json();
+      if (seq !== connectSeq.current) return;
+      setConn(info);
       setStage('live');
     } catch {
-      setStage('error');
+      if (seq === connectSeq.current) setStage('error');
     }
   }, [id, v2]);
 
