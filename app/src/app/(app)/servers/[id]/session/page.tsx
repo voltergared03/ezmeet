@@ -65,8 +65,9 @@ export default function ServerSessionPage() {
   const [livePhase, setLivePhase] = useState<Phase>('init');
   // v2 render scale (viewport × scale). guacd can't scale the Windows UI, so scale sets BOTH
   // sharpness and UI size. Two modes only, no picker: normal 1× and HD 1.25× (the levels that
-  // read best in practice). Per-connection, default normal, not persisted — hdRef is what
-  // doConnect reads (avoids a stale closure); hd state drives the pill's button.
+  // read best in practice). HD is STICKY (persisted below) and defaults ON, so a user lands in
+  // the crisp device-pixel render without toggling each session — hdRef is what doConnect reads
+  // (avoids a stale closure); hd state drives the pill's button.
   // Normal is a comfort choice (1× was too large). HD must equal devicePixelRatio: a render is
   // pixel-exact only when its width == frame × dpr — anything less gets upscaled by the browser
   // and looks soft no matter how high it is. On a dpr-2 Retina that means exactly 2×.
@@ -82,6 +83,18 @@ export default function ServerSessionPage() {
     hdScaleRef.current = v;
     setHdScale(v);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Seed HD from the saved choice (default ON). Client-only + before the user clicks Connect
+  // (connect is user-triggered, never on mount), so doConnect reads the right hdRef. Read here
+  // rather than in useState/useRef initializers to avoid touching localStorage during SSR.
+  useEffect(() => {
+    let on = true; // never chosen → HD on by default
+    try {
+      const v = localStorage.getItem('garely-guac-hd');
+      if (v !== null) on = v === '1';
+    } catch { /* noop */ }
+    hdRef.current = on;
+    setHd(on);
   }, []);
   // Guards against racing reconnects: rapid scale/HD changes fire several /connect requests, and
   // whichever RESPONSE lands last used to win — so the session could end up at an older scale
@@ -145,6 +158,7 @@ export default function ServerSessionPage() {
   const toggleHd = useCallback(() => {
     hdRef.current = !hdRef.current;
     setHd(hdRef.current);
+    try { localStorage.setItem('garely-guac-hd', hdRef.current ? '1' : '0'); } catch { /* noop */ }
     void doConnect();
   }, [doConnect]);
 
