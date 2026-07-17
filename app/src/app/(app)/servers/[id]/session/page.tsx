@@ -64,16 +64,29 @@ export default function ServerSessionPage() {
   const [password, setPassword] = useState('');
   const [livePhase, setLivePhase] = useState<Phase>('init');
   // v2 render scale (viewport × scale). guacd can't scale the Windows UI, so scale sets BOTH
-  // sharpness and UI size: lower = bigger UI/softer, higher = crisper/smaller. Adjusted via the
-  // pill's −/+ stepper and persisted (garely-guac-scale). scaleRef is what doConnect reads
-  // (avoids a stale closure); scale state drives the pill readout. Default 1.5.
-  const scaleRef = useRef(1.5);
-  const [scale, setScale] = useState(1.5);
+  // sharpness and UI size: lower = bigger UI/softer, higher = crisper/smaller. The pill offers
+  // an HD preset toggle plus a −/+ stepper; the chosen scale persists (garely-guac-scale).
+  // Presets are per-platform (Macs run Retina, so they want different values than a 1× display).
+  // scaleRef/presetsRef are what the handlers read (no stale closure); state drives the pill.
+  const MAC_PRESETS = { normal: 1.75, hd: 1.6 };
+  const OTHER_PRESETS = { normal: 1.5, hd: 2 };
+  const scaleRef = useRef(OTHER_PRESETS.normal);
+  const presetsRef = useRef(OTHER_PRESETS);
+  const [scale, setScale] = useState(OTHER_PRESETS.normal);
+  const [presets, setPresets] = useState(OTHER_PRESETS);
   useEffect(() => {
+    const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+    const p = isMac ? MAC_PRESETS : OTHER_PRESETS;
+    presetsRef.current = p;
+    setPresets(p);
+    let s = p.normal;
     try {
       const v = parseFloat(localStorage.getItem('garely-guac-scale') || '');
-      if (v >= 1 && v <= 2.5) { const s = Math.round(v / 0.25) * 0.25; scaleRef.current = s; setScale(s); }
-    } catch { /* keep default 1.5 */ }
+      if (v >= 1 && v <= 2.5) s = v;
+    } catch { /* keep the platform default */ }
+    scaleRef.current = s;
+    setScale(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -100,10 +113,8 @@ export default function ServerSessionPage() {
     if (!id) return;
     setStage('connecting');
     try {
-      // For v2, start guacd at our CSS viewport size (NOT ×dpr): guacd can't scale the remote
-      // Windows UI (it sets no DesktopScaleFactor), so a HiDPI resolution renders everything
-      // tiny on Retina. CSS size gives normal-size UI. HD mode (opt-in via the pill) bumps it
-      // by 1.5× (sharper, UI ~67%); default OFF so a fresh connection starts comfortable.
+      // For v2, start guacd at viewport × the chosen scale. guacd can't scale the remote Windows
+      // UI (it sets no DesktopScaleFactor), so this single number sets both sharpness and UI size.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
         const s = scaleRef.current;
@@ -121,6 +132,17 @@ export default function ServerSessionPage() {
       setStage('error');
     }
   }, [id, v2]);
+
+  // Apply a new render scale: persist it, then reconnect so guacd starts at the new resolution
+  // (guacd's live display-update resize is unreliable, especially when shrinking).
+  const applyScale = useCallback((next: number) => {
+    const v = Math.min(2.5, Math.max(1, Math.round(next * 100) / 100));
+    if (v === scaleRef.current) return;
+    scaleRef.current = v;
+    setScale(v);
+    try { localStorage.setItem('garely-guac-scale', String(v)); } catch { /* noop */ }
+    void doConnect();
+  }, [doConnect]);
 
   // Connect entry: re-check live occupancy (so the warning is accurate at click time),
   // warn if someone else is already connected (RDP bumps the prior session for the same
@@ -198,14 +220,9 @@ export default function ServerSessionPage() {
             token={conn.token}
             serverName={server.name}
             scale={scale}
-            onScaleChange={(delta) => {
-              const next = Math.min(2.5, Math.max(1, Math.round((scaleRef.current + delta) / 0.25) * 0.25));
-              if (next === scaleRef.current) return;
-              scaleRef.current = next;
-              setScale(next);
-              try { localStorage.setItem('garely-guac-scale', String(next)); } catch { /* noop */ }
-              void doConnect();
-            }}
+            hd={Math.abs(scale - presets.hd) < 0.001}
+            onScaleChange={(delta) => applyScale(scaleRef.current + delta)}
+            onToggleHd={() => applyScale(Math.abs(scaleRef.current - presetsRef.current.hd) < 0.001 ? presetsRef.current.normal : presetsRef.current.hd)}
             onExit={() => {
               setConn(null);
               setLivePhase('init');

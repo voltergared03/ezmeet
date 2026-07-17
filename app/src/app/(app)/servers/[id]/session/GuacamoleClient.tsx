@@ -42,14 +42,18 @@ export default function GuacamoleClient({
   token,
   serverName,
   scale = 1.5,
+  hd = false,
   onScaleChange,
+  onToggleHd,
   onExit,
 }: {
   tunnelUrl: string;
   token: string;
   serverName: string;
   scale?: number; // render multiplier, owned by the session page; a change remounts at the new resolution
+  hd?: boolean; // true when scale sits on the HD preset (the button's active state)
   onScaleChange?: (delta: number) => void;
+  onToggleHd?: () => void;
   onExit?: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -622,6 +626,7 @@ export default function GuacamoleClient({
           <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', minWidth: 34, textAlign: 'center', fontVariantNumeric: 'tabular-nums', userSelect: 'none' }} title="Масштаб зображення">{scale}×</span>
           {toolBtn(() => onScaleChange?.(0.25), 'Чіткіше (більша роздільність)', <Plus size={14} />)}
         </span>
+        {toolBtn(() => onToggleHd?.(), hd ? 'HD увімкнено — натисни для звичайного масштабу' : 'HD — переключити на HD-масштаб', <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>HD</span>, { active: hd })}
         {toolBtn(goFullscreen, 'Fullscreen', <Maximize2 size={15} />)}
         {toolBtn(exit, 'Disconnect', <Power size={15} />, { danger: true })}
       </div>
