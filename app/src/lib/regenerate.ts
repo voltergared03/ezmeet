@@ -173,13 +173,12 @@ async function generateReportInner(
   });
   const deptIdByName = new Map<string, string>();
   for (const d of departments) deptIdByName.set(d.name.trim().toLowerCase(), d.id);
-  // userId → first department id (for fallback routing when the model doesn't
-  // name a department) and → department names (to hint the model in the prompt).
-  const userFirstDeptId = new Map<string, string>();
+  // userId → department names, to hint the model in the prompt. (There is deliberately no
+  // userId → department map for routing: inheriting a task's department from its assignee
+  // is what mis-routed all-hands tasks — see resolveDept.)
   const userDeptNames = new Map<string, string[]>();
   for (const d of departments) {
     for (const m of d.members) {
-      if (!userFirstDeptId.has(m.userId)) userFirstDeptId.set(m.userId, d.id);
       const arr = userDeptNames.get(m.userId) || [];
       arr.push(d.name);
       userDeptNames.set(m.userId, arr);
@@ -249,15 +248,42 @@ async function generateReportInner(
       .filter((g) => g && !regNameSet.has(g.toLowerCase()))
       .map((g) => ({ id: null, name: g, preferences: null })),
   ];
+  /**
+   * Resolve a name the AI emitted to one of the attendees.
+   *
+   * Deliberately conservative. The previous unanchored substring test
+   * (`an.includes(n) || n.includes(an)`) let a short name swallow an unrelated longer one
+   * — "Al" matched "Natalia", "Ann" matched "Anna" — and first-match-wins over an
+   * unordered list meant the winner could change between runs on identical input. That is
+   * how work got attached to the wrong people and how distinct assignees collapsed into one.
+   *
+   * Now: exact full-name first, then whole-WORD containment (so "Anna" still resolves to
+   * "Anna Kovalenko", but "Ann" never does). Anything ambiguous — two attendees sharing a
+   * first name — resolves to NOBODY: an unassigned task is visible and recoverable, a task
+   * on the wrong person is neither. Being order-independent also makes it deterministic.
+   */
+  const nameTokens = (s: string): string[] =>
+    (s || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
   const matchParticipant = (name: any): Attendee | null => {
     if (!name || typeof name !== 'string') return null;
-    const n = name.trim().toLowerCase();
-    if (!n) return null;
-    for (const a of attendees) {
-      const an = (a.name || '').toLowerCase();
-      if (an && (an.includes(n) || n.includes(an))) return a;
-    }
-    return null;
+    const want = nameTokens(name);
+    if (!want.length) return null;
+
+    // 1) Exact full name (normalized). Two attendees with the same full name → unresolvable.
+    const wantKey = want.join(' ');
+    const exact = attendees.filter((a) => nameTokens(a.name).join(' ') === wantKey);
+    if (exact.length) return exact.length === 1 ? exact[0] : null;
+
+    // 2) Whole-word containment in either direction ("Anna" ↔ "Anna Kovalenko").
+    const partial = attendees.filter((a) => {
+      const have = nameTokens(a.name);
+      if (!have.length) return false;
+      const haveSet = new Set(have);
+      const wantSet = new Set(want);
+      return want.every((t) => haveSet.has(t)) || have.every((t) => wantSet.has(t));
+    });
+    return partial.length === 1 ? partial[0] : null;
   };
   // Registered attendees by id (for notify preferences during persistence).
   const attendeeById = new Map<string, Attendee>();
@@ -430,13 +456,23 @@ ${numbered}`;
     ];
     return { leadId: lead?.id ?? null, leadName: lead?.name ?? null, regIds: [...new Set(regIds)] };
   };
-  // Route a task to a department: explicit model name → lead's department → meeting's.
-  const resolveDept = (deptName: any, leadId: string | null): string | null => {
+  /**
+   * Route a task to a department: the model's explicit department, else the MEETING's.
+   *
+   * It used to fall back to the LEAD ASSIGNEE's department. That is what dumped an
+   * all-hands' shared tasks onto one team's board — whoever the AI happened to name first
+   * dragged the task into their department (reported as "all the general tasks went to the
+   * IT List"). A person's department says nothing about which department a task belongs to,
+   * and for anyone in several departments the pick was arbitrary anyway (the lookup at
+   * :178-182 has no ordering). With no department the task now resolves to null → the Call
+   * Inbox, where it is visible and can be triaged, instead of silently landing on the
+   * wrong team's board.
+   */
+  const resolveDept = (deptName: any): string | null => {
     if (typeof deptName === 'string' && deptName.trim()) {
       const id = deptIdByName.get(deptName.trim().toLowerCase());
       if (id) return id;
     }
-    if (leadId && userFirstDeptId.has(leadId)) return userFirstDeptId.get(leadId) as string;
     return meetingDeptId;
   };
 
@@ -500,7 +536,7 @@ ${numbered}`;
       regIds,
       priority: k.priority,
       dueDate: k.due ? parseDueDate(String(k.due)) : null,
-      departmentId: resolveDept(k.department, leadId),
+      departmentId: resolveDept(k.department),
       cells: (k.cells && typeof k.cells === 'object') ? k.cells as Record<string, unknown> : undefined,
       subtasks: (k.subtasks || []).map((s: any) => {
         const r = resolveSet(s.assignees || []);

@@ -437,3 +437,208 @@ describe('getFallbackStats', () => {
     expect(countArgs.where.syncedAt.gte).toBeInstanceOf(Date);
   });
 });
+
+// ─────────────────────── list discovery: folders (regression) ───────────────────────
+
+/** Minimal fetch stub with an explicit route table, for discovery/retry edge cases. */
+function stubFetch(routes: (u: string, method: string) => Response | undefined) {
+  const calls: { url: string; method: string; body: any }[] = [];
+  const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    const method = init?.method || 'GET';
+    calls.push({ url: u, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    return routes(u, method) ?? json({});
+  }) as any);
+  return { calls, json };
+}
+
+function pushPrismaMocks() {
+  prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com' }] as any);
+  prismaMock.clickUpTaskLink.findUnique.mockResolvedValue(null as any);
+  prismaMock.clickUpTaskLink.create.mockResolvedValue({} as any);
+  prismaMock.taskRow.update.mockResolvedValue({} as any);
+}
+
+describe('list discovery: folder-nested lists', () => {
+  it('finds a department list inside a ClickUp folder (folderless endpoint returns none)', async () => {
+    // Regression: we only called GET /space/{id}/list ("Get Folderless Lists"), so a Space
+    // whose lists live in Folders looked empty → the whole department silently fell back
+    // to the Call Inbox even though it plainly existed in ClickUp.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dSales', name: 'Sales' }] as any);
+    pushPrismaMocks();
+
+    const { calls, json } = stubFetch((u, method) => {
+      if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }] }] });
+      if (u.includes('/team/team1/space')) return json({ spaces: [{ id: 'spS', name: 'Sales' }] });
+      if (u.includes('/space/spS/list')) return json({ lists: [] });
+      if (u.includes('/space/spS/folder')) return json({ folders: [{ id: 'f1', name: 'Boards', lists: [{ id: 'L_SALES', name: 'Tasks' }] }] });
+      if (u.includes('/list/L_SALES/task') && method === 'POST') return json({ id: 'CU9', url: 'https://app.clickup.com/t/CU9' });
+      return undefined;
+    });
+
+    await pushMeetingTasksToClickUp('m1', [{ ...itTask, departmentId: 'dSales' }]);
+
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_SALES/task'))).toBe(true);
+  });
+
+  it('falls back to fetching a folder’s lists when the folder payload omits them', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dSales', name: 'Sales' }] as any);
+    pushPrismaMocks();
+
+    const { calls, json } = stubFetch((u, method) => {
+      if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }] }] });
+      if (u.includes('/team/team1/space')) return json({ spaces: [{ id: 'spS', name: 'Sales' }] });
+      if (u.includes('/space/spS/list')) return json({ lists: [] });
+      if (u.includes('/space/spS/folder')) return json({ folders: [{ id: 'f1', name: 'Boards' }] }); // no embedded lists
+      if (u.includes('/folder/f1/list')) return json({ lists: [{ id: 'L_SALES', name: 'Tasks' }] });
+      if (u.includes('/list/L_SALES/task') && method === 'POST') return json({ id: 'CU9', url: 'https://app.clickup.com/t/CU9' });
+      return undefined;
+    });
+
+    await pushMeetingTasksToClickUp('m1', [{ ...itTask, departmentId: 'dSales' }]);
+
+    expect(calls.some((c) => c.url.includes('/folder/f1/list'))).toBe(true);
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_SALES/task'))).toBe(true);
+  });
+});
+
+// ─────────────────────── create retry safety (regression) ───────────────────────
+
+describe('createClickUpTask retry safety', () => {
+  const baseRoutes = (json: (b: unknown) => Response) => (u: string) => {
+    if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }] }] });
+    if (u.includes('/team/team1/space')) return json({ spaces: [{ id: 'sp1', name: 'IT' }] });
+    if (u.includes('/space/sp1/list')) return json({ lists: [{ id: 'L_IT', name: 'Tasks' }] });
+    return undefined;
+  };
+
+  it('does NOT retry when the create times out — the task may already exist (no duplicate)', async () => {
+    // This is the reported bug: a blind retry after a timeout produced TWO tasks —
+    // one WITH the assignee (orphaned) and one WITHOUT (linked).
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT' }] as any);
+    pushPrismaMocks();
+
+    const calls: { url: string; method: string }[] = [];
+    const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url); const method = init?.method || 'GET';
+      calls.push({ url: u, method });
+      if (u.includes('/list/L_IT/task') && method === 'POST') {
+        throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+      }
+      return baseRoutes(json)(u) ?? json({});
+    }) as any);
+
+    await pushMeetingTasksToClickUp('m1', [itTask]); // per-item catch keeps this from throwing
+
+    const posts = calls.filter((c) => c.method === 'POST' && c.url.includes('/task'));
+    expect(posts).toHaveLength(1); // exactly one attempt — no blind second create
+    expect(prismaMock.clickUpTaskLink.create).not.toHaveBeenCalled();
+  });
+
+  it('does NOT retry on a 5xx — the create may have landed server-side', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT' }] as any);
+    pushPrismaMocks();
+
+    const calls: { url: string; method: string }[] = [];
+    const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url); const method = init?.method || 'GET';
+      calls.push({ url: u, method });
+      if (u.includes('/list/L_IT/task') && method === 'POST') {
+        return { ok: false, status: 502, json: async () => ({}), text: async () => 'bad gateway' } as Response;
+      }
+      return baseRoutes(json)(u) ?? json({});
+    }) as any);
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(calls.filter((c) => c.method === 'POST' && c.url.includes('/task'))).toHaveLength(1);
+  });
+
+  it('DOES retry unassigned when ClickUp rejects the assignee with a 400 (private list)', async () => {
+    // A 400 proves nothing was created, so degrading to an unassigned task is safe and
+    // keeps the task from being lost. This is the one case the retry exists for.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT' }] as any);
+    pushPrismaMocks();
+
+    const posts: any[] = [];
+    const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url); const method = init?.method || 'GET';
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (u.includes('/list/L_IT/task') && method === 'POST') {
+        posts.push(body);
+        if (body.assignees?.length) return { ok: false, status: 400, json: async () => ({}), text: async () => 'Assignee not a member' } as Response;
+        return json({ id: 'CU1', url: 'https://app.clickup.com/t/CU1' });
+      }
+      return baseRoutes(json)(u) ?? json({});
+    }) as any);
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(posts).toHaveLength(2);
+    expect(posts[0].assignees).toEqual([111]);
+    expect(posts[1].assignees).toBeUndefined(); // landed unassigned rather than lost
+    expect(prismaMock.clickUpTaskLink.create).toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────── department→list pin (regression) ───────────────────────
+
+describe('department → list pin', () => {
+  it('falls back to the pinned list when the department name no longer matches any Space', async () => {
+    // Regression: the link was a pure NAME match, so renaming the department (or the Space)
+    // silently sent 100% of that department's tasks to the Call Inbox.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([
+      { id: 'dIT', name: 'Renamed Team', clickupListId: 'L_PINNED' },
+    ] as any);
+    pushPrismaMocks();
+
+    const { calls, json } = stubFetch((u, method) => {
+      if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }] }] });
+      if (u.includes('/team/team1/space')) return json({ spaces: [{ id: 'sp2', name: 'Call Inbox' }] });
+      if (u.includes('/space/sp2/list')) return json({ lists: [{ id: 'L_INBOX', name: 'New Tasks' }] });
+      if (u.includes('/list/L_PINNED/task') && method === 'POST') return json({ id: 'CU7', url: 'https://app.clickup.com/t/CU7' });
+      return undefined;
+    });
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_PINNED/task'))).toBe(true);
+    expect(calls.some((c) => c.url.includes('/list/L_INBOX/task'))).toBe(false); // not stranded in the Inbox
+  });
+
+  it('pins the list on a successful name resolve, so a later rename is survivable', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT', clickupListId: null }] as any);
+    prismaMock.department.update.mockResolvedValue({} as any);
+    pushPrismaMocks();
+    installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(prismaMock.department.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'dIT' }, data: { clickupListId: 'L_IT' } }),
+    );
+  });
+
+  it('does not re-write an unchanged pin', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'dIT', name: 'IT', clickupListId: 'L_IT' }] as any);
+    prismaMock.department.update.mockResolvedValue({} as any);
+    pushPrismaMocks();
+    installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [itTask]);
+
+    expect(prismaMock.department.update).not.toHaveBeenCalled();
+  });
+});

@@ -111,11 +111,20 @@ export function dedupeKeyFor(
   return createHash('sha256').update(parts.join('|')).digest('hex');
 }
 
-/** Resolve the destination list for a department name (honors routing mode + aliases). */
+/**
+ * Resolve the destination list for a department (honors routing mode + aliases).
+ *
+ * Order: name match (explicit CLICKUP_LIST_MAP override, then Space discovery) → the id this
+ * department last resolved to (`pinnedListId`) → the Call Inbox. The pin exists because the
+ * link is otherwise a pure NAME match: renaming the department in Garely or the Space in
+ * ClickUp used to silently dump every one of that department's tasks into the Inbox. Name
+ * matching still comes first so an admin override always wins and can correct a bad pin.
+ */
 export function listIdForDepartment(
   cfg: ClickUpConfig,
   listMap: { byDept: Map<string, string>; fallbackListId: string | null },
   departmentName: string | null,
+  pinnedListId?: string | null,
 ): string | null {
   if (cfg.routingMode === 'inbox') return listMap.fallbackListId;
   if (departmentName) {
@@ -125,7 +134,21 @@ export function listIdForDepartment(
     const alias = DEPT_ALIASES[n];
     if (alias && listMap.byDept.get(alias)) return listMap.byDept.get(alias)!;
   }
+  if (pinnedListId) return pinnedListId;
   return listMap.fallbackListId;
+}
+
+/**
+ * Remember the list a department resolved to, so a later rename can't strand it in the Inbox.
+ * Best-effort and only on change — never let bookkeeping break a push.
+ */
+async function pinDepartmentList(departmentId: string, listId: string, current: string | null): Promise<void> {
+  if (!listId || listId === current) return;
+  try {
+    await prisma.department.update({ where: { id: departmentId }, data: { clickupListId: listId } });
+  } catch (e) {
+    console.error('[clickup] could not pin list for department', departmentId, (e as Error).message);
+  }
 }
 
 // ─────────────────────────── config ───────────────────────────
@@ -176,10 +199,27 @@ async function cuFetch(token: string, path: string, init?: RequestInit): Promise
   });
 }
 
+/**
+ * A ClickUp HTTP error carrying the status, so callers can tell a REJECTED request
+ * (4xx — nothing was created) from a request that may well have SUCCEEDED server-side
+ * (timeout / 5xx). Retrying a POST is only safe in the former case.
+ */
+export class ClickUpHttpError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(method: string, path: string, status: number, body: string) {
+    super(`ClickUp ${method} ${path} → ${status}: ${body.slice(0, 160)}`);
+    this.name = 'ClickUpHttpError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function cuJson<T = any>(token: string, path: string, init?: RequestInit): Promise<T> {
   let res = await cuFetch(token, path, init);
   if (res.status === 429) {
     // Respect the rate limit (~100 req/min): wait out Retry-After once, then retry.
+    // Safe even for POST: a 429 means the request was rejected, so nothing was created.
     const retryAfter = Math.min(Number(res.headers.get('retry-after')) || 1, 3);
     await new Promise((r) => setTimeout(r, retryAfter * 1000));
     res = await cuFetch(token, path, init);
@@ -187,7 +227,7 @@ async function cuJson<T = any>(token: string, path: string, init?: RequestInit):
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     // Never include the token; truncate the body.
-    throw new Error(`ClickUp ${init?.method || 'GET'} ${path} → ${res.status}: ${body.slice(0, 160)}`);
+    throw new ClickUpHttpError(init?.method || 'GET', path, res.status, body);
   }
   return res.json() as Promise<T>;
 }
@@ -258,9 +298,14 @@ async function resolveListMap(
   const spacesRes = await cuJson<{ spaces?: { id: string; name: string }[] }>(cfg.token, `/team/${teamId}/space?archived=false`);
   for (const space of spacesRes.spaces || []) {
     try {
-      const listsRes = await cuJson<{ lists?: { id: string; name: string }[] }>(cfg.token, `/space/${space.id}/list?archived=false`);
-      const first = (listsRes.lists || [])[0];
-      if (!first) continue;
+      const lists = await listsInSpace(cfg.token, space.id);
+      const first = lists[0];
+      if (!first) {
+        // Loud: a department whose Space has no reachable list silently sends 100% of its
+        // tasks to the Call Inbox, which is exactly how this looked to users in the wild.
+        console.warn('[clickup] space has no reachable list — its tasks will fall back to the Inbox:', space.name);
+        continue;
+      }
       byDept.set(normName(space.name), first.id);
       if (!cfg.fallbackListId && normName(space.name) === 'call inbox') fallbackListId = first.id;
     } catch (e) {
@@ -272,6 +317,44 @@ async function resolveListMap(
     if (listId) byDept.set(normName(dept), String(listId));
   }
   return { byDept, fallbackListId };
+}
+
+/**
+ * Every list a Space exposes — folderless AND folder-nested.
+ *
+ * `GET /space/{id}/list` is ClickUp's "Get Folderless Lists": it returns NOTHING for a
+ * Space whose lists live inside Folders. We only used that endpoint, so such a department
+ * looked empty to us — no mapping, no error — and 100% of its tasks silently went to the
+ * Call Inbox even though the department plainly existed in ClickUp. Folders are read too.
+ *
+ * Folderless lists come first so the previous choice of list stays stable for Spaces that
+ * already worked.
+ */
+async function listsInSpace(token: string, spaceId: string): Promise<{ id: string; name: string }[]> {
+  const out: { id: string; name: string }[] = [];
+
+  const folderless = await cuJson<{ lists?: { id: string; name: string }[] }>(token, `/space/${spaceId}/list?archived=false`);
+  out.push(...(folderless.lists || []));
+
+  const folders = await cuJson<{ folders?: { id: string; name: string; lists?: { id: string; name: string }[] }[] }>(
+    token,
+    `/space/${spaceId}/folder?archived=false`,
+  );
+  for (const folder of folders.folders || []) {
+    // The folder payload usually embeds its lists; fall back to a fetch if it doesn't.
+    if (folder.lists?.length) {
+      out.push(...folder.lists);
+      continue;
+    }
+    try {
+      const inFolder = await cuJson<{ lists?: { id: string; name: string }[] }>(token, `/folder/${folder.id}/list?archived=false`);
+      out.push(...(inFolder.lists || []));
+    } catch (e) {
+      console.error('[clickup] list discovery failed for folder', folder.name, (e as Error).message);
+    }
+  }
+
+  return out;
 }
 
 /** Resolve a list's "Source" dropdown field id + the "Garely Call" option id. */
@@ -307,18 +390,42 @@ type CreateBody = {
   custom_fields?: { id: string; value: string }[];
 };
 
+const cuPost = (token: string, listId: string, body: CreateBody) =>
+  cuJson<{ id: string; url: string }>(token, `/list/${listId}/task`, { method: 'POST', body: JSON.stringify(body) });
+
+/**
+ * Create one task, degrading gracefully ONLY when ClickUp actually rejected the request.
+ *
+ * A retry is safe exclusively on a 400: the request was refused, so no task exists. On a
+ * timeout (AbortSignal, TIMEOUT_MS) or a 5xx the task may already have been created — the
+ * old code retried there too, which is what produced the reported pairs of duplicates
+ * (one WITH the assignee, orphaned; one WITHOUT, linked). Those errors now propagate.
+ *
+ * The two rejectable fields are also dropped separately: a status name the list doesn't
+ * define must never cost a valid assignee (dropping both together silently de-assigned).
+ */
 async function createClickUpTask(token: string, listId: string, body: CreateBody): Promise<{ id: string; url: string }> {
+  const rejected = (e: unknown) => e instanceof ClickUpHttpError && e.status === 400;
   try {
-    return await cuJson<{ id: string; url: string }>(token, `/list/${listId}/task`, { method: 'POST', body: JSON.stringify(body) });
+    return await cuPost(token, listId, body);
   } catch (e) {
-    // Private lists: a matched assignee may not be a member of THIS list → ClickUp
-    // rejects. Don't auto-add them — retry once unassigned (task still lands).
-    if (body.assignees?.length || body.status) {
-      // A private-list non-member assignee OR a status name the list doesn't have
-      // would reject — retry without either so the task still lands (defaults New).
-      console.warn('[clickup] create failed, retrying without assignees/status:', (e as Error).message);
-      const { assignees: _a, status: _s, ...rest } = body;
-      return cuJson<{ id: string; url: string }>(token, `/list/${listId}/task`, { method: 'POST', body: JSON.stringify(rest) });
+    if (!rejected(e)) throw e; // may have landed server-side — never blind-retry
+    // 1) Drop only the status (list may not define it), keeping the assignees.
+    if (body.status) {
+      const { status: _s, ...noStatus } = body;
+      try {
+        console.warn('[clickup] create rejected, retrying without status:', (e as Error).message);
+        return await cuPost(token, listId, noStatus);
+      } catch (e2) {
+        if (!rejected(e2)) throw e2;
+      }
+    }
+    // 2) Still rejected → the assignee isn't a member of this (private) list. Don't
+    //    auto-add them; land the task unassigned rather than losing it.
+    if (body.assignees?.length) {
+      const { assignees: _a, status: _s2, ...rest } = body;
+      console.warn('[clickup] create rejected, retrying without assignees:', (e as Error).message);
+      return cuPost(token, listId, rest);
     }
     throw e;
   }
@@ -531,10 +638,11 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
     const deptIds = [...new Set(items.map((i) => i.departmentId).filter((x): x is string => !!x))];
     const userIds = [...new Set(items.flatMap((i) => i.assigneeUserIds).filter(Boolean))];
     const [depts, users] = await Promise.all([
-      deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
+      deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true, clickupListId: true } }) : Promise.resolve([]),
       userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } }) : Promise.resolve([]),
     ]);
     const deptName = new Map(depts.map((d) => [d.id, d.name]));
+    const deptPin = new Map(depts.map((d) => [d.id, d.clickupListId ?? null]));
     const emailById = new Map(users.map((u) => [u.id, (u.email || '').toLowerCase()]));
     const nameById = new Map(users.map((u) => [u.id, u.name || '']));
 
@@ -552,12 +660,19 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           console.warn('[clickup] department not found, routing to fallback:', item.departmentId, '· task:', item.title);
         }
         const dName = item.departmentId ? deptName.get(item.departmentId) || null : null;
+        const dPin = item.departmentId ? deptPin.get(item.departmentId) ?? null : null;
         // Unconfirmed tasks (routed to a department with nobody from the meeting present)
         // are forced to the shared Call Inbox and handled by the legacy single-task path
         // below (one triage task, all attendees), NOT the per-user split.
         const listId = item.forceFallback
           ? listMap.fallbackListId
-          : listIdForDepartment(cfg, listMap, dName);
+          : listIdForDepartment(cfg, listMap, dName, dPin);
+        // Remember a real department→list resolution so a later rename on either side can't
+        // strand this department in the Inbox.
+        if (!item.forceFallback && item.departmentId && listId && listId !== listMap.fallbackListId) {
+          await pinDepartmentList(item.departmentId, listId, dPin);
+          deptPin.set(item.departmentId, listId);
+        }
 
         // Per-user split path: one task per assignee, personal list for multi-dept users.
         if (cfg.personalRouting && personal && !item.forceFallback) {

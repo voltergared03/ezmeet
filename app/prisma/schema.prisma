@@ -439,6 +439,12 @@ model Department {
   name         String
   color        String? // hex accent for UI chips
   teableBaseId String? // Teable base this department's tasks sync to
+  // Last ClickUp list this department resolved to. The department→list link is otherwise a
+  // NAME match against ClickUp Space names, so renaming either side silently sent the whole
+  // department's tasks to the Call Inbox. Pinned automatically on each successful resolve and
+  // used as the fallback when the name no longer matches. An explicit CLICKUP_LIST_MAP
+  // override still wins, so a wrong pin is always correctable.
+  clickupListId String?
   orgId        String
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   createdAt    DateTime     @default(now())
