@@ -40,21 +40,11 @@ import { getSystemTasksTable } from './system-tasks-table';
 const CLICKUP_API = 'https://api.clickup.com/api/v2';
 const TIMEOUT_MS = 15_000;
 
-// Known Garely-department → ClickUp-Space name aliases (normalized, lowercased).
-// The live workspace has "Account Manager" (Garely) vs "Account Management"
-// (ClickUp Space). Add more here if names drift; admins can also override the
-// whole mapping via CLICKUP_LIST_MAP.
-const DEPT_ALIASES: Record<string, string> = {
-  'account manager': 'account management',
-  'account managers': 'account management',
-};
-
 export interface ClickUpConfig {
   token: string;
   teamId: string; // '' → auto-detect
   routingMode: 'department' | 'inbox';
-  listMap: Record<string, string>; // explicit dept-name → list-id overrides
-  fallbackListId: string; // '' → auto-detect "Call Inbox"
+  fallbackListId: string; // '' → unmapped departments are not pushed at all
   // Per-user routing (opt-in). When on, a task is split into one ClickUp task PER
   // assignee, and an assignee who belongs to 2+ departments is routed to their own
   // auto-created personal list instead of a department space. Off → legacy model
@@ -112,43 +102,23 @@ export function dedupeKeyFor(
 }
 
 /**
- * Resolve the destination list for a department (honors routing mode + aliases).
+ * Resolve the destination list for a department: the admin's explicit mapping, else the
+ * fallback list. That is the whole rule.
  *
- * Order: name match (explicit CLICKUP_LIST_MAP override, then Space discovery) → the id this
- * department last resolved to (`pinnedListId`) → the Call Inbox. The pin exists because the
- * link is otherwise a pure NAME match: renaming the department in Garely or the Space in
- * ClickUp used to silently dump every one of that department's tasks into the Inbox. Name
- * matching still comes first so an admin override always wins and can correct a bad pin.
+ * This used to match the department's NAME against ClickUp Space names (plus a table of
+ * hardcoded aliases, plus "first list in the Space"), which failed in every direction:
+ * renaming either side stranded a department, a Space with several lists picked whichever
+ * one ClickUp's sidebar happened to order first, and a customer's naming drift had to be
+ * patched into our source. None of it was ever visible to the admin. Now the mapping is
+ * chosen in the UI from the real list, so it cannot be guessed wrong.
  */
 export function listIdForDepartment(
   cfg: ClickUpConfig,
-  listMap: { byDept: Map<string, string>; fallbackListId: string | null },
-  departmentName: string | null,
-  pinnedListId?: string | null,
+  fallbackListId: string | null,
+  mappedListId: string | null,
 ): string | null {
-  if (cfg.routingMode === 'inbox') return listMap.fallbackListId;
-  if (departmentName) {
-    const n = normName(departmentName);
-    const direct = listMap.byDept.get(n);
-    if (direct) return direct;
-    const alias = DEPT_ALIASES[n];
-    if (alias && listMap.byDept.get(alias)) return listMap.byDept.get(alias)!;
-  }
-  if (pinnedListId) return pinnedListId;
-  return listMap.fallbackListId;
-}
-
-/**
- * Remember the list a department resolved to, so a later rename can't strand it in the Inbox.
- * Best-effort and only on change — never let bookkeeping break a push.
- */
-async function pinDepartmentList(departmentId: string, listId: string, current: string | null): Promise<void> {
-  if (!listId || listId === current) return;
-  try {
-    await prisma.department.update({ where: { id: departmentId }, data: { clickupListId: listId } });
-  } catch (e) {
-    console.error('[clickup] could not pin list for department', departmentId, (e as Error).message);
-  }
+  if (cfg.routingMode === 'inbox') return fallbackListId;
+  return mappedListId || fallbackListId;
 }
 
 // ─────────────────────────── config ───────────────────────────
@@ -157,18 +127,15 @@ async function pinDepartmentList(departmentId: string, listId: string, current: 
 export async function getClickUpConfig(): Promise<ClickUpConfig | null> {
   const m = await readConfig([
     'CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_TEAM_ID',
-    'CLICKUP_LIST_MAP', 'CLICKUP_FALLBACK_LIST_ID', 'CLICKUP_ROUTING_MODE', 'CLICKUP_PERSONAL_ROUTING',
+    'CLICKUP_FALLBACK_LIST_ID', 'CLICKUP_ROUTING_MODE', 'CLICKUP_PERSONAL_ROUTING',
   ]);
   if (m.CLICKUP_ENABLED !== 'true') return null;
   const token = decodeToken(m.CLICKUP_TOKEN);
   if (!token) return null;
-  let listMap: Record<string, string> = {};
-  try { if (m.CLICKUP_LIST_MAP) listMap = JSON.parse(m.CLICKUP_LIST_MAP); } catch { listMap = {}; }
   return {
     token,
     teamId: (m.CLICKUP_TEAM_ID || '').trim(),
     routingMode: m.CLICKUP_ROUTING_MODE === 'inbox' ? 'inbox' : 'department',
-    listMap,
     fallbackListId: (m.CLICKUP_FALLBACK_LIST_ID || '').trim(),
     personalRouting: m.CLICKUP_PERSONAL_ROUTING === 'true',
   };
@@ -239,19 +206,19 @@ export async function clickUpPing(token: string): Promise<{ teams: { id: string;
 }
 
 /**
- * How much the fallback list (auto-detected "Call Inbox", or an explicit fallback)
- * is actually catching — so an admin can judge whether it's still needed. Counts
- * pushed tasks whose destination was the fallback list. Null when disabled/unresolvable.
+ * How much the fallback list is actually catching — so an admin can judge whether their
+ * department mapping has holes. Counts pushed tasks whose destination was the fallback
+ * list. Null when disabled, or when no fallback list is configured.
  */
 export async function getFallbackStats(): Promise<{ listName: string; last30d: number; total: number } | null> {
   const cfg = await getClickUpConfig();
   if (!cfg) return null;
   try {
-    const teamId = await resolveTeamId(cfg);
-    const { fallbackListId } = await resolveListMap(cfg, teamId);
+    const fallbackListId = cfg.fallbackListId || null;
     if (!fallbackListId) return null;
     const info = await cuJson<{ name?: string; space?: { name?: string } }>(cfg.token, `/list/${fallbackListId}`).catch(() => null);
-    const listName = info?.space?.name || info?.name || 'fallback list';
+    // The LIST's own name first: this stat is about a list the admin picked by name.
+    const listName = info?.name || info?.space?.name || 'fallback list';
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const [last30d, total] = await Promise.all([
       prisma.clickUpTaskLink.count({ where: { listId: fallbackListId, syncedAt: { gte: since } } }),
@@ -287,36 +254,40 @@ async function resolveMembers(token: string): Promise<Map<string, number>> {
   return out;
 }
 
-/** Walk Spaces → Lists, mapping normalized Space name → its (first) list id. */
-async function resolveListMap(
-  cfg: ClickUpConfig,
-  teamId: string,
-): Promise<{ byDept: Map<string, string>; fallbackListId: string | null }> {
-  const byDept = new Map<string, string>();
-  let fallbackListId: string | null = cfg.fallbackListId || null;
+/** One selectable ClickUp list, labelled with its full path so the choice is unambiguous. */
+export interface ClickUpListOption {
+  listId: string;
+  label: string; // "Space / Folder / List"
+  spaceName: string;
+}
 
-  const spacesRes = await cuJson<{ spaces?: { id: string; name: string }[] }>(cfg.token, `/team/${teamId}/space?archived=false`);
-  for (const space of spacesRes.spaces || []) {
+/**
+ * Every list in the workspace, for the admin's department/user pickers.
+ *
+ * The label carries the FULL path because list names are not unique — a real workspace can
+ * have two lists both called "Tasks" in different Spaces, and picking between them by name
+ * alone is a coin flip.
+ */
+export async function listAllClickUpLists(): Promise<ClickUpListOption[]> {
+  const cfg = await getClickUpConfig();
+  if (!cfg) return [];
+  const teamId = await resolveTeamId(cfg);
+  const spaces = await cuJson<{ spaces?: { id: string; name: string }[] }>(cfg.token, `/team/${teamId}/space?archived=false`);
+  const out: ClickUpListOption[] = [];
+  for (const space of spaces.spaces || []) {
     try {
-      const lists = await listsInSpace(cfg.token, space.id);
-      const first = lists[0];
-      if (!first) {
-        // Loud: a department whose Space has no reachable list silently sends 100% of its
-        // tasks to the Call Inbox, which is exactly how this looked to users in the wild.
-        console.warn('[clickup] space has no reachable list — its tasks will fall back to the Inbox:', space.name);
-        continue;
+      for (const l of await listsInSpace(cfg.token, space.id)) {
+        out.push({
+          listId: l.id,
+          label: [space.name, l.folderName, l.name].filter(Boolean).join(' / '),
+          spaceName: space.name,
+        });
       }
-      byDept.set(normName(space.name), first.id);
-      if (!cfg.fallbackListId && normName(space.name) === 'call inbox') fallbackListId = first.id;
     } catch (e) {
       console.error('[clickup] list discovery failed for space', space.name, (e as Error).message);
     }
   }
-  // Explicit admin overrides win over auto-discovery.
-  for (const [dept, listId] of Object.entries(cfg.listMap)) {
-    if (listId) byDept.set(normName(dept), String(listId));
-  }
-  return { byDept, fallbackListId };
+  return out;
 }
 
 /**
@@ -327,11 +298,12 @@ async function resolveListMap(
  * looked empty to us — no mapping, no error — and 100% of its tasks silently went to the
  * Call Inbox even though the department plainly existed in ClickUp. Folders are read too.
  *
- * Folderless lists come first so the previous choice of list stays stable for Spaces that
- * already worked.
+ * Folderless lists come first, so a Space's own lists are offered ahead of its folders'.
  */
-async function listsInSpace(token: string, spaceId: string): Promise<{ id: string; name: string }[]> {
-  const out: { id: string; name: string }[] = [];
+interface SpaceList { id: string; name: string; folderName?: string }
+
+async function listsInSpace(token: string, spaceId: string): Promise<SpaceList[]> {
+  const out: SpaceList[] = [];
 
   const folderless = await cuJson<{ lists?: { id: string; name: string }[] }>(token, `/space/${spaceId}/list?archived=false`);
   out.push(...(folderless.lists || []));
@@ -343,12 +315,12 @@ async function listsInSpace(token: string, spaceId: string): Promise<{ id: strin
   for (const folder of folders.folders || []) {
     // The folder payload usually embeds its lists; fall back to a fetch if it doesn't.
     if (folder.lists?.length) {
-      out.push(...folder.lists);
+      out.push(...folder.lists.map((l) => ({ ...l, folderName: folder.name })));
       continue;
     }
     try {
       const inFolder = await cuJson<{ lists?: { id: string; name: string }[] }>(token, `/folder/${folder.id}/list?archived=false`);
-      out.push(...(inFolder.lists || []));
+      out.push(...(inFolder.lists || []).map((l) => ({ ...l, folderName: folder.name })));
     } catch (e) {
       console.error('[clickup] list discovery failed for folder', folder.name, (e as Error).message);
     }
@@ -514,8 +486,9 @@ async function makePersonalRouter(cfg: ClickUpConfig, teamId: string): Promise<P
 
 interface AssigneeTarget { garelyUserId: string; clickupUserId: number; listId: string }
 
-/** Per-assignee destinations for a task: personal list for a multi-department user,
- *  else the task's department list. Assignees not in ClickUp are dropped. */
+/** Per-assignee destinations for a task, in precedence order: the admin's explicit list for
+ *  this user → their personal list (multi-department users) → the task's department list.
+ *  Assignees not in ClickUp are dropped. */
 async function resolveAssigneeTargets(
   assigneeUserIds: string[],
   ctx: {
@@ -523,8 +496,9 @@ async function resolveAssigneeTargets(
     emailById: Map<string, string>;
     nameById: Map<string, string>;
     multiDept: Set<string>;
+    overrideByUser: Map<string, string>;
     deptListId: string | null;
-    personal: PersonalRouter;
+    personal: PersonalRouter | null;
   },
 ): Promise<AssigneeTarget[]> {
   const out: AssigneeTarget[] = [];
@@ -536,9 +510,13 @@ async function resolveAssigneeTargets(
     if (!email) continue;
     const clickupUserId = ctx.members.get(email);
     if (!clickupUserId) continue; // not in ClickUp → skip (no task for them)
-    // Multi-dept user → personal list; on failure fall back to the department list.
     let listId = ctx.deptListId;
-    if (ctx.multiDept.has(uid)) {
+    const override = ctx.overrideByUser.get(uid);
+    if (override) {
+      // An admin named this list for this person. It beats the multi-dept heuristic below,
+      // which is only a `count >= 2` inference with no human intent behind it.
+      listId = override;
+    } else if (ctx.personal && ctx.multiDept.has(uid)) {
       const personalList = await ctx.personal.listForUser(email, ctx.nameById.get(uid) || '');
       if (personalList) listId = personalList;
     }
@@ -567,6 +545,66 @@ interface SplitMeetingTask {
  * per-(row × assignee) dedupe link so regeneration updates instead of duplicating.
  * Marks the Garely row owned via the first copy. One target failing doesn't stop the rest.
  */
+/**
+ * Convert a pre-split (shared) link into this task's first per-assignee link.
+ *
+ * The legacy path keys a link by the task alone; the split path keys it by task + assignee.
+ * So the first time a task takes the split path, its 5-arg lookup MISSES the existing 4-arg
+ * link, creates a fresh ClickUp task and orphans the old one — the duplicate pairs users
+ * reported. Adopting the old link (rewriting its key in place) makes the switch a rename,
+ * not a re-creation. Idempotent: once adopted, the 4-arg key no longer exists.
+ */
+async function adoptLegacyLink(cfg: ClickUpConfig, item: SplitMeetingTask, targets: AssigneeTarget[]): Promise<void> {
+  if (!targets.length) return;
+  const legacyKey = dedupeKeyFor(item.meetingId, item.title, item.departmentId, item.parentTitle);
+  const legacy = await prisma.clickUpTaskLink
+    .findUnique({ where: { meetingId_dedupeKey: { meetingId: item.meetingId, dedupeKey: legacyKey } } })
+    .catch(() => null);
+  if (!legacy) return;
+
+  // Prefer the target already sitting in the shared task's list, so the task stays
+  // physically where it is (v2 PUT cannot move it) and the link never lies about location.
+  const t = targets.find((x) => x.listId === legacy.listId) ?? targets[0];
+  const newKey = dedupeKeyFor(item.meetingId, item.title, item.departmentId, item.parentTitle, t.garelyUserId);
+
+  // Collision guard: if the chosen target already owns its 5-arg link (a partial prior
+  // adoption), rewriting to that key would violate @@unique([meetingId, dedupeKey]) and
+  // throw — leaving the legacy task orphaned. The legacy link is redundant in that case,
+  // so drop it and let the loop update the existing per-assignee link.
+  const clash = await prisma.clickUpTaskLink
+    .findUnique({ where: { meetingId_dedupeKey: { meetingId: item.meetingId, dedupeKey: newKey } } })
+    .catch(() => null);
+  if (clash && clash.id !== legacy.id) {
+    await prisma.clickUpTaskLink.delete({ where: { id: legacy.id } }).catch(() => {});
+    return;
+  }
+
+  // Reconcile assignees on the shared task BEFORE committing the key rewrite: the rewrite is
+  // the point of no return (the 4-arg key is gone afterwards), so a failed PUT here must NOT
+  // leave the co-assignees on the shared task AND holding their own copy. Do it first; if it
+  // fails on anything but a 400 (task may be half-updated / unknown), abort so the next run
+  // retries the whole adoption instead of committing a half-done state.
+  const rem = targets.filter((x) => x.garelyUserId !== t.garelyUserId).map((x) => x.clickupUserId);
+  if (rem.length) {
+    try {
+      await cuJson(cfg.token, `/task/${legacy.clickupTaskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ assignees: { add: [t.clickupUserId], rem } }),
+      });
+    } catch (e) {
+      if (!(e instanceof ClickUpHttpError && e.status === 400)) {
+        console.warn('[clickup] adoption assignee rewrite failed — retrying next run:', (e as Error).message);
+        return;
+      }
+    }
+  }
+
+  await prisma.clickUpTaskLink.update({
+    where: { id: legacy.id },
+    data: { dedupeKey: newKey, rowId: item.rowId, assigneeUserId: t.garelyUserId },
+  }).catch((e) => console.error('[clickup] legacy link adoption commit failed for row', item.rowId, (e as Error).message));
+}
+
 async function syncSplitMeetingTask(
   cfg: ClickUpConfig,
   fieldCache: Map<string, { fieldId: string; optionId: string } | null>,
@@ -576,6 +614,9 @@ async function syncSplitMeetingTask(
   let created = 0;
   let updated = 0;
   let lead: { id: string; url: string } | null = null;
+
+  await adoptLegacyLink(cfg, item, targets);
+
   for (const t of targets) {
     try {
       const dedupeKey = dedupeKeyFor(item.meetingId, item.title, item.departmentId, item.parentTitle, t.garelyUserId);
@@ -586,7 +627,10 @@ async function syncSplitMeetingTask(
         if (item.priority != null) body.priority = item.priority;
         if (item.dueDateMs != null) { body.due_date = item.dueDateMs; body.due_date_time = false; }
         await cuJson(cfg.token, `/task/${existing.clickupTaskId}`, { method: 'PUT', body: JSON.stringify(body) });
-        await prisma.clickUpTaskLink.update({ where: { id: existing.id }, data: { syncedAt: new Date(), title: item.title, listId: t.listId, rowId: item.rowId, assigneeUserId: t.garelyUserId } });
+        // listId is deliberately NOT rewritten: this PUT changes content only, and ClickUp's
+        // v2 API cannot re-home a task anyway. Writing t.listId here would make the link
+        // claim a move that never happened, which is what made getFallbackStats mis-report.
+        await prisma.clickUpTaskLink.update({ where: { id: existing.id }, data: { syncedAt: new Date(), title: item.title, rowId: item.rowId, assigneeUserId: t.garelyUserId } });
         await applyClickUpEvent('taskStatusUpdated', existing.clickupTaskId);
         if (!lead) lead = { id: existing.clickupTaskId, url: existing.clickupUrl };
         updated++;
@@ -629,24 +673,27 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
 
   try {
     const teamId = await resolveTeamId(cfg);
-    const [members, listMap] = await Promise.all([
-      resolveMembers(cfg.token),
-      resolveListMap(cfg, teamId),
-    ]);
+    const members = await resolveMembers(cfg.token);
+    const fallbackListId = cfg.fallbackListId || null;
 
     // Resolve Garely entity names/emails for the items in batch.
     const deptIds = [...new Set(items.map((i) => i.departmentId).filter((x): x is string => !!x))];
     const userIds = [...new Set(items.flatMap((i) => i.assigneeUserIds).filter(Boolean))];
     const [depts, users] = await Promise.all([
       deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true, clickupListId: true } }) : Promise.resolve([]),
-      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } }) : Promise.resolve([]),
+      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true, clickupListId: true } }) : Promise.resolve([]),
     ]);
     const deptName = new Map(depts.map((d) => [d.id, d.name]));
-    const deptPin = new Map(depts.map((d) => [d.id, d.clickupListId ?? null]));
+    const deptListId = new Map(depts.map((d) => [d.id, d.clickupListId ?? null]));
     const emailById = new Map(users.map((u) => [u.id, (u.email || '').toLowerCase()]));
     const nameById = new Map(users.map((u) => [u.id, u.name || '']));
+    // Admin-set per-user destinations ("this person's tasks always go here").
+    const overrideByUser = new Map(
+      users.filter((u) => u.clickupListId).map((u) => [u.id, u.clickupListId as string]),
+    );
 
-    // Per-user routing prerequisites (only when the mode is on).
+    // Per-user routing prerequisites. The personal-list router is only for the multi-dept
+    // heuristic, so it is only needed when that mode is on — an override needs no router.
     const personal = cfg.personalRouting ? await makePersonalRouter(cfg, teamId) : null;
     const multiDept = cfg.personalRouting ? await multiDeptUserIds(userIds) : new Set<string>();
 
@@ -659,25 +706,24 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
         if (item.departmentId && !deptName.has(item.departmentId)) {
           console.warn('[clickup] department not found, routing to fallback:', item.departmentId, '· task:', item.title);
         }
-        const dName = item.departmentId ? deptName.get(item.departmentId) || null : null;
-        const dPin = item.departmentId ? deptPin.get(item.departmentId) ?? null : null;
+        const mapped = item.departmentId ? deptListId.get(item.departmentId) ?? null : null;
         // Unconfirmed tasks (routed to a department with nobody from the meeting present)
         // are forced to the shared Call Inbox and handled by the legacy single-task path
         // below (one triage task, all attendees), NOT the per-user split.
         const listId = item.forceFallback
-          ? listMap.fallbackListId
-          : listIdForDepartment(cfg, listMap, dName, dPin);
-        // Remember a real department→list resolution so a later rename on either side can't
-        // strand this department in the Inbox.
-        if (!item.forceFallback && item.departmentId && listId && listId !== listMap.fallbackListId) {
-          await pinDepartmentList(item.departmentId, listId, dPin);
-          deptPin.set(item.departmentId, listId);
+          ? fallbackListId
+          : listIdForDepartment(cfg, fallbackListId, mapped);
+        if (!item.forceFallback && item.departmentId && !mapped && listId === fallbackListId) {
+          console.warn('[clickup] department is not mapped to a list — task goes to the fallback:', deptName.get(item.departmentId) || item.departmentId, '· task:', item.title);
         }
 
-        // Per-user split path: one task per assignee, personal list for multi-dept users.
-        if (cfg.personalRouting && personal && !item.forceFallback) {
+        // Per-user split path: one task per assignee. Reachable when the global mode is on,
+        // OR when someone on this task has an admin-set list of their own — otherwise their
+        // override would silently do nothing whenever the mode is off.
+        const hasOverride = item.assigneeUserIds.some((u) => overrideByUser.has(u));
+        if ((cfg.personalRouting || hasOverride) && !item.forceFallback) {
           const targets = await resolveAssigneeTargets(item.assigneeUserIds, {
-            members, emailById, nameById, multiDept, deptListId: listId, personal,
+            members, emailById, nameById, multiDept, overrideByUser, deptListId: listId, personal,
           });
           if (!targets.length) {
             // Nobody resolves to ClickUp now → release the row if it was owned before,
@@ -695,7 +741,7 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
         }
 
         if (!listId) {
-          console.error('[clickup] no destination list for task (no match + no fallback):', item.title);
+          console.error('[clickup] task not pushed — its department is unmapped and no fallback list is set:', item.title);
           continue;
         }
 
@@ -731,9 +777,13 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           if (prio != null) body.priority = prio;
           if (item.dueDate) { body.due_date = item.dueDate.getTime(); body.due_date_time = false; }
           await cuJson(cfg.token, `/task/${existing.clickupTaskId}`, { method: 'PUT', body: JSON.stringify(body) });
+          // listId not rewritten: content-only PUT, and the task never moved (v2 can't).
+          // rowId IS refreshed: regeneration deletes+recreates the Garely row, so a link that
+          // survives a regenerate would otherwise keep pointing at a deleted rowId — and
+          // taskDeleted prefers the link's rowId, which would then orphan the live row.
           await prisma.clickUpTaskLink.update({
             where: { id: existing.id },
-            data: { syncedAt: new Date(), title: item.title, listId },
+            data: { syncedAt: new Date(), title: item.title, rowId: item.rowId },
           });
           await markRowOwned(item.rowId, existing.clickupTaskId, existing.clickupUrl);
           // Reconcile the (re-created on regenerate) row to ClickUp's CURRENT status,
@@ -749,8 +799,12 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           if (item.dueDate) { body.due_date = item.dueDate.getTime(); body.due_date_time = false; }
           if (source) body.custom_fields = [{ id: source.fieldId, value: source.optionId }];
           const res = await createClickUpTask(cfg.token, listId, body);
+          // rowId matters even on this shared/legacy link: taskDeleted only keeps the Garely
+          // row when another link with the same rowId survives, and adoption makes mixed
+          // legacy+split states real. Without it, deleting one ClickUp copy could delete the
+          // Garely row (and its subtasks) for everyone.
           await prisma.clickUpTaskLink.create({
-            data: { meetingId, dedupeKey, clickupTaskId: res.id, clickupUrl: res.url, listId, title: item.title },
+            data: { meetingId, dedupeKey, clickupTaskId: res.id, clickupUrl: res.url, listId, title: item.title, rowId: item.rowId },
           });
           await markRowOwned(item.rowId, res.id, res.url);
           created++;
@@ -959,7 +1013,8 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
     try { if (cur.CLICKUP_MIGRATION && JSON.parse(cur.CLICKUP_MIGRATION).state === 'running') return { migrated, skipped }; } catch { /* ignore */ }
 
     const teamId = await resolveTeamId(cfg);
-    const [members, listMap] = await Promise.all([resolveMembers(cfg.token), resolveListMap(cfg, teamId)]);
+    const members = await resolveMembers(cfg.token);
+    const fallbackListId = cfg.fallbackListId || null;
     const f = prov.fieldIds;
 
     // Eligible = task Rows not yet owned that have at least one assignee.
@@ -978,13 +1033,16 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
     const deptIds = [...new Set(rows.map((r) => r.taskMeta?.departmentId).filter((x): x is string => !!x))];
     const parentIds = [...new Set(rows.map((r) => r.taskMeta?.parentRowId).filter((x): x is string => !!x))];
     const [users, depts, parents] = await Promise.all([
-      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } }) : Promise.resolve([]),
-      deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
+      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true, clickupListId: true } }) : Promise.resolve([]),
+      deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true, clickupListId: true } }) : Promise.resolve([]),
       parentIds.length ? prisma.row.findMany({ where: { id: { in: parentIds } }, select: { id: true, data: true } }) : Promise.resolve([]),
     ]);
     const emailById = new Map(users.map((u) => [u.id, (u.email || '').toLowerCase()]));
     const nameById = new Map(users.map((u) => [u.id, u.name || '']));
-    const deptName = new Map(depts.map((d) => [d.id, d.name]));
+    const deptListMap = new Map(depts.map((d) => [d.id, d.clickupListId ?? null]));
+    const overrideByUser = new Map(
+      users.filter((u) => u.clickupListId).map((u) => [u.id, u.clickupListId as string]),
+    );
     const parentTitle = new Map(parents.map((p) => [p.id, str((p.data as Record<string, unknown>)?.[f.title]) || null]));
     const fieldCache = new Map<string, { fieldId: string; optionId: string } | null>();
 
@@ -1000,11 +1058,13 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
 
         // Per-user split path (meeting tasks only — they carry the meetingId the
         // dedupe link needs; manual tasks keep the legacy single-task path below).
-        if (cfg.personalRouting && personal && row.taskMeta?.meetingId) {
-          const dNameP = row.taskMeta.departmentId ? deptName.get(row.taskMeta.departmentId) || null : null;
-          const deptListId = listIdForDepartment(cfg, listMap, dNameP);
-          const targets = await resolveAssigneeTargets(row.assignments.map((a) => a.userId), {
-            members, emailById, nameById, multiDept, deptListId, personal,
+        const rowUserIds = row.assignments.map((a) => a.userId);
+        const rowHasOverride = rowUserIds.some((u) => overrideByUser.has(u));
+        if ((cfg.personalRouting || rowHasOverride) && row.taskMeta?.meetingId) {
+          const mappedP = row.taskMeta.departmentId ? deptListMap.get(row.taskMeta.departmentId) ?? null : null;
+          const deptListId = listIdForDepartment(cfg, fallbackListId, mappedP);
+          const targets = await resolveAssigneeTargets(rowUserIds, {
+            members, emailById, nameById, multiDept, overrideByUser, deptListId, personal,
           });
           if (!targets.length) { skipped++; continue; }
           const dueStr = str(data[f.dueDate]);
@@ -1035,8 +1095,8 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
         }
         if (!assignees.length) { skipped++; continue; } // no ClickUp assignee → stays native
 
-        const dName = row.taskMeta?.departmentId ? deptName.get(row.taskMeta.departmentId) || null : null;
-        const listId = listIdForDepartment(cfg, listMap, dName);
+        const mapped = row.taskMeta?.departmentId ? deptListMap.get(row.taskMeta.departmentId) ?? null : null;
+        const listId = listIdForDepartment(cfg, fallbackListId, mapped);
         if (!listId) { skipped++; continue; }
 
         const source = await resolveSourceField(cfg.token, listId, fieldCache);

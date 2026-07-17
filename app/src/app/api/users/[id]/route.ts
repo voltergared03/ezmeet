@@ -26,7 +26,7 @@ async function patchHandler(
 
   const { id } = await params;
   const body = await req.json();
-  const { role, spokenLanguage, spokenLanguageLocked, name } = body;
+  const { role, spokenLanguage, spokenLanguageLocked, name, clickupListId } = body;
 
   const data: any = {};
 
@@ -68,6 +68,15 @@ async function patchHandler(
     }
     next.spokenLanguageMeta = { source: 'admin', at: new Date().toISOString() };
     data.preferences = next;
+  }
+
+  // Admin can pin a user's tasks to one ClickUp list, whatever call they came from.
+  // Its own column, NOT `preferences` — that JSON is only merged inside the spoken-language
+  // branch above, so a field added there would be dropped unless the languages changed too.
+  if (clickupListId !== undefined) {
+    data.clickupListId = typeof clickupListId === 'string' && clickupListId.trim()
+      ? clickupListId.trim().slice(0, 64)
+      : null;
   }
 
   if (Object.keys(data).length === 0) {

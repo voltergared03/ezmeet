@@ -3,14 +3,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Plus, Pencil, Check, X, Trash2, Loader2, Crown, Building2, ChevronDown, ChevronRight, Users as UsersIcon, ListChecks,
+  Plus, Pencil, Check, X, Trash2, Loader2, Crown, Building2, ChevronDown, ChevronRight, Users as UsersIcon, ListChecks, AlertTriangle,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { Select } from '@/components/ui/select';
 
 interface DeptMember { userId: string; isLead: boolean; name: string | null; email: string | null; image?: string | null }
-interface Dept { id: string; name: string; color: string | null; teableBaseId: string | null; taskCount: number; meetingCount: number; members: DeptMember[] }
+interface Dept { id: string; name: string; color: string | null; teableBaseId: string | null; clickupListId?: string | null; taskCount: number; meetingCount: number; members: DeptMember[] }
 interface UserOpt { id: string; name: string; email: string; image?: string | null }
+interface ListOpt { listId: string; label: string }
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#64748b'];
 
@@ -26,6 +27,8 @@ export function DepartmentsTab() {
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [lists, setLists] = useState<ListOpt[]>([]);
+  const [clickupOn, setClickupOn] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +41,35 @@ export function DepartmentsTab() {
   useEffect(() => {
     fetch('/api/users').then((r) => (r.ok ? r.json() : [])).then((u) => setUsers(Array.isArray(u) ? u : [])).catch(() => {});
   }, []);
+  // The ClickUp lists for the picker: one fetch for the whole tab, never per row — it
+  // walks Spaces → Folders → Lists upstream. Only when the integration is actually on.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await fetch('/api/settings/clickup').then((r) => (r.ok ? r.json() : null));
+        if (!alive || !s?.enabled || !s?.tokenSet) return;
+        setClickupOn(true);
+        const d = await fetch('/api/settings/clickup/lists').then((r) => (r.ok ? r.json() : null));
+        if (alive && Array.isArray(d?.lists)) setLists(d.lists);
+      } catch { /* the picker just stays hidden */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const setList = async (d: Dept, listId: string) => {
+    const prev = d.clickupListId ?? null;
+    const next = listId || null;
+    setDepts((ds) => ds.map((x) => (x.id === d.id ? { ...x, clickupListId: next } : x)));
+    try {
+      const res = await fetch(`/api/departments/${d.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clickupListId: next }),
+      });
+      if (!res.ok) setDepts((ds) => ds.map((x) => (x.id === d.id ? { ...x, clickupListId: prev } : x)));
+    } catch {
+      setDepts((ds) => ds.map((x) => (x.id === d.id ? { ...x, clickupListId: prev } : x)));
+    }
+  };
 
   const createDept = async () => {
     const name = newName.trim();
@@ -180,6 +212,12 @@ export function DepartmentsTab() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+                    {clickupOn && !d.clickupListId && (
+                      <span className="chip" title={t('departments.clickupUnmappedHint')}
+                        style={{ background: 'color-mix(in oklab, var(--amber) 18%, transparent)', color: '#fde68a' }}>
+                        <AlertTriangle size={10} /> {t('departments.clickupUnmapped')}
+                      </span>
+                    )}
                     {countChip(<UsersIcon size={13} style={{ color: 'var(--muted)' }} />, d.members.length, t('departments.members'))}
                     {countChip(<ListChecks size={13} style={{ color: 'var(--muted)' }} />, d.taskCount, t('departments.tasks'))}
                     <button className="btn btn-ghost btn-icon" style={{ width: 30, height: 30, color: 'var(--red)' }} title={t('common.delete')} onClick={() => deleteDept(d)}>
@@ -200,6 +238,30 @@ export function DepartmentsTab() {
                         }} />
                       ))}
                     </div>
+
+                    {/* ClickUp destination list */}
+                    {clickupOn && (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600, marginBottom: 8 }}>
+                          {t('departments.clickupList')}
+                        </div>
+                        <div style={{ maxWidth: 380 }}>
+                          <Select
+                            value={d.clickupListId ?? ''}
+                            placeholder={t('departments.clickupPick')}
+                            options={[
+                              { value: '', label: t('departments.clickupNoList') },
+                              ...lists.map((l) => ({ value: l.listId, label: l.label })),
+                            ]}
+                            onChange={(v) => setList(d, v)}
+                            style={{ height: 34, fontSize: 13 }}
+                          />
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+                          {t('departments.clickupListHint')}
+                        </div>
+                      </div>
+                    )}
 
                     {/* members */}
                     <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600, marginBottom: 8 }}>

@@ -188,11 +188,44 @@ export const CONFIG_DEFAULTS: Record<string, string> = {
   WS_MAX_PARTICIPANTS: '20',
   WS_MAX_DURATION_MIN: '240',
   WS_RETENTION_DAYS: '0',
+  WS_GLOSSARY: '',
   PRICE_DEEPSEEK_IN: '0.27',
   PRICE_DEEPSEEK_OUT: '1.10',
   PRICE_DEEPGRAM_MIN: '0.0043',
   EMAIL_LIMIT: '3000',
 };
+
+/**
+ * Workspace glossary → the terms to boost in speech-to-text and to spell-normalise in the
+ * AI report. One term per line.
+ *
+ * Measured against real recordings before this shipped, and the results are why the caps
+ * and the warning below exist:
+ *  • Boosting genuinely fixes the reported bug — an English product name spoken inside
+ *    Russian speech ("Knowledge Center") was transcribed as "Nologic Center" at 0.99
+ *    confidence, and the glossary recovers it.
+ *  • On nova-3, `keyterm` DELETES unrelated domain words the glossary never mentioned, and
+ *    the damage grows with the list — so keep it short. nova-2's `keywords` showed no such
+ *    damage, which is why nova-2 remains the default model.
+ *  • SHORT PERSONAL NAMES ARE UNSAFE: "Denys" in a nova-3 glossary was force-fit onto audio
+ *    that said "Zen". Prefer distinctive multi-word product terms.
+ * Capped at 100 (Deepgram's `keywords` limit; `keyterm` allows 500 tokens, and the lower
+ * cap keeps one setting valid for both models).
+ */
+export function glossaryTerms(raw: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of (raw || '').split(/\r?\n/)) {
+    const t = line.trim().slice(0, 60);
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+    if (out.length >= 100) break;
+  }
+  return out;
+}
 
 /** Read a numeric config value with default fallback. */
 export function num(map: Record<string, string>, key: string): number {

@@ -7,6 +7,7 @@ import {
   Key, Eye, EyeOff, Loader2, Save, Check, ListChecks, X, Settings2, Plug, MessageSquare, GitBranch, Webhook, Trash2, Plus,
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
+import { Select } from '@/components/ui/select';
 import { LinearIcon, ClickUpIcon, DeepgramIcon, LiveKitIcon, PostgresIcon, S3Icon, GoogleIcon, HubSpotIcon } from '../components/BrandIcons';
 
 // Which connectors open a config modal (the rest are read-only status cards).
@@ -60,7 +61,8 @@ export function IntegrationsTab() {
   const [s3Test, setS3Test] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // ClickUp integration config (paste token → it works)
-  const [clickup, setClickup] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; teamId: string; personalRouting: boolean; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department', teamId: '', personalRouting: false });
+  const [clickup, setClickup] = useState<{ enabled: boolean; tokenSet: boolean; routingMode: 'department' | 'inbox'; teamId: string; personalRouting: boolean; fallbackListId: string; migration?: { state?: string; total?: number; migrated?: number } | null }>({ enabled: false, tokenSet: false, routingMode: 'department', teamId: '', personalRouting: false, fallbackListId: '' });
+  const [clickupLists, setClickupLists] = useState<{ listId: string; label: string }[]>([]);
   const [clickupToken, setClickupToken] = useState('');
   const [clickupSaving, setClickupSaving] = useState(false);
   const [clickupSaved, setClickupSaved] = useState(false);
@@ -166,6 +168,7 @@ export function IntegrationsTab() {
           enabled: !!d.enabled, tokenSet: !!d.tokenSet,
           routingMode: d.routingMode === 'inbox' ? 'inbox' : 'department', teamId: d.teamId || '',
           personalRouting: !!d.personalRouting,
+          fallbackListId: d.fallbackListId || '',
           migration: d.migration ?? null,
         });
       })
@@ -248,6 +251,13 @@ export function IntegrationsTab() {
         .catch(() => {})
         .finally(() => setClickupFallbackLoading(false));
     }
+    // Same deal for the list picker: several ClickUp calls, so only on modal open.
+    if (manage === 'ClickUp' && clickup.enabled && clickup.tokenSet && clickupLists.length === 0) {
+      fetch('/api/settings/clickup/lists')
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { if (Array.isArray(d?.lists)) setClickupLists(d.lists); })
+        .catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manage]);
 
@@ -269,7 +279,7 @@ export function IntegrationsTab() {
   const saveClickup = async () => {
     setClickupSaving(true); setClickupSaved(false);
     try {
-      const payload: any = { enabled: clickup.enabled, routingMode: clickup.routingMode, personalRouting: clickup.personalRouting };
+      const payload: any = { enabled: clickup.enabled, routingMode: clickup.routingMode, personalRouting: clickup.personalRouting, fallbackListId: clickup.fallbackListId };
       if (clickupToken.trim()) payload.token = clickupToken.trim();
       const res = await fetch('/api/settings/clickup', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (res.ok) {
@@ -762,6 +772,18 @@ export function IntegrationsTab() {
           <option value="inbox">{t('settings.clickupRoutingInbox')}</option>
         </select>
       </FieldWrapper>
+      <FieldWrapper label={t('settings.clickupFallbackList')}>
+        <Select
+          value={clickup.fallbackListId}
+          placeholder={t('departments.clickupPick')}
+          options={[
+            { value: '', label: t('departments.clickupNoList') },
+            ...clickupLists.map(l => ({ value: l.listId, label: l.label })),
+          ]}
+          onChange={v => setClickup(c => ({ ...c, fallbackListId: v }))}
+        />
+      </FieldWrapper>
+      <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupFallbackListHint')}</div>
       <Toggle label={t('settings.clickupPersonalRouting')} value={clickup.personalRouting} onChange={v => setClickup(c => ({ ...c, personalRouting: v }))} />
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupPersonalHint')}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.clickupHint')}</div>

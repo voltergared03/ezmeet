@@ -17,13 +17,18 @@ interface UserRecord {
   hasPassword?: boolean;
   spokenLanguage?: string | null;
   spokenLanguageLocked?: boolean;
+  clickupListId?: string | null;
 }
+
+interface ListOpt { listId: string; label: string }
 
 export function UsersTab() {
   const t = useTranslations();
   const { data: session } = useSession();
   const [search, setSearch] = useState('');
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [lists, setLists] = useState<ListOpt[]>([]);
+  const [clickupOn, setClickupOn] = useState(false);
   const [editNameId, setEditNameId] = useState<string | null>(null);
   const [editNameVal, setEditNameVal] = useState('');
   const saveName = async (u: UserRecord) => {
@@ -142,6 +147,22 @@ export function UsersTab() {
     return () => { cancelled = true; };
   }, [session]);
 
+  // ClickUp lists for the per-user destination picker: one fetch for the tab (it walks
+  // Spaces → Folders → Lists upstream), and only when the integration is actually on.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await fetch('/api/settings/clickup').then((r) => (r.ok ? r.json() : null));
+        if (!alive || !s?.enabled || !s?.tokenSet) return;
+        setClickupOn(true);
+        const d = await fetch('/api/settings/clickup/lists').then((r) => (r.ok ? r.json() : null));
+        if (alive && Array.isArray(d?.lists)) setLists(d.lists);
+      } catch { /* the column just stays hidden */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // Self-registration requests awaiting approval.
   const [requests, setRequests] = useState<{ id: string; email: string; name: string | null; createdAt: string; expiresAt: string }[]>([]);
   const [reqBusy, setReqBusy] = useState<string | null>(null);
@@ -216,14 +237,14 @@ export function UsersTab() {
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-        <div className="admin-table-header" style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>
-          <div>{t('settings.colUser')}</div><div>{t('settings.colEmail')}</div><div>{t('settings.colRole')}</div><div>{t('settings.colLanguage')}</div><div>{t('settings.colStatus')}</div><div />
+        <div className={`admin-table-header${clickupOn ? ' has-clickup' : ''}`} style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>
+          <div>{t('settings.colUser')}</div><div>{t('settings.colEmail')}</div><div>{t('settings.colRole')}</div><div>{t('settings.colLanguage')}</div>{clickupOn && <div>{t('settings.colClickup')}</div>}<div>{t('settings.colStatus')}</div><div />
         </div>
         {filtered.map((u) => {
           const isMe = session?.user?.email === u.email;
           const st = getUserStatus(u.lastLogin);
           return (
-            <div key={u.id} className="admin-table-row user-row" style={{ display: 'grid', padding: '14px 16px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: 13 }}>
+            <div key={u.id} className={`admin-table-row user-row${clickupOn ? ' has-clickup' : ''}`} style={{ display: 'grid', padding: '14px 16px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: 13 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                 <span style={{ position: 'relative', flexShrink: 0, display: 'inline-flex' }}>
                   <Avatar name={u.name} image={u.image} size="md" />
@@ -324,6 +345,32 @@ export function UsersTab() {
                   }}
                 />
               </div>
+              {clickupOn && (
+                <div style={{ minWidth: 0 }} title={t('settings.clickupUserListHint')}>
+                  <Select
+                    value={u.clickupListId ?? ''}
+                    options={[
+                      { value: '', label: t('settings.clickupUserNoList') },
+                      ...lists.map((l) => ({ value: l.listId, label: l.label })),
+                    ]}
+                    style={{ height: 32, fontSize: 12.5, width: '100%' }}
+                    onChange={async (v) => {
+                      const prev = u.clickupListId ?? null;
+                      const next = v || null;
+                      setUsers((us) => us.map((x) => x.id === u.id ? { ...x, clickupListId: next } : x));
+                      try {
+                        const res = await fetch(`/api/users/${u.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ clickupListId: next }),
+                        });
+                        if (!res.ok) setUsers((us) => us.map((x) => x.id === u.id ? { ...x, clickupListId: prev } : x));
+                      } catch {
+                        setUsers((us) => us.map((x) => x.id === u.id ? { ...x, clickupListId: prev } : x));
+                      }
+                    }}
+                  />
+                </div>
+              )}
               <div>
                 {(() => {
                   const label =

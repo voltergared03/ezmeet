@@ -11,7 +11,7 @@ export async function GET() {
   if (!session?.user || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const m = await readConfig(['CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'CLICKUP_TEAM_ID', 'CLICKUP_MIGRATION', 'CLICKUP_PERSONAL_ROUTING']);
+  const m = await readConfig(['CLICKUP_ENABLED', 'CLICKUP_TOKEN', 'CLICKUP_ROUTING_MODE', 'CLICKUP_TEAM_ID', 'CLICKUP_MIGRATION', 'CLICKUP_PERSONAL_ROUTING', 'CLICKUP_FALLBACK_LIST_ID']);
   let migration: unknown = null;
   try { if (m.CLICKUP_MIGRATION) migration = JSON.parse(m.CLICKUP_MIGRATION); } catch { /* ignore */ }
   return NextResponse.json({
@@ -20,6 +20,8 @@ export async function GET() {
     routingMode: m.CLICKUP_ROUTING_MODE === 'inbox' ? 'inbox' : 'department',
     teamId: m.CLICKUP_TEAM_ID || '',
     personalRouting: m.CLICKUP_PERSONAL_ROUTING === 'true',
+    // A list id, not a secret — the modal needs it to show the current choice.
+    fallbackListId: m.CLICKUP_FALLBACK_LIST_ID || '',
     migration,
   });
 }
@@ -39,9 +41,6 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.personalRouting === 'boolean') updates.CLICKUP_PERSONAL_ROUTING = body.personalRouting ? 'true' : 'false';
   if (typeof body.teamId === 'string') updates.CLICKUP_TEAM_ID = body.teamId.trim();
   if (typeof body.fallbackListId === 'string') updates.CLICKUP_FALLBACK_LIST_ID = body.fallbackListId.trim();
-  if (body.listMap && typeof body.listMap === 'object') {
-    try { updates.CLICKUP_LIST_MAP = JSON.stringify(body.listMap); } catch { /* ignore */ }
-  }
   // Only overwrite the token when a real new value is supplied (a masked
   // placeholder of dots, or empty, is ignored so a re-save doesn't wipe it).
   if (typeof body.token === 'string') {

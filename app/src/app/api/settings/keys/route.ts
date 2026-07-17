@@ -44,9 +44,16 @@ async function getHandler(req: NextRequest) {
 
   // The Python agent needs the workspace language to generate reports / live
   // notes / action items in the admin-chosen language. Internal callers only.
+  // The glossary rides along for the same reason: it feeds Deepgram term boosting.
+  // Both are served here rather than via ALLOWED_KEYS because the PATCH below drops
+  // empty values, which would make an emptied glossary impossible to clear.
   if (internal) {
-    const wsLang = await prisma.systemConfig.findUnique({ where: { key: 'WS_LANGUAGE' } });
+    const [wsLang, gloss] = await Promise.all([
+      prisma.systemConfig.findUnique({ where: { key: 'WS_LANGUAGE' } }),
+      prisma.systemConfig.findUnique({ where: { key: 'WS_GLOSSARY' } }),
+    ]);
     result['WS_LANGUAGE'] = { value: wsLang?.value || 'en', masked: '', updatedAt: '' };
+    result['WS_GLOSSARY'] = { value: gloss?.value || '', masked: '', updatedAt: '' };
   }
 
   return NextResponse.json(result);

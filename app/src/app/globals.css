@@ -937,6 +937,11 @@ h2 {
     gap: 12px;
     padding: 12px 16px;
   }
+  /* Users table with the optional ClickUp-list column (admin + integration on). */
+  .admin-table-header.has-clickup,
+  .admin-table-row.has-clickup {
+    grid-template-columns: minmax(160px, 1.7fr) minmax(150px, 1.5fr) 120px 132px minmax(150px, 1.4fr) 110px 76px;
+  }
   .admin-table-header { display: grid; }
 }
 
@@ -1011,6 +1016,10 @@ h2 {
   .admin-table-header,
   .admin-table-row {
     grid-template-columns: minmax(170px, 1.8fr) minmax(160px, 1.6fr) 122px 134px 112px 78px;
+  }
+  .admin-table-header.has-clickup,
+  .admin-table-row.has-clickup {
+    grid-template-columns: minmax(170px, 1.8fr) minmax(160px, 1.6fr) 122px 134px minmax(160px, 1.5fr) 112px 78px;
   }
 
   .lobby-header {

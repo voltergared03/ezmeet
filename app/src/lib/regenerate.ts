@@ -9,7 +9,7 @@
 import fs from 'node:fs/promises';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
-import { readConfig, getDeepSeekConfig } from './config';
+import { readConfig, getDeepSeekConfig, glossaryTerms } from './config';
 import { sseJsonChunks, chunkDelta } from './sse';
 import { workspaceLocale } from './i18n-server';
 import { notify } from './notify';
@@ -36,18 +36,26 @@ export async function transcribeSpeakerFile(
   filePath: string,
   language: string
 ): Promise<ReTranscribedSegment[]> {
-  const cfg = await readConfig(['DEEPGRAM_API_KEY']);
+  const cfg = await readConfig(['DEEPGRAM_API_KEY', 'DEEPGRAM_MODEL', 'WS_GLOSSARY']);
   const key = cfg.DEEPGRAM_API_KEY || process.env.DEEPGRAM_API_KEY || '';
   if (!key) throw new Error('Deepgram API key not configured');
 
   const audio = await fs.readFile(filePath);
 
+  // Honour the admin's model — this used to be pinned to nova-2 while the live agent used
+  // whatever DEEPGRAM_MODEL said, so a re-transcribed speaker could come back in a
+  // different voice from the rest of the call.
+  const model = (cfg.DEEPGRAM_MODEL || 'nova-2').trim();
   const url = new URL('https://api.deepgram.com/v1/listen');
-  url.searchParams.set('model', 'nova-2');
+  url.searchParams.set('model', model);
   url.searchParams.set('language', language);
   url.searchParams.set('smart_format', 'true');
   url.searchParams.set('punctuate', 'true');
   url.searchParams.set('utterances', 'true');
+  // Term boosting: `keyterm` on nova-3, `keywords` on nova-2 and older — not aliases.
+  // Repeated params, so append (set would keep only the last term).
+  const boostParam = model.startsWith('nova-3') ? 'keyterm' : 'keywords';
+  for (const term of glossaryTerms(cfg.WS_GLOSSARY)) url.searchParams.append(boostParam, term);
 
   const res = await fetch(url, {
     method: 'POST',
@@ -155,6 +163,7 @@ async function generateReportInner(
   if (!ds.apiKey) throw new Error('DeepSeek API key not configured');
   const wsLoc = await workspaceLocale();
   const langName = wsLoc === 'uk' ? 'Ukrainian' : 'English';
+  const glossary = glossaryTerms((await readConfig(['WS_GLOSSARY'])).WS_GLOSSARY);
 
   // Meeting context for tenant scoping + department auto-routing. Fetched up
   // front so the prompt can list departments (and which attendee is in which)
@@ -341,16 +350,27 @@ async function generateReportInner(
     .map((s, i) => `${i + 1}. [${(s.language || '??').toUpperCase()}] ${s.speakerName || '?'}: ${s.content}`)
     .join('\n');
 
+  // The transcript is speech-to-text output, and nothing else in this prompt says so — a
+  // model told to never invent facts will faithfully copy a misheard product name into a
+  // task title (a real call produced "Nologic Center" for "Knowledge Center"). Boosting
+  // fixes future calls but cannot repair transcripts already captured, so give the model
+  // the same glossary. Scoped hard to SPELLING of a CLOSED list: an open-ended "fix what
+  // sounds wrong" would contradict the no-fabrication rule this sits under.
+  const glossaryLine = glossary.length
+    ? `- The transcript is automatic speech-to-text output and may contain PHONETIC misspellings of these known terms: ${glossary.join(', ')}. Where a transcript word is clearly a misrecognition of one of them, write the term's correct spelling instead. This is SPELLING NORMALISATION of that closed list ONLY — never licence to change what was said, substitute meaning, or invent facts.`
+    : '';
+
   const prompt = `You are a meeting documentarian. From the NUMBERED transcript below, produce a DETAILED, well-structured report.
 Rules:
 - Organise the report by TOPIC — create a SEPARATE topic for EACH distinct theme or agenda item actually discussed. A substantive meeting usually has 5-10 topics; do NOT consolidate everything into 2-3 broad topics. Prefer more, finer-grained topics, and within each capture every decision, task and open question raised.
 - For EVERY decision, task and open question, include a "cites" array with the exact transcript line numbers that support it.
 - NEVER invent facts that are not present in the transcript.
+${glossaryLine}
 - Write all textual content in ${langName}.
 - Extract ALL decisions, tasks and open questions that were discussed — never omit an item, even when nobody is clearly responsible for it.
 - Be EXHAUSTIVE with REAL tasks: capture every distinct FOLLOW-UP action item, commitment or deliverable ("I will…", "we need to…", "let's build / send / prepare…") as its OWN separate task — but ONLY work that must happen AFTER the meeting. Do not merge different tasks into one.
 - NOT a task — do NOT record these (this is the #1 source of noise): in-meeting logistics and call mechanics ("share/show your screen", "unmute", "mute", "turn on your camera", "can you hear me?", "scroll down", "next slide", "zoom in", "let me present", "start/stop recording", "wait for X to join", "let's take a break", "repeat that", "speak up"); anything DONE on the spot during the call with no follow-up; greetings, small talk and filler; and vague wishes with no concrete deliverable. A task must be trackable work that OUTLIVES the meeting — if it is completed the moment it is said, or it is about operating the call, it is NOT a task. When unsure whether something is a genuine follow-up vs. an in-call request, leave it OUT.
-- A task's "title" (and a decision's "text") must state ONLY the action or outcome, in imperative form — NEVER include the responsible person's name, because tasks can be reassigned. e.g. write "Develop native apps for Android, iOS, Mac and Windows", NOT "Vitaliy will develop native apps". The people go ONLY in the separate "assignees" / "owner" field.
+- A task's "title" (and a decision's "text") must state ONLY the action or outcome, in imperative form — NEVER include the responsible person's name, because tasks can be reassigned. e.g. write "Develop native apps for Android, iOS, Mac and Windows", NOT "Anna will develop native apps". The people go ONLY in the separate "assignees" / "owner" field.
 - Be EQUALLY EXHAUSTIVE with DECISIONS: capture every conclusion, choice, agreement or settled direction ("we'll go with X", "let's use Y", "decided to…", "agreed that…", "the plan is…") as its own decision.
 - Be EQUALLY EXHAUSTIVE with OPEN QUESTIONS / follow-ups: capture everything left unresolved, deferred or to revisit ("we still need to figure out…", "to be decided", "let's come back to this", any unanswered question or risk raised).
 - Classify by intent and POPULATE ALL THREE categories — a typical working meeting has SEVERAL tasks, several decisions and a few open questions, so do not leave tasks (or any category) empty when the transcript contains them:

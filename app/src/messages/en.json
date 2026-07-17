@@ -958,7 +958,13 @@
     "makeLead": "Make lead",
     "removeLead": "Remove as lead",
     "removeMember": "Remove from department",
-    "deleteConfirm": "Delete department \"{name}\"? Its tasks and meetings stay but lose this department."
+    "deleteConfirm": "Delete department \"{name}\"? Its tasks and meetings stay but lose this department.",
+    "clickupList": "ClickUp list",
+    "clickupPick": "Pick a ClickUp list…",
+    "clickupNoList": "Not mapped — send to the fallback list",
+    "clickupListHint": "Tasks routed to this department are pushed to this list. Pick it yourself — nothing is matched by name.",
+    "clickupUnmapped": "No list",
+    "clickupUnmappedHint": "This department has no ClickUp list, so its tasks go to the fallback list. Open it and pick one."
   },
   "settings": {
     "pageTitle": "Settings",
@@ -1199,7 +1205,16 @@
     "tokensInput": "Tokens (input)",
     "tokensOutput": "Tokens (output)",
     "transcriptions": "Transcriptions",
-    "totalsLine": "Total meetings: {meetings} · Total tasks: {tasks} · Users: {users}"
+    "totalsLine": "Total meetings: {meetings} · Total tasks: {tasks} · Users: {users}",
+    "clickupFallbackList": "Fallback list",
+    "clickupFallbackListHint": "Where tasks go when their department has no list, or nobody from that department was on the call.",
+    "clickupUserList": "ClickUp list",
+    "clickupUserListHint": "Always send this person's tasks to one list, whatever call they came from. Leave empty for normal department routing.",
+    "clickupUserNoList": "By department (default)",
+    "colClickup": "ClickUp",
+    "glossary": "Glossary",
+    "glossaryHint": "Names the transcription keeps getting wrong — products, tools, internal terms. One per line. Use distinctive multi-word terms; short personal names can be misapplied to similar-sounding speech. Up to 100.",
+    "glossaryPlaceholder": "Knowledge Center\nStrategic Business Roadmap"
   },
   "setupChecklist": {
     "title": "Finish setup",

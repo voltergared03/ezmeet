@@ -7,8 +7,10 @@ import { withRoute } from '@/lib/with-route';
 
 const BOOL_KEYS = ['WS_GUEST_ACCESS', 'WS_AI_SUMMARY', 'WS_LIVE_TRANSCRIPTION', 'WS_RECORD_ALL', 'WS_REQUIRE_2FA'];
 const STR_KEYS = ['WS_NAME', 'WS_DOMAIN', 'WS_TIMEZONE', 'WS_LANGUAGE'];
+// Multi-line text: only edge-trimmed (line breaks separate terms, so no inner trim).
+const TEXT_KEYS = ['WS_GLOSSARY'];
 const NUM_KEYS = ['WS_MAX_PARTICIPANTS', 'WS_MAX_DURATION_MIN', 'WS_RETENTION_DAYS', 'PRICE_DEEPSEEK_IN', 'PRICE_DEEPSEEK_OUT', 'PRICE_DEEPGRAM_MIN', 'EMAIL_LIMIT'];
-const ALL_KEYS = [...BOOL_KEYS, ...STR_KEYS, ...NUM_KEYS];
+const ALL_KEYS = [...BOOL_KEYS, ...STR_KEYS, ...TEXT_KEYS, ...NUM_KEYS];
 
 // GET /api/settings/workspace — workspace + pricing config (merged with defaults)
 async function getHandler() {
@@ -20,6 +22,7 @@ async function getHandler() {
   const saved = await readConfig(ALL_KEYS);
   const out: Record<string, string | boolean | number> = {};
   for (const k of STR_KEYS) out[k] = saved[k] ?? CONFIG_DEFAULTS[k];
+  for (const k of TEXT_KEYS) out[k] = saved[k] ?? CONFIG_DEFAULTS[k];
   for (const k of BOOL_KEYS) out[k] = (saved[k] ?? CONFIG_DEFAULTS[k]) === 'true';
   for (const k of NUM_KEYS) out[k] = Number(saved[k] ?? CONFIG_DEFAULTS[k]);
 
@@ -46,6 +49,11 @@ async function patchHandler(req: NextRequest) {
 
   for (const k of STR_KEYS) {
     if (typeof body[k] === 'string') updates[k] = body[k].trim();
+  }
+  for (const k of TEXT_KEYS) {
+    // Edge-trim only, and cap the stored size so an admin can't paste a novel that then
+    // rides on every STT request. ~100 terms × 60 chars, with slack.
+    if (typeof body[k] === 'string') updates[k] = body[k].trim().slice(0, 8000);
   }
   for (const k of BOOL_KEYS) {
     if (body[k] !== undefined) updates[k] = body[k] ? 'true' : 'false';

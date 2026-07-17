@@ -26,17 +26,21 @@ export async function GET(req: NextRequest) {
       createdAt: true,
       passwordHash: true,
       preferences: true,
+      clickupListId: true,
     } as any,
     orderBy: { createdAt: "asc" },
   });
 
   // Expose only whether a password is set (never the hash). Also surface the
   // forced spoken language so admins can see/change it in the Users list.
-  const safe = (users as any[]).map(({ passwordHash, preferences, ...u }) => ({
+  const isAdmin = session.user.role === "admin";
+  const safe = (users as any[]).map(({ passwordHash, preferences, clickupListId, ...u }) => ({
     ...u,
     hasPassword: !!passwordHash,
     spokenLanguage: (preferences as any)?.spokenLanguage ?? null,
     spokenLanguageLocked: !!(preferences as any)?.spokenLanguageLocked,
+    // Admin-only: every authenticated user can read this route.
+    ...(isAdmin ? { clickupListId: clickupListId ?? null } : {}),
   }));
 
   return NextResponse.json(safe);

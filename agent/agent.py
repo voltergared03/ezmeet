@@ -12,6 +12,7 @@ This agent:
 """
 
 import asyncio
+import inspect
 import io
 import json
 import logging
@@ -56,6 +57,11 @@ _cached_keys: dict[str, str] = {
     "DEEPSEEK_BASE_URL": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     "DEEPGRAM_API_KEY": os.getenv("DEEPGRAM_API_KEY", ""),
 }
+# Secrets whose presence gates the cache; an empty value means "not configured yet".
+SECRET_KEYS = ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPGRAM_API_KEY")
+# Workspace settings served to internal callers. Empty is a meaningful value for these
+# (an admin clearing the glossary), so they are cached even when blank.
+WS_KEYS = ("WS_LANGUAGE", "WS_GLOSSARY")
 _keys_last_fetched: float = 0
 
 # Per-speaker audio capture: the agent writes one WAV per participant into this
@@ -78,9 +84,11 @@ async def fetch_api_keys() -> dict[str, str]:
     global _cached_keys, _keys_last_fetched
     import time
 
-    # Cache for 60 seconds to avoid hammering the API
+    # Cache for 60 seconds to avoid hammering the API. Only the SECRET keys are checked for
+    # presence here — WS_* are workspace settings that are legitimately empty, and including
+    # them would make all() false forever and re-fetch on every call.
     now = time.time()
-    if now - _keys_last_fetched < 60 and all(_cached_keys.values()):
+    if now - _keys_last_fetched < 60 and all(_cached_keys[k] for k in SECRET_KEYS if k in _cached_keys):
         return _cached_keys
 
     try:
@@ -89,8 +97,14 @@ async def fetch_api_keys() -> dict[str, str]:
             if res.status_code == 200:
                 data = res.json()
                 for key_name, key_data in data.items():
-                    if isinstance(key_data, dict) and key_data.get("value"):
-                        _cached_keys[key_name] = key_data["value"]
+                    if not isinstance(key_data, dict):
+                        continue
+                    val = key_data.get("value")
+                    # Cache empty values for workspace settings only: clearing the glossary
+                    # must actually clear it, but an empty secret must not clobber the env
+                    # fallback.
+                    if val or (key_name in WS_KEYS and val is not None):
+                        _cached_keys[key_name] = val or ""
                 _keys_last_fetched = now
                 logger.info("API keys refreshed from DB")
             else:
@@ -114,6 +128,58 @@ def prewarm(proc: JobProcess):
         interim_results=True,
         punctuate=True,
     )
+
+
+def _glossary_terms(keys: dict[str, str]) -> list[str]:
+    """Workspace glossary → term list. One per line; capped to Deepgram's keywords limit."""
+    raw = keys.get("WS_GLOSSARY", "") or ""
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in raw.splitlines():
+        t = line.strip()[:60]
+        if not t or t.lower() in seen:
+            continue
+        seen.add(t.lower())
+        out.append(t)
+        if len(out) >= 100:
+            break
+    return out
+
+
+def _boost_kwargs(model: str, terms: list[str]) -> dict:
+    """Deepgram term boosting, shaped for the model generation AND the plugin's kwarg type.
+
+    `keyterm` (nova-3) and `keywords` (nova-2 and older) are NOT aliases — each model rejects
+    the other's parameter. Measured on real calls: nova-2 + keywords recovers a product name
+    the ASR otherwise mangles, with no side effects; nova-3 + keyterm recovers it too but
+    silently deletes unrelated domain words, which is why nova-2 stays the prod default.
+
+    CRUCIAL: the two kwargs take DIFFERENT value shapes in the plugin — `keyterm` wants
+    plain strings (list[str]) but `keywords` wants (term, intensifier) TUPLES
+    (list[tuple[str, float]]). Passing strings to `keywords` raises at STT construction and
+    kills live transcription, so the value is built to match the accepted parameter's type.
+    Intensifier 1.0 = Deepgram's default weight (what the REST eval used).
+
+    The installed plugin version is not pinned, so the kwarg is only passed when this build
+    actually accepts it — an unknown plugin degrades to today's behaviour, never raises.
+    """
+    if not terms:
+        return {}
+    try:
+        accepted = inspect.signature(STT.__init__).parameters
+    except (TypeError, ValueError):
+        return {}
+    if model.startswith("nova-3"):
+        if "keyterm" in accepted:
+            return {"keyterm": terms}
+        if "keyterms" in accepted:
+            return {"keyterms": terms}
+        logger.warning("deepgram plugin accepts no keyterm param — glossary skipped")
+        return {}
+    if "keywords" in accepted:
+        return {"keywords": [(t, 1.0) for t in terms]}
+    logger.warning("deepgram plugin accepts no keywords param — glossary skipped")
+    return {}
 
 
 def participant_language(participant: rtc.RemoteParticipant) -> str | None:
@@ -175,6 +241,7 @@ async def create_stt_for_language(lang: str | None) -> STT | None:
         endpointing_ms=500,
         interim_results=True,
         punctuate=True,
+        **_boost_kwargs(model, _glossary_terms(keys)),
     )
 
 

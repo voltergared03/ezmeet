@@ -185,6 +185,20 @@ export function WorkspaceTab() {
         </div>
       </div>
 
+      {/* Transcription glossary */}
+      <div className="card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{t('settings.glossary')}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>{t('settings.glossaryHint')}</div>
+        <textarea
+          className="field"
+          value={ws.WS_GLOSSARY ?? ''}
+          onChange={e => set('WS_GLOSSARY', e.target.value)}
+          placeholder={t('settings.glossaryPlaceholder')}
+          rows={6}
+          style={{ resize: 'vertical', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}
+        />
+      </div>
+
       {/* Save */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="btn btn-primary" onClick={save} disabled={saving}

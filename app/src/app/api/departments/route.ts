@@ -34,6 +34,9 @@ export const GET = withRoute('departments.list', async () => {
       name: d.name,
       color: d.color,
       teableBaseId: d.teableBaseId,
+      // Admin-only: which ClickUp list this department pushes to is integration
+      // plumbing, and members can see this route for their own departments.
+      ...(isAdmin ? { clickupListId: d.clickupListId } : {}),
       taskCount: d._count.tasks,
       meetingCount: d._count.meetings,
       members: d.members.map((m) => ({

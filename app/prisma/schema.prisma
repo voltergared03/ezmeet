@@ -69,6 +69,11 @@ model User {
   // Personal calendar (ICS) subscription feed — secret token in the URL is the
   // auth; rotating it revokes existing subscriptions.
   calendarFeedToken  String?   @unique
+  // Explicit ClickUp list for this user's tasks, set by an admin in Settings → Users.
+  // Out-ranks both the task's department list and the auto-created personal list, so a
+  // C-level's action items land on their own board no matter whose call produced them.
+  // Null → normal department routing. Never inferred; only ever set from the picker.
+  clickupListId      String?
 
   accounts              Account[]
   sessions              Session[]
@@ -439,11 +444,10 @@ model Department {
   name         String
   color        String? // hex accent for UI chips
   teableBaseId String? // Teable base this department's tasks sync to
-  // Last ClickUp list this department resolved to. The department→list link is otherwise a
-  // NAME match against ClickUp Space names, so renaming either side silently sent the whole
-  // department's tasks to the Call Inbox. Pinned automatically on each successful resolve and
-  // used as the fallback when the name no longer matches. An explicit CLICKUP_LIST_MAP
-  // override still wins, so a wrong pin is always correctable.
+  // The ClickUp list this department's tasks are pushed to. Set by an admin in
+  // Settings → Departments from the live list picker — never inferred. Null → the
+  // department is unmapped and its tasks go to the fallback list; if no fallback is
+  // configured either, they stay Garely-native and are not pushed.
   clickupListId String?
   orgId        String
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
