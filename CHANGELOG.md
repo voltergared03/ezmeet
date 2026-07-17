@@ -4,6 +4,50 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.24.0-beta.1] — 2026-07-17
+
+Meeting tasks stop duplicating and landing on the wrong people, and RDP v2 can finally
+ask Windows to scale its UI.
+
+### Fixed
+- **Duplicate ClickUp tasks (one assigned, one not).** Task creation caught *every* error
+  and retried without assignees. That is only safe for a 400 (request refused, nothing
+  created) — it also fired on timeouts and 5xx, where ClickUp had already created the task,
+  leaving an orphaned assigned copy plus a linked unassigned one. Only a 400 retries now,
+  and the status and assignees are dropped in separate steps so a status name the list
+  doesn't define can no longer cost a valid assignee.
+- **Whole departments falling into the Call Inbox.** List discovery only asked for
+  *folderless* lists, so a ClickUp Space whose lists live inside Folders looked empty —
+  no mapping, no error — and every one of that department's tasks went to the Inbox even
+  though the department plainly existed. Folders are read too, and a Space with no
+  reachable list now warns instead of failing silently.
+- **Tasks assigned to the wrong person, and multi-assignee tasks collapsing to one.**
+  Name matching was an unanchored substring test, so a short name captured an unrelated
+  longer one ("Al" matched "Natalia") and the winner could change between runs. Matching is
+  now exact-then-whole-word, and an ambiguous name resolves to nobody: an unassigned task
+  is visible and fixable, a task on the wrong person is not.
+- **All-hands tasks dumped onto one team's board.** A task with no explicit department
+  inherited its *assignee's* department, so shared work followed whoever the AI named first.
+  A task without a department now goes to the Call Inbox for triage. Expect more Inbox
+  volume — that is the point.
+- **Renaming a department stranded it.** The department→list link was a pure name match
+  against ClickUp Space names. Each successful resolve is now pinned, and the pin is used
+  when the name no longer matches. An explicit list-map override still wins.
+
+### Added
+- **RDP v2 can request Windows UI scaling.** Upstream `guacd` never sends the RDP
+  `desktopScaleFactor` (and zeroes it on every resize), so a HiDPI client could only shrink
+  the picture, never make Windows scale — HD was crisp but tiny. Garely now ships a patched
+  `guacd` (`rdp-gw2/desktop-scale.patch`) that adds a `desktop-scale` parameter, and HD
+  renders at device-pixel density while asking for 150% UI scaling.
+  *Note:* a Windows target configured with `IgnoreClientDesktopScaleFactor=1` discards the
+  request — no RDP client can override that; it must be changed on the server.
+
+### Changed
+- **RDP v2 scale is two fixed modes** — normal and HD — instead of a picker, and switching
+  reconnects. Concurrent reconnects could previously let an older scale win while the UI
+  showed the newer one, so the on-screen scale could disagree with what was rendered.
+
 ## [1.23.0-beta.4] — 2026-07-17
 
 ### Changed
@@ -650,6 +694,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.24.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.1
 [1.23.0-beta.4]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.4
 [1.23.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.3
 [1.23.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.23.0-beta.2
