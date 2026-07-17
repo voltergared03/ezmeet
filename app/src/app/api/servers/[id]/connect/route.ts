@@ -62,6 +62,7 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
       width: clampInt(sp.get('w'), 640, 5120),
       height: clampInt(sp.get('h'), 480, 2880),
       dpi: clampInt(sp.get('dpi'), 96, 240),
+      desktopScale: clampInt(sp.get('ds'), 100, 500),
       drivePath: `/guac-drive/${driveUser}`,
     });
     return NextResponse.json({ method: 'guac', tunnelUrl: guacTunnelUrl(), token: gtoken, sessionId: sess.id });

@@ -218,7 +218,16 @@ services:
   #   docker compose --profile rdp2 up -d --build guacd guac-tunnel
   # Needs GUAC_TOKEN_KEY (32 bytes) in .env; expose guac-tunnel via host-nginx at /guac2.
   guacd:
-    image: guacamole/guacd:1.6.0
+    # Patched guacd 1.6.0: upstream never sends the RDP desktopScaleFactor (and hardcodes it
+    # to 0 on every resize), so a HiDPI client can only shrink the picture, never ask Windows
+    # to scale its UI. Our patch adds a `desktop-scale` parameter and plumbs it through both
+    # the connect-time settings and the display-update PDU. Rebuild after a guacd upgrade:
+    #   git clone --branch <ver> https://github.com/apache/guacamole-server.git && \
+    #   git apply desktop-scale.patch && \
+    #   docker build --build-arg BUILD_JOBS=2 --build-arg WITH_FREERDP='2\.11\.7' \
+    #     -t garely-guacd:<ver>-scale .
+    # The patch lives in rdp-gw2/desktop-scale.patch.
+    image: garely-guacd:1.6.0-scale
     profiles: ["rdp2"]
     restart: unless-stopped
     mem_limit: 512m

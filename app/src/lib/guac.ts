@@ -45,6 +45,11 @@ export interface GuacRdpParams {
    *  the guacd container (a mounted volume). */
   drivePath?: string;
   driveName?: string;
+  /** UI scale factor (percent, 100–500) the Windows server should apply to its desktop —
+   *  the RDP desktopScaleFactor. Lets a HiDPI client request a high resolution AND a
+   *  readable UI. Requires our PATCHED guacd (`garely-guacd:*-scale`): upstream guacd never
+   *  sends this field, so on a stock image the setting is simply ignored. */
+  desktopScale?: number;
 }
 
 /**
@@ -74,6 +79,9 @@ export function mintGuacToken(p: GuacRdpParams): string {
   };
   if (p.password) settings.password = p.password;
   if (p.domain) settings.domain = p.domain;
+  if (p.desktopScale && p.desktopScale > 100) {
+    settings['desktop-scale'] = Math.min(500, Math.round(p.desktopScale));
+  }
   if (p.drivePath) {
     settings['enable-drive'] = true;
     settings['drive-name'] = p.driveName ?? 'Garely';

@@ -71,6 +71,7 @@ export default function ServerSessionPage() {
   // pixel-exact only when its width == frame × dpr — anything less gets upscaled by the browser
   // and looks soft no matter how high it is. On a dpr-2 Retina that means exactly 2×.
   const SCALE_NORMAL = 1.25;
+  const HD_DESKTOP_SCALE = 150; // Windows UI scaling requested in HD (percent)
   const hdRef = useRef(false);
   const [hd, setHd] = useState(false);
   const hdScaleRef = useRef(2);
@@ -120,6 +121,10 @@ export default function ServerSessionPage() {
         const w = Math.round((window.innerWidth || 1280) * s);
         const h = Math.round((window.innerHeight || 800) * s);
         url += `?v=2&w=${w}&h=${h}`;
+        // HD renders at device-pixel density (crisp) and asks Windows to scale its UI to
+        // 150%, so the extra pixels buy sharpness instead of shrinking everything. Needs our
+        // patched guacd; a stock guacd ignores it (the picture is just crisp-and-small).
+        if (hdRef.current) url += `&ds=${HD_DESKTOP_SCALE}`;
       }
       const res = await fetch(url, { method: 'POST' });
       if (seq !== connectSeq.current) return; // superseded by a newer connect — drop this response
