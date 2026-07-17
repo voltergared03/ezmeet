@@ -61,8 +61,18 @@ _cached_keys: dict[str, str] = {
 SECRET_KEYS = ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPGRAM_API_KEY")
 # Workspace settings served to internal callers. Empty is a meaningful value for these
 # (an admin clearing the glossary), so they are cached even when blank.
-WS_KEYS = ("WS_LANGUAGE", "WS_GLOSSARY")
+WS_KEYS = ("WS_LANGUAGE", "WS_GLOSSARY", "WS_REPORT_LANGUAGE")
 _keys_last_fetched: float = 0
+
+# The language the agent WRITES generated prose in (live notes, decisions, action items).
+# Distinct from the STT/transcription language. WS_REPORT_LANGUAGE wins; falls back to the
+# UI language, then English — the same chain as the server's reportLocale().
+LANGUAGE_NAMES = {"uk": "Ukrainian", "ru": "Russian", "en": "English"}
+
+
+def output_language(keys) -> str:
+    code = (keys.get("WS_REPORT_LANGUAGE") or keys.get("WS_LANGUAGE") or "en").strip()
+    return LANGUAGE_NAMES.get(code, "English")
 
 # Per-speaker audio capture: the agent writes one WAV per participant into this
 # shared volume so we can later detect each speaker's language and re-transcribe
@@ -302,7 +312,7 @@ async def entrypoint(ctx: JobContext):
             keys = await fetch_api_keys()
             deepseek_key = keys.get("DEEPSEEK_API_KEY", "")
             deepseek_base = keys.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-            lang_name = "Ukrainian" if keys.get("WS_LANGUAGE", "en") == "uk" else "English"
+            lang_name = output_language(keys)
             if not deepseek_key:
                 return
 
@@ -353,11 +363,17 @@ async def entrypoint(ctx: JobContext):
     async def detect_action_item(text: str, speaker: str):
         """Check if a transcript segment contains an action item and broadcast it."""
         action_keywords = [
+            # Ukrainian
             "треба", "потрібно", "зроби", "зробити", "зробимо",
             "давай", "до п'ятниці", "до завтра", "до кінця тижня",
+            "таск", "задача", "відповідальний", "візьми на себе", "доручаю",
+            # Russian — without these, a Russian action item is dropped before the LLM
+            "нужно", "надо", "сделай", "сделать", "сделаем", "должен", "должны",
+            "поручаю", "берёшь на себя", "берешь на себя", "дедлайн", "срок",
+            "к пятнице", "к завтра", "к концу недели", "до конца недели", "ответственный",
+            # English
             "need to", "should", "will do", "let's do", "make sure",
-            "must", "deadline", "action item", "таск", "задача",
-            "відповідальний", "візьми на себе", "доручаю",
+            "must", "deadline", "action item",
         ]
         lower_text = text.lower()
         if not any(kw in lower_text for kw in action_keywords):
@@ -369,7 +385,7 @@ async def entrypoint(ctx: JobContext):
             keys = await fetch_api_keys()
             deepseek_key = keys.get("DEEPSEEK_API_KEY", "")
             deepseek_base = keys.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-            lang_name = "Ukrainian" if keys.get("WS_LANGUAGE", "en") == "uk" else "English"
+            lang_name = output_language(keys)
             if not deepseek_key:
                 return
 

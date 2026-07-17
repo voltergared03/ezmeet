@@ -25,8 +25,14 @@ export function Toggle({ label, value, onChange, disabled }: { label: string; va
   );
 }
 
-export function FieldWrapper({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="field-label">{label}</label>{children}</div>;
+export function FieldWrapper({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="field-label">{label}</label>
+      {children}
+      {hint ? <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 5, lineHeight: 1.45 }}>{hint}</div> : null}
+    </div>
+  );
 }
 
 export function StatBox({ label, value }: { label: string; value: string }) {

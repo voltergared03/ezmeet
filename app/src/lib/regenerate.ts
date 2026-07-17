@@ -11,7 +11,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { readConfig, getDeepSeekConfig, glossaryTerms } from './config';
 import { sseJsonChunks, chunkDelta } from './sse';
-import { workspaceLocale } from './i18n-server';
+import { reportLocale, languageName } from './i18n-server';
 import { notify } from './notify';
 import { sendReportEmail } from './report-email';
 import { provisionSystemTasksTable } from './system-tasks-table';
@@ -161,8 +161,7 @@ async function generateReportInner(
 
   const ds = await getDeepSeekConfig();
   if (!ds.apiKey) throw new Error('DeepSeek API key not configured');
-  const wsLoc = await workspaceLocale();
-  const langName = wsLoc === 'uk' ? 'Ukrainian' : 'English';
+  const langName = languageName(await reportLocale());
   const glossary = glossaryTerms((await readConfig(['WS_GLOSSARY'])).WS_GLOSSARY);
 
   // Meeting context for tenant scoping + department auto-routing. Fetched up

@@ -18,6 +18,34 @@ export function getTranslator(locale: string, namespace?: string) {
   return createTranslator({ locale: loc, messages: MESSAGES[loc] as any, namespace });
 }
 
+// ─────────────────────────── AI output language ───────────────────────────
+// A DIFFERENT axis from the UI locale: which language the AI writes generated prose in
+// (meeting reports, task titles, decisions, summaries, live notes). Kept separate from the
+// UI `Locale` set on purpose — reports can be Russian while the interface stays Ukrainian,
+// and adding a language here never requires a message catalog. Only ever fed into DeepSeek
+// prompts as a language NAME, never used to render UI strings.
+
+export const REPORT_LANGUAGES = ['en', 'uk', 'ru'] as const;
+export type ReportLanguage = (typeof REPORT_LANGUAGES)[number];
+const LANGUAGE_NAMES: Record<ReportLanguage, string> = { en: 'English', uk: 'Ukrainian', ru: 'Russian' };
+
+/** A language code → the English name of that language, for injecting into an AI prompt. */
+export function languageName(code: string): string {
+  return LANGUAGE_NAMES[code as ReportLanguage] ?? 'English';
+}
+
+/** The AI-output language: WS_REPORT_LANGUAGE → WS_LANGUAGE (back-compat) → 'en'. */
+export async function reportLocale(): Promise<ReportLanguage> {
+  try {
+    const cfg = await readConfig(['WS_REPORT_LANGUAGE', 'WS_LANGUAGE']);
+    const v = (cfg.WS_REPORT_LANGUAGE || cfg.WS_LANGUAGE || '').trim();
+    if ((REPORT_LANGUAGES as readonly string[]).includes(v)) return v as ReportLanguage;
+  } catch {
+    /* DB down → default */
+  }
+  return 'en';
+}
+
 /** Workspace default UI language (WS_LANGUAGE) → 'en'. */
 export async function workspaceLocale(): Promise<Locale> {
   try {

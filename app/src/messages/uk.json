@@ -1070,6 +1070,8 @@
     "dnsCustomDomain": "DNS / Custom domain",
     "defaultTimezone": "Часовий пояс за замовч.",
     "defaultInterfaceLanguage": "Мова інтерфейсу за замовч.",
+    "reportLanguage": "Мова AI-звітів",
+    "reportLanguageHint": "Мова, якою AI пише звіти зустрічей, задачі, рішення та живі нотатки. Не залежить від мови інтерфейсу.",
     "signInMethods": "Способи входу",
     "signInMethodsDesc": "Як користувачі авторизуються. Зберігається одразу. Хоча б один має лишатись увімкненим.",
     "emailPassword": "Email + пароль",

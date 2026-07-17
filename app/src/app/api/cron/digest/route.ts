@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
-import { getTranslator, workspaceLocale } from '@/lib/i18n-server';
+import { getTranslator, workspaceLocale, reportLocale, languageName } from '@/lib/i18n-server';
 import { publicBaseUrl } from '@/lib/config';
 import { esc } from '@/lib/email/html';
 import { withRoute } from '@/lib/with-route';
@@ -28,9 +28,11 @@ async function getHandler(req: NextRequest) {
     select: { id: true, email: true, name: true },
   });
 
-  // Digest emails go out in the workspace (admin-chosen) language.
+  // Digest emails go out in the workspace (admin-chosen) UI language...
   const locale = await workspaceLocale();
   const t = getTranslator(locale);
+  // ...but the AI "where to focus" rollup follows the AI-output language.
+  const rollupLang = languageName(await reportLocale());
   const orgId = (await getSingletonOrgId()) || '';
 
   // One user's digest. Extracted so the per-user AI rollups run in bounded-
@@ -53,7 +55,7 @@ async function getHandler(req: NextRequest) {
       name: u.name,
       taskTitles: tasks.map((tk) => tk.title),
       meetingCount,
-      langName: locale === 'uk' ? 'Ukrainian' : 'English',
+      langName: rollupLang,
     });
 
     const tasksHtml = tasks.length

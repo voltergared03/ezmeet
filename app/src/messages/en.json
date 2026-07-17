@@ -1070,6 +1070,8 @@
     "dnsCustomDomain": "DNS / Custom domain",
     "defaultTimezone": "Default timezone",
     "defaultInterfaceLanguage": "Default interface language",
+    "reportLanguage": "AI report language",
+    "reportLanguageHint": "Language the AI writes meeting reports, tasks, decisions and live notes in. Independent of the interface language.",
     "signInMethods": "Sign-in methods",
     "signInMethodsDesc": "How users authenticate. Saved immediately. At least one must stay enabled.",
     "emailPassword": "Email + password",

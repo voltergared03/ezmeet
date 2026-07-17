@@ -48,12 +48,15 @@ async function getHandler(req: NextRequest) {
   // Both are served here rather than via ALLOWED_KEYS because the PATCH below drops
   // empty values, which would make an emptied glossary impossible to clear.
   if (internal) {
-    const [wsLang, gloss] = await Promise.all([
+    const [wsLang, gloss, repLang] = await Promise.all([
       prisma.systemConfig.findUnique({ where: { key: 'WS_LANGUAGE' } }),
       prisma.systemConfig.findUnique({ where: { key: 'WS_GLOSSARY' } }),
+      prisma.systemConfig.findUnique({ where: { key: 'WS_REPORT_LANGUAGE' } }),
     ]);
     result['WS_LANGUAGE'] = { value: wsLang?.value || 'en', masked: '', updatedAt: '' };
     result['WS_GLOSSARY'] = { value: gloss?.value || '', masked: '', updatedAt: '' };
+    // Empty ⇒ the agent falls back to WS_LANGUAGE (same chain as the server's reportLocale()).
+    result['WS_REPORT_LANGUAGE'] = { value: repLang?.value || '', masked: '', updatedAt: '' };
   }
 
   return NextResponse.json(result);

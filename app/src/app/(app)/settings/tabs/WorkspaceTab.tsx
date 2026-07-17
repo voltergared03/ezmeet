@@ -102,6 +102,13 @@ export function WorkspaceTab() {
               { value: 'en', label: 'English' },
             ]} />
           </FieldWrapper>
+          <FieldWrapper label={t('settings.reportLanguage')} hint={t('settings.reportLanguageHint')}>
+            <Select value={ws.WS_REPORT_LANGUAGE || ws.WS_LANGUAGE} onChange={(v) => set('WS_REPORT_LANGUAGE', v)} options={[
+              { value: 'uk', label: 'Українська' },
+              { value: 'ru', label: 'Русский' },
+              { value: 'en', label: 'English' },
+            ]} />
+          </FieldWrapper>
         </div>
       </div>
 

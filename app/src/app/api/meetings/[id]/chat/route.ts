@@ -10,7 +10,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getDeepSeekConfig } from '@/lib/config';
 import { sseJsonChunks, chunkDelta } from '@/lib/sse';
-import { workspaceLocale } from '@/lib/i18n-server';
+import { reportLocale, languageName } from '@/lib/i18n-server';
 
 export const maxDuration = 120;
 
@@ -81,8 +81,7 @@ export async function POST(
     return NextResponse.json({ error: 'DeepSeek API key not configured' }, { status: 500 });
   }
 
-  const wsLoc = await workspaceLocale();
-  const langName = wsLoc === 'uk' ? 'Ukrainian' : 'English';
+  const langName = languageName(await reportLocale());
 
   // 1-based numbered transcript — MUST match the client's transcript order
   // (both are ordered by startTime asc) so cited line numbers map to the right

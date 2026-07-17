@@ -1,6 +1,6 @@
 import { prisma } from './prisma';
 import { getDeepSeekConfig } from './config';
-import { workspaceLocale } from './i18n-server';
+import { reportLocale, languageName } from './i18n-server';
 
 // Stored question shape (Quiz.questions Json):
 //   { id, prompt, type: 'single'|'multi', options: [{id,text}], correctOptionIds: string[], cites: number[] }
@@ -87,8 +87,7 @@ export async function generateQuizQuestions(meetingId: string, count = 5): Promi
   });
   if (!report || (!report.summary && !report.topics)) throw new Error('no_report');
 
-  const loc = await workspaceLocale();
-  const langName = loc === 'uk' ? 'Ukrainian' : 'English';
+  const langName = languageName(await reportLocale());
   const grounding = JSON.stringify({ summary: report.summary, topics: report.topics }).slice(0, 24000);
 
   const prompt = `You are creating a short comprehension quiz to verify that meeting attendees actually understood the meeting. Using ONLY the meeting report below, write ${count} multiple-choice questions in ${langName}.

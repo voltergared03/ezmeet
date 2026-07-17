@@ -189,6 +189,10 @@ export const CONFIG_DEFAULTS: Record<string, string> = {
   WS_MAX_DURATION_MIN: '240',
   WS_RETENTION_DAYS: '0',
   WS_GLOSSARY: '',
+  // Language the AI writes reports/tasks/decisions/summaries/live-notes in. Empty ⇒ follow
+  // the UI language (WS_LANGUAGE). Decoupled from the UI so a Ukrainian-interface workspace
+  // can generate Russian meeting content. Values: uk | ru | en.
+  WS_REPORT_LANGUAGE: '',
   PRICE_DEEPSEEK_IN: '0.27',
   PRICE_DEEPSEEK_OUT: '1.10',
   PRICE_DEEPGRAM_MIN: '0.0043',

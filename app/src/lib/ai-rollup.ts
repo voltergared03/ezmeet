@@ -11,7 +11,7 @@ export async function aiWeeklyRollup(input: {
   name: string | null;
   taskTitles: string[];
   meetingCount: number;
-  langName: string; // 'Ukrainian' | 'English'
+  langName: string; // English name of the AI-output language, e.g. 'Ukrainian' | 'Russian' | 'English'
 }): Promise<string | null> {
   try {
     const ds = await getDeepSeekConfig();

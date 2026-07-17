@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/lib/auth";
 import { getDeepSeekConfig } from "@/lib/config";
-import { workspaceLocale } from "@/lib/i18n-server";
+import { reportLocale, languageName } from "@/lib/i18n-server";
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
@@ -23,10 +23,9 @@ export async function POST(req: Request) {
   const { apiKey, baseUrl, model } = await getDeepSeekConfig();
   if (!apiKey) return NextResponse.json({ error: "AI not configured" }, { status: 500 });
 
-  // Generated content follows the workspace (admin-chosen) language, not the
+  // Generated content follows the workspace (admin-chosen) AI-output language, not the
   // requesting user's interface language.
-  const locale = await workspaceLocale();
-  const lang = locale === "uk" ? "Ukrainian" : "English";
+  const lang = languageName(await reportLocale());
 
   const systemPrompt = `You are a meeting-prep assistant. Generate a list of discussion questions/topics.
 Each item is a specific question or topic, one short sentence.
