@@ -67,10 +67,21 @@ export default function ServerSessionPage() {
   // sharpness and UI size. Two modes only, no picker: normal 1× and HD 1.25× (the levels that
   // read best in practice). Per-connection, default normal, not persisted — hdRef is what
   // doConnect reads (avoids a stale closure); hd state drives the pill's button.
+  // Normal is a comfort choice (1× was too large). HD must equal devicePixelRatio: a render is
+  // pixel-exact only when its width == frame × dpr — anything less gets upscaled by the browser
+  // and looks soft no matter how high it is. On a dpr-2 Retina that means exactly 2×.
   const SCALE_NORMAL = 1.25;
-  const SCALE_HD = 1.5;
   const hdRef = useRef(false);
   const [hd, setHd] = useState(false);
+  const hdScaleRef = useRef(2);
+  const [hdScale, setHdScale] = useState(2);
+  useEffect(() => {
+    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
+    const v = Math.max(SCALE_NORMAL + 0.25, dpr); // never below normal — HD is always an upgrade
+    hdScaleRef.current = v;
+    setHdScale(v);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Guards against racing reconnects: rapid scale/HD changes fire several /connect requests, and
   // whichever RESPONSE lands last used to win — so the session could end up at an older scale
   // while the UI showed the newest one (this is what made the on-screen scale label lie).
@@ -105,7 +116,7 @@ export default function ServerSessionPage() {
       // UI (it sets no DesktopScaleFactor), so this single number sets both sharpness and UI size.
       let url = `/api/servers/${id}/connect`;
       if (v2) {
-        const s = hdRef.current ? SCALE_HD : SCALE_NORMAL;
+        const s = hdRef.current ? hdScaleRef.current : SCALE_NORMAL;
         const w = Math.round((window.innerWidth || 1280) * s);
         const h = Math.round((window.innerHeight || 800) * s);
         url += `?v=2&w=${w}&h=${h}`;
@@ -207,7 +218,7 @@ export default function ServerSessionPage() {
             tunnelUrl={conn.tunnelUrl || ''}
             token={conn.token}
             serverName={server.name}
-            scale={hd ? SCALE_HD : SCALE_NORMAL}
+            scale={hd ? hdScale : SCALE_NORMAL}
             hd={hd}
             onToggleHd={toggleHd}
             onExit={() => {
