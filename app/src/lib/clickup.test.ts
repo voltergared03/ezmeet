@@ -775,3 +775,264 @@ describe('createClickUpTask retry safety', () => {
     expect(prismaMock.clickUpTaskLink.create).toHaveBeenCalled();
   });
 });
+
+// ─────────────────────── reverse sync: renames + reconcile (regression) ───────────────────────
+
+describe('webhook subscription covers renames', () => {
+  it('re-creates the webhook when the stored one is missing an event we now need', async () => {
+    // Regression: the verify branch compared only the ENDPOINT, so adding an event to the
+    // subscription was a silent no-op — the existing hook matched and was never re-created,
+    // and the new event (taskUpdated → renames) simply never arrived.
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_WEBHOOK_ID: 'wh1' } as any);
+    const { ensureClickUpWebhook } = await import('@/lib/clickup');
+
+    const { calls } = stubFetch((u, method) => {
+      const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [] }] });
+      if (u.includes('/team/team1/webhook') && method === 'GET') {
+        // Same endpoint, but subscribed only to the OLD event set.
+        return json({ webhooks: [{ id: 'wh1', endpoint: 'https://meet.example.com/api/webhooks/clickup', events: ['taskStatusUpdated', 'taskDeleted'] }] });
+      }
+      if (u.includes('/team/team1/webhook') && method === 'POST') return json({ id: 'wh2', secret: 's' });
+      return undefined;
+    });
+
+    const res = await ensureClickUpWebhook();
+    expect(res.ok).toBe(true);
+    const created = calls.find((c) => c.method === 'POST' && c.url.includes('/webhook'));
+    expect(created).toBeTruthy(); // it re-registered instead of short-circuiting
+    expect(created!.body.events).toContain('taskUpdated');
+  });
+
+  it('leaves a healthy webhook alone when endpoint AND events already match', async () => {
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_WEBHOOK_ID: 'wh1' } as any);
+    const { ensureClickUpWebhook } = await import('@/lib/clickup');
+
+    const { calls } = stubFetch((u, method) => {
+      const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.endsWith('/team')) return json({ teams: [{ id: 'team1', members: [] }] });
+      if (u.includes('/team/team1/webhook') && method === 'GET') {
+        return json({ webhooks: [{ id: 'wh1', endpoint: 'https://meet.example.com/api/webhooks/clickup', events: ['taskStatusUpdated', 'taskUpdated', 'taskDeleted'] }] });
+      }
+      return undefined;
+    });
+
+    await ensureClickUpWebhook();
+    expect(calls.some((c) => c.method === 'POST')).toBe(false); // no needless re-registration
+  });
+});
+
+describe('applyClickUpEvent mirrors renames', () => {
+  const json = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+
+  it('writes a ClickUp rename back onto the Garely row', async () => {
+    // A title corrected by hand in ClickUp (e.g. a garbled AI name) must win, or Garely keeps
+    // showing the old wording and the task reads as stale/missing.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: { fT: 'Nologic Center check', fS: 'open' }, table: { base: { orgId: 'org1' } } } as any);
+    prismaMock.row.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    prismaMock.clickUpTaskLink.updateMany.mockResolvedValue({} as any);
+    prismaMock.$transaction.mockResolvedValue([] as any);
+    vi.stubGlobal('fetch', vi.fn(async () => json({ name: 'Knowledge Center check', status: { status: 'to do', type: 'open' } })));
+
+    await applyClickUpEvent('taskUpdated', 'CU1');
+
+    const upd = prismaMock.row.update.mock.calls[0][0] as any;
+    expect(upd.data.data.fT).toBe('Knowledge Center check'); // title mirrored under the title field id
+  });
+
+  it('does not blank a Garely title when ClickUp returns no name', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: { fT: 'Keep me', fS: 'open' }, table: { base: { orgId: 'org1' } } } as any);
+    prismaMock.row.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.updateMany.mockResolvedValue({} as any);
+    prismaMock.$transaction.mockResolvedValue([] as any);
+    vi.stubGlobal('fetch', vi.fn(async () => json({ status: { status: 'in progress', type: 'custom' } })));
+
+    await applyClickUpEvent('taskUpdated', 'CU1');
+
+    const upd = prismaMock.row.update.mock.calls[0][0] as any;
+    expect(upd.data.data.fT).toBe('Keep me');
+    expect(upd.data.data.fS).toBe('in_progress'); // status still mirrored
+  });
+
+  it('skips the write entirely when nothing changed (taskUpdated fires on every edit)', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: { fT: 'Same', fS: 'open' }, table: { base: { orgId: 'org1' } } } as any);
+    prismaMock.taskRow.updateMany.mockResolvedValue({} as any);
+    vi.stubGlobal('fetch', vi.fn(async () => json({ name: 'Same', status: { status: 'to do', type: 'open' } })));
+
+    await applyClickUpEvent('taskUpdated', 'CU1');
+
+    expect(prismaMock.row.update).not.toHaveBeenCalled(); // no churn on a no-op event
+  });
+});
+
+describe('reconcileClickUpTasks (catch-up sweep)', () => {
+  it('converges a status the webhook never delivered, fetching per LIST not per task', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { reconcileClickUpTasks } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([
+      { clickupTaskId: 'CU1', listId: 'L_IT', rowId: 'r1' },
+      { clickupTaskId: 'CU2', listId: 'L_IT', rowId: 'r2' },
+    ] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: { fT: 'T', fS: 'open' }, table: { base: { orgId: 'org1' } } } as any);
+    prismaMock.row.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.updateMany.mockResolvedValue({} as any);
+    prismaMock.clickUpTaskLink.updateMany.mockResolvedValue({} as any);
+    prismaMock.$transaction.mockResolvedValue([] as any);
+
+    const { calls } = stubFetch((u) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.includes('/list/L_IT/task')) {
+        return j({ last_page: true, tasks: [
+          { id: 'CU1', name: 'T', status: { status: 'complete', type: 'closed' } },
+          { id: 'CU2', name: 'T', status: { status: 'to do', type: 'open' } },
+        ] });
+      }
+      return undefined;
+    });
+
+    const res = await reconcileClickUpTasks();
+    expect(res.checked).toBe(2);
+    // One list fetch covers both tasks — never one GET /task per link.
+    expect(calls.filter((c) => c.url.includes('/list/L_IT/task')).length).toBe(1);
+    expect(calls.some((c) => c.url.includes('/task/CU1?') || c.url.endsWith('/task/CU1'))).toBe(false);
+    const wrote = prismaMock.row.update.mock.calls.map((c: any) => c[0].data.data.fS);
+    expect(wrote).toContain('done'); // CU1 converged to done
+  });
+
+  it('never deletes a Garely row for a task that merely MOVED lists', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { reconcileClickUpTasks } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([{ clickupTaskId: 'CUmoved', listId: 'L_IT', rowId: 'r1' }] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any);
+
+    stubFetch((u) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.includes('/list/L_IT/task')) return j({ last_page: true, tasks: [] }); // not in this list any more
+      if (u.includes('/task/CUmoved')) return j({ id: 'CUmoved', name: 'Moved', status: { status: 'to do', type: 'open' } }); // but alive
+      return undefined;
+    });
+
+    const res = await reconcileClickUpTasks();
+    expect(res.deleted).toBe(0);
+    expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('applies ONE authoritative copy per row when a task is split per assignee', async () => {
+    // Regression (high): per-user routing puts N ClickUp copies on ONE Garely row. Mirroring
+    // every copy is last-writer-wins — a rename on the lead copy gets reverted by another
+    // copy's stale name on the same sweep, and completedAt flips. Exactly one copy must win,
+    // and it must be the lead (TaskRow.clickupTaskId), never DB row order.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { reconcileClickUpTasks } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([
+      { clickupTaskId: 'CUb', listId: 'L_IT', rowId: 'r1' }, // non-lead copy, stale name
+      { clickupTaskId: 'CUa', listId: 'L_IT', rowId: 'r1' }, // lead copy, renamed by a human
+    ] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([{ rowId: 'r1', clickupTaskId: 'CUa' }] as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: { fT: 'Old name', fS: 'open' }, table: { base: { orgId: 'org1' } } } as any);
+    prismaMock.row.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.updateMany.mockResolvedValue({} as any);
+    prismaMock.clickUpTaskLink.updateMany.mockResolvedValue({} as any);
+    prismaMock.$transaction.mockResolvedValue([] as any);
+
+    stubFetch((u) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.includes('/list/L_IT/task')) {
+        return j({ last_page: true, tasks: [
+          { id: 'CUa', name: 'Renamed by human', status: { status: 'to do', type: 'open' } },
+          { id: 'CUb', name: 'Old name', status: { status: 'to do', type: 'open' } },
+        ] });
+      }
+      return undefined;
+    });
+
+    await reconcileClickUpTasks();
+
+    // Exactly one write for the row, and it carries the LEAD copy's name.
+    expect(prismaMock.row.update).toHaveBeenCalledTimes(1);
+    const upd = prismaMock.row.update.mock.calls[0][0] as any;
+    expect(upd.data.data.fT).toBe('Renamed by human');
+  });
+
+  it('prunes a dead link with no Garely row instead of counting it as a deletion', async () => {
+    // Found on prod: 53 legacy links pointed at long-gone ClickUp tasks and resolved to no row.
+    // applyClickUpEvent no-ops on those, but the sweep still counted them as "deleted" AND left
+    // them in place — so every run re-probed dead ids and pinned the delete cap forever,
+    // masking any real deletion.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { reconcileClickUpTasks } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([{ clickupTaskId: 'CUdead', listId: 'L_IT', rowId: null }] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any); // nothing claims it
+    prismaMock.clickUpTaskLink.deleteMany.mockResolvedValue({ count: 1 } as any);
+
+    stubFetch((u) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.includes('/list/L_IT/task')) return j({ last_page: true, tasks: [] });
+      if (u.includes('/task/CUdead')) return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' } as Response;
+      return undefined;
+    });
+
+    const res = await reconcileClickUpTasks();
+    expect(res.pruned).toBe(1);
+    expect(res.deleted).toBe(0); // never counted as a task deletion — no user data involved
+    expect(prismaMock.clickUpTaskLink.deleteMany).toHaveBeenCalled(); // the dead link is gone
+    expect(prismaMock.row.deleteMany).not.toHaveBeenCalled(); // and no Garely row touched
+  });
+
+  it('skips a whole list it could not enumerate, instead of per-task checking it', async () => {
+    // A list fetch that fails tells us NOTHING about its tasks. Falling through to a per-task
+    // check would fire one GET per link (rate-limit storm) and risk reading an outage as gone.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { reconcileClickUpTasks } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([
+      { clickupTaskId: 'CUa', listId: 'L_DEAD', rowId: 'r1' },
+      { clickupTaskId: 'CUb', listId: 'L_DEAD', rowId: 'r2' },
+    ] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any);
+
+    const { calls } = stubFetch((u) => {
+      if (u.includes('/list/L_DEAD/task')) {
+        return { ok: false, status: 500, json: async () => ({}), text: async () => 'boom' } as Response;
+      }
+      return undefined;
+    });
+
+    const res = await reconcileClickUpTasks();
+    expect(res.deleted).toBe(0);
+    expect(res.skipped).toBe(2);
+    // No per-task fallback GETs for links whose list we could not read.
+    expect(calls.some((c) => c.url.includes('/task/CUa'))).toBe(false);
+    expect(calls.some((c) => c.url.includes('/task/CUb'))).toBe(false);
+  });
+
+  it('does not delete on a transient API failure — only a confirmed 404', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { reconcileClickUpTasks } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([{ clickupTaskId: 'CUerr', listId: 'L_IT', rowId: 'r1' }] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any);
+
+    stubFetch((u) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.includes('/list/L_IT/task')) return j({ last_page: true, tasks: [] });
+      if (u.includes('/task/CUerr')) {
+        return { ok: false, status: 500, json: async () => ({}), text: async () => 'server error' } as Response;
+      }
+      return undefined;
+    });
+
+    const res = await reconcileClickUpTasks();
+    expect(res.deleted).toBe(0); // a 5xx must never be read as "deleted"
+    expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+  });
+});

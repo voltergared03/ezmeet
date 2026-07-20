@@ -844,7 +844,13 @@ export function clickUpStatusToGarely(statusType: string | null | undefined, sta
 
 // ─────────────────────────── webhook management (ClickUp → Garely) ───────────────────────────
 
-/** Create (or verify) the ClickUp webhook that pushes status/deletion back to Garely. Idempotent. */
+/** Events we need pushed back. `taskUpdated` carries renames — without it a task renamed in
+ *  ClickUp keeps its original AI-generated title in Garely forever, which reads as a stale
+ *  or missing task. */
+const WEBHOOK_EVENTS = ['taskStatusUpdated', 'taskUpdated', 'taskDeleted'];
+
+/** Create (or verify) the ClickUp webhook that pushes status/rename/deletion back to Garely.
+ *  Idempotent, and re-creates whenever the endpoint OR the event set drifts from what we need. */
 export async function ensureClickUpWebhook(): Promise<{ ok: boolean; error?: string }> {
   const cfg = await getClickUpConfig();
   if (!cfg) return { ok: false, error: 'disabled' };
@@ -855,16 +861,21 @@ export async function ensureClickUpWebhook(): Promise<{ ok: boolean; error?: str
     const teamId = await resolveTeamId(cfg);
     const stored = await readConfig(['CLICKUP_WEBHOOK_ID']);
     if (stored.CLICKUP_WEBHOOK_ID) {
-      // Verify the stored webhook still exists + points at us.
-      const list = await cuJson<{ webhooks?: { id: string; endpoint: string }[] }>(cfg.token, `/team/${teamId}/webhook`);
+      // Verify the stored webhook still exists, points at us, AND subscribes to everything we
+      // need. Comparing the endpoint alone used to be enough — but then adding an event to
+      // WEBHOOK_EVENTS was a silent no-op: the existing hook matched on endpoint and was never
+      // re-created, so the new event simply never arrived.
+      const list = await cuJson<{ webhooks?: { id: string; endpoint: string; events?: string[] }[] }>(cfg.token, `/team/${teamId}/webhook`);
       const found = (list.webhooks || []).find((w) => w.id === stored.CLICKUP_WEBHOOK_ID);
-      if (found && found.endpoint === endpoint) return { ok: true };
-      // Endpoint changed (e.g. domain move) → drop the stale webhook before re-creating.
+      const subscribed = new Set(found?.events || []);
+      const hasAllEvents = WEBHOOK_EVENTS.every((e) => subscribed.has(e));
+      if (found && found.endpoint === endpoint && hasAllEvents) return { ok: true };
+      // Endpoint or event set drifted → drop the stale webhook before re-creating.
       if (found) await cuJson(cfg.token, `/webhook/${stored.CLICKUP_WEBHOOK_ID}`, { method: 'DELETE' }).catch(() => {});
     }
     const res = await cuJson<{ id?: string; webhook?: { id: string; secret: string } }>(cfg.token, `/team/${teamId}/webhook`, {
       method: 'POST',
-      body: JSON.stringify({ endpoint, events: ['taskStatusUpdated', 'taskDeleted'] }),
+      body: JSON.stringify({ endpoint, events: WEBHOOK_EVENTS }),
     });
     const wh = res.webhook || (res as { id?: string; secret?: string });
     await writeConfig({
@@ -901,6 +912,54 @@ export async function verifyClickUpSignature(rawBody: string, signature: string 
 }
 
 // ─────────────────────────── reverse apply (a ClickUp event → the Garely Row) ───────────────────────────
+
+/**
+ * Mirror a ClickUp task's current status + name onto its Garely Row. Shared by the webhook
+ * and the reconcile sweep so both apply exactly the same rules.
+ *
+ * ClickUp is the source of truth here: a task renamed there (e.g. an AI title corrected by
+ * hand) must win, or Garely keeps showing the stale wording and the task reads as missing.
+ * Writes are skipped when nothing actually changed — `taskUpdated` fires on every edit
+ * (assignee, priority, custom field), so most events are no-ops and shouldn't churn the DB.
+ */
+async function applyClickUpTaskState(
+  rowId: string,
+  clickupTaskId: string,
+  s: { statusName?: string; statusType?: string; taskName?: string },
+): Promise<void> {
+  const gStatus = clickUpStatusToGarely(s.statusType, s.statusName);
+  const row = await prisma.row.findUnique({
+    where: { id: rowId },
+    select: { data: true, table: { select: { base: { select: { orgId: true } } } } },
+  });
+  if (!row) return;
+  const prov = await getSystemTasksTable(row.table.base.orgId);
+  if (!prov) return;
+
+  const current = (row.data as Record<string, unknown>) ?? {};
+  const data: Record<string, unknown> = { ...current, [prov.fieldIds.status]: gStatus };
+  // Only take the name when ClickUp actually has one — never blank a Garely title.
+  const renamed = !!s.taskName && s.taskName !== String(current[prov.fieldIds.title] ?? '');
+  if (renamed) data[prov.fieldIds.title] = s.taskName;
+
+  const statusChanged = String(current[prov.fieldIds.status] ?? '') !== gStatus;
+  if (!statusChanged && !renamed) {
+    // Nothing to mirror — just record that we checked, so the sweep can report freshness.
+    await prisma.taskRow.updateMany({ where: { rowId }, data: { clickupSyncedAt: new Date() } }).catch(() => {});
+    return;
+  }
+
+  await prisma.$transaction([
+    prisma.row.update({ where: { id: rowId }, data: { data: data as Prisma.InputJsonValue } }),
+    prisma.taskRow.update({
+      where: { rowId },
+      data: { clickupStatus: s.statusName || null, clickupSyncedAt: new Date(), completedAt: gStatus === 'done' ? new Date() : null },
+    }),
+  ]);
+  if (renamed) {
+    await prisma.clickUpTaskLink.updateMany({ where: { clickupTaskId }, data: { title: s.taskName! } }).catch(() => {});
+  }
+}
 
 /**
  * Apply a ClickUp webhook event to the owning Garely task Row. `taskDeleted`
@@ -947,40 +1006,172 @@ export async function applyClickUpEvent(event: string, clickupTaskId: string): P
       return;
     }
 
-    // Status (or generic update): read the authoritative current status from ClickUp.
+    // Status / rename / generic update: read the authoritative current state from ClickUp.
     const cfg = await getClickUpConfig();
     if (!cfg) return;
     let statusName: string | undefined;
     let statusType: string | undefined;
+    let taskName: string | undefined;
     try {
-      const task = await cuJson<{ id?: string; status?: { status?: string; type?: string } }>(cfg.token, `/task/${clickupTaskId}`);
+      const task = await cuJson<{ id?: string; name?: string; status?: { status?: string; type?: string } }>(cfg.token, `/task/${clickupTaskId}`);
       if (task.id && task.id !== clickupTaskId) return; // defensive: ClickUp returned a different task
       statusName = task.status?.status;
       statusType = task.status?.type;
+      taskName = typeof task.name === 'string' ? task.name.trim() : undefined;
     } catch (e) {
       console.error('[clickup] fetch task for status failed:', (e as Error).message);
       return;
     }
-    const gStatus = clickUpStatusToGarely(statusType, statusName);
-
-    const row = await prisma.row.findUnique({
-      where: { id: rowId },
-      select: { data: true, table: { select: { base: { select: { orgId: true } } } } },
-    });
-    if (!row) return;
-    const prov = await getSystemTasksTable(row.table.base.orgId);
-    if (!prov) return;
-    const data = { ...((row.data as Record<string, unknown>) ?? {}), [prov.fieldIds.status]: gStatus };
-    await prisma.$transaction([
-      prisma.row.update({ where: { id: rowId }, data: { data: data as Prisma.InputJsonValue } }),
-      prisma.taskRow.update({
-        where: { rowId },
-        data: { clickupStatus: statusName || null, clickupSyncedAt: new Date(), completedAt: gStatus === 'done' ? new Date() : null },
-      }),
-    ]);
+    await applyClickUpTaskState(rowId, clickupTaskId, { statusName, statusType, taskName });
   } catch (e) {
     console.error('[clickup] applyClickUpEvent failed:', (e as Error).message);
   }
+}
+
+// ─────────────────────────── reconcile (catch-up sweep, ClickUp → Garely) ───────────────────────────
+
+/** How many rows one sweep may delete. A ClickUp outage that 404s everything must not be
+ *  able to wipe the task list; anything above this is a bug or an incident, not a cleanup. */
+const RECONCILE_MAX_DELETES = 25;
+
+/**
+ * Pull the CURRENT state of every linked ClickUp task and mirror it into Garely.
+ *
+ * The webhook is the fast path, but it is fire-and-forget: a delivery missed while we were
+ * redeploying, rate-limited or the hook was disabled is never retried, so a task's status or
+ * name silently drifts for good. This sweep is the safety net that converges that drift.
+ *
+ * Fetches per LIST rather than per task — a workspace with hundreds of linked tasks lives in
+ * a handful of lists, so this is a few requests instead of one per task (ClickUp allows
+ * ~100/min). A task missing from its list is re-checked individually before anything is
+ * deleted: it may simply have been MOVED to another list, and treating a move as a deletion
+ * would destroy the Garely row and its subtasks.
+ */
+export async function reconcileClickUpTasks(): Promise<{ checked: number; updated: number; deleted: number; pruned: number; skipped: number }> {
+  // `deleted` = Garely tasks removed because their ClickUp copy is gone (counts against the
+  // cap). `pruned` = dead link rows cleaned up, which touches no user data.
+  const out = { checked: 0, updated: 0, deleted: 0, pruned: 0, skipped: 0 };
+  const cfg = await getClickUpConfig();
+  if (!cfg) return out;
+
+  const links = await prisma.clickUpTaskLink.findMany({
+    select: { clickupTaskId: true, listId: true, rowId: true },
+  });
+  if (!links.length) return out;
+
+  // Group by list so each list is fetched once.
+  const byList = new Map<string, typeof links>();
+  for (const l of links) {
+    if (!l.listId) continue;
+    const arr = byList.get(l.listId) || [];
+    arr.push(l);
+    byList.set(l.listId, arr);
+  }
+
+  const seen = new Map<string, { name?: string; status?: string; type?: string }>();
+  // Lists we could NOT read in full. A list we failed to enumerate tells us nothing about its
+  // tasks, so its links are skipped wholesale: falling through to a per-task check would both
+  // storm the rate limit (one GET per link) and risk reading an outage as "deleted".
+  const incompleteLists = new Set<string>();
+  for (const [listId] of byList) {
+    let complete = false;
+    for (let page = 0; page < 20; page++) { // hard page cap — never loop forever on a bad API
+      let res: { tasks?: { id: string; name?: string; status?: { status?: string; type?: string } }[]; last_page?: boolean };
+      try {
+        res = await cuJson(cfg.token, `/list/${listId}/task?include_closed=true&subtasks=true&page=${page}`);
+      } catch (e) {
+        console.error('[clickup] reconcile: list fetch failed', listId, (e as Error).message);
+        break; // leave complete=false → this list's links are skipped below
+      }
+      for (const t of res.tasks || []) {
+        seen.set(t.id, { name: t.name, status: t.status?.status, type: t.status?.type });
+      }
+      if (res.last_page || !(res.tasks || []).length) { complete = true; break; }
+    }
+    if (!complete) incompleteLists.add(listId); // includes hitting the page cap mid-list
+  }
+
+  // Resolve rowIds in ONE query (legacy links carry none) and learn each row's "lead" copy.
+  const taskRows = await prisma.taskRow.findMany({
+    where: { clickupTaskId: { in: links.map((l) => l.clickupTaskId) } },
+    select: { rowId: true, clickupTaskId: true },
+  });
+  const rowIdByTaskId = new Map(taskRows.filter((t) => t.clickupTaskId).map((t) => [t.clickupTaskId!, t.rowId]));
+  const leadTaskIdByRow = new Map(taskRows.filter((t) => t.clickupTaskId).map((t) => [t.rowId, t.clickupTaskId!]));
+  const rowIdFor = (l: { clickupTaskId: string; rowId: string | null }) =>
+    l.rowId ?? rowIdByTaskId.get(l.clickupTaskId) ?? null;
+
+  // Per-assignee split puts N ClickUp copies on ONE Garely row. Mirroring every copy would be
+  // last-writer-wins: a rename on one copy gets reverted by another copy's stale name on the
+  // very same sweep, and completedAt would flip. So collect first, then apply ONE copy per row.
+  type State = { name?: string; status?: string; type?: string };
+  const byRow = new Map<string, { taskId: string; state: State }[]>();
+  const collect = (rowId: string, taskId: string, state: State) => {
+    const arr = byRow.get(rowId) || [];
+    arr.push({ taskId, state });
+    byRow.set(rowId, arr);
+  };
+
+  for (const link of links) {
+    const found = seen.get(link.clickupTaskId);
+    const rowId = rowIdFor(link);
+    if (found) {
+      out.checked++;
+      if (!rowId) { out.skipped++; continue; }
+      collect(rowId, link.clickupTaskId, found);
+      continue;
+    }
+
+    // Not in its list. If we couldn't read that list in full, we know nothing — skip.
+    if (!link.listId || incompleteLists.has(link.listId)) { out.skipped++; continue; }
+    // Could be moved, archived (the list query returns neither), or genuinely deleted.
+    try {
+      const t = await cuJson<{ name?: string; status?: { status?: string; type?: string } }>(cfg.token, `/task/${link.clickupTaskId}`);
+      out.checked++;
+      // Alive after all — mirror it rather than discarding the response we already paid for.
+      // This is the only path that reaches ARCHIVED tasks, which the list query never returns.
+      if (rowId) collect(rowId, link.clickupTaskId, { name: t.name, status: t.status?.status, type: t.status?.type });
+      else out.skipped++;
+    } catch (e) {
+      // 404 = gone. Anything else (401 no-access, timeout, 5xx) is unclear → never destructive.
+      if (!(e instanceof ClickUpHttpError && e.status === 404)) { out.skipped++; continue; }
+      if (!rowId) {
+        // Orphan: the ClickUp task is gone AND no Garely row claims this link. The link is
+        // pure bookkeeping garbage — prune it, or every sweep re-probes a dead id forever and
+        // pins the delete cap, masking real deletions. Deletes no user data by construction.
+        await prisma.clickUpTaskLink.deleteMany({ where: { clickupTaskId: link.clickupTaskId } }).catch(() => {});
+        out.pruned++;
+        continue;
+      }
+      // A real Garely task whose ClickUp copy is gone. Only THIS counts against the cap.
+      if (out.deleted >= RECONCILE_MAX_DELETES) { out.skipped++; continue; }
+      await applyClickUpEvent('taskDeleted', link.clickupTaskId);
+      out.deleted++;
+    }
+  }
+
+  // One authoritative copy per row: the lead that markRowOwned recorded, else a deterministic
+  // pick so the choice never depends on DB row order.
+  for (const [rowId, copies] of byRow) {
+    const lead = leadTaskIdByRow.get(rowId);
+    const chosen =
+      copies.find((c) => c.taskId === lead) ??
+      [...copies].sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0))[0];
+    try {
+      await applyClickUpTaskState(rowId, chosen.taskId, {
+        statusName: chosen.state.status, statusType: chosen.state.type, taskName: chosen.state.name?.trim(),
+      });
+      out.updated++;
+    } catch (e) {
+      console.error('[clickup] reconcile: apply failed', chosen.taskId, (e as Error).message);
+      out.skipped++;
+    }
+  }
+
+  if (out.deleted >= RECONCILE_MAX_DELETES) {
+    console.warn('[clickup] reconcile hit the delete cap — stopping deletions this run:', RECONCILE_MAX_DELETES);
+  }
+  return out;
 }
 
 // ─────────────────────────── migration (existing Garely tasks → ClickUp) ───────────────────────────
