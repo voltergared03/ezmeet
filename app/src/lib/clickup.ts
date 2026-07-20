@@ -836,7 +836,16 @@ export function garelyStatusToClickUp(status: string | null | undefined): string
 export function clickUpStatusToGarely(statusType: string | null | undefined, statusName: string | null | undefined): 'open' | 'in_progress' | 'done' {
   const type = (statusType || '').toLowerCase();
   const name = (statusName || '').toLowerCase();
+  // Prefer ClickUp's own semantic TYPE — it is language-agnostic. A list has exactly one
+  // 'open' status (the initial one) and one 'closed'/'done'; everything a team adds in
+  // between is type 'custom'. A task parked in one of those was deliberately moved off
+  // "to do" and is not finished, so it is work in progress — whatever the stage is called
+  // ("in control", "routine", "На перевірці"). Matching English status names instead would
+  // silently report every non-English workspace's active work as untouched.
   if (type === 'done' || type === 'closed') return 'done';
+  if (type === 'open') return 'open';
+  if (type === 'custom') return 'in_progress';
+  // No type at all (older payloads) → fall back to name hints.
   if (name.includes('done') || name.includes('complete') || name.includes('closed')) return 'done';
   if (name.includes('progress') || name.includes('blocked') || name.includes('review')) return 'in_progress';
   return 'open';

@@ -494,6 +494,23 @@ describe('status mapping', () => {
     expect(clickUpStatusToGarely('open', 'New')).toBe('open');
     expect(clickUpStatusToGarely('open', 'to do')).toBe('open');
   });
+
+  it('treats EVERY custom stage as in-progress, whatever it is named', () => {
+    // A list has one 'open' status and one 'closed'; everything a team adds between them is
+    // type 'custom'. Those tasks were deliberately moved off "to do" and are not finished.
+    // Keyed on ClickUp's semantic type, NOT English names — matching names reported a
+    // non-English workspace's active work as untouched.
+    expect(clickUpStatusToGarely('custom', 'in control')).toBe('in_progress');
+    expect(clickUpStatusToGarely('custom', 'routine')).toBe('in_progress');
+    expect(clickUpStatusToGarely('custom', 'На перевірці')).toBe('in_progress');
+    expect(clickUpStatusToGarely('custom', 'в работе')).toBe('in_progress');
+  });
+
+  it('falls back to name hints only when ClickUp sends no type', () => {
+    expect(clickUpStatusToGarely(null, 'Complete')).toBe('done');
+    expect(clickUpStatusToGarely(undefined, 'In Review')).toBe('in_progress');
+    expect(clickUpStatusToGarely('', 'Something else')).toBe('open');
+  });
 });
 
 describe('verifyClickUpSignature', () => {
