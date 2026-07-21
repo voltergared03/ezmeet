@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { meetingId, speakerName, speakerId, content, language, startTime, endTime, confidence } = body;
+    const { meetingId, speakerName, speakerId, content, language, startTime, endTime, confidence, startEpochMs, endEpochMs } = body;
 
     if (!meetingId || !content) {
       return NextResponse.json({ error: 'meetingId and content required' }, { status: 400 });
@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
     const newEnd = typeof endTime === 'number' ? endTime : 0;
     const newConf = typeof confidence === 'number' ? confidence : null;
     const newLang = language || null;
+    // Absolute UTC millis (new-agent only; null from older agents / pre-fix rows).
+    const newStartEpoch = typeof startEpochMs === 'number' ? startEpochMs : null;
+    const newEndEpoch = typeof endEpochMs === 'number' ? endEpochMs : null;
 
     // Coalesce this final into the most-recent row when it's the SAME speaker,
     // SAME language and temporally contiguous — turning a stream of 0.5s
@@ -66,6 +69,9 @@ export async function POST(req: NextRequest) {
         data: {
           content: `${last.content} ${content}`.replace(/\s+/g, ' ').trim(),
           endTime: Math.max(last.endTime, newEnd),
+          // The row keeps its own (earlier) start; extend only the end. Mirror that for the
+          // absolute epochs so the merged row spans start(first)..end(latest).
+          endEpochMs: last.endEpochMs != null && newEndEpoch != null ? Math.max(last.endEpochMs, newEndEpoch) : (newEndEpoch ?? last.endEpochMs),
           confidence:
             last.confidence != null && newConf != null
               ? (last.confidence + newConf) / 2
@@ -84,6 +90,8 @@ export async function POST(req: NextRequest) {
         language: newLang,
         startTime: newStart,
         endTime: newEnd,
+        startEpochMs: newStartEpoch,
+        endEpochMs: newEndEpoch,
         confidence: newConf,
         isFinal: true,
       },

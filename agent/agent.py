@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import time
 import wave
 from datetime import datetime
 
@@ -291,6 +292,14 @@ async def entrypoint(ctx: JobContext):
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
+    # One meeting-wide time anchor, captured once. MONO0 is a monotonic reference (immune to
+    # wall-clock jumps) used to place every speaker's segments on ONE timeline; WALL0 is the
+    # matching UTC epoch so each segment also carries an absolute time the report can align to
+    # the recording. Each participant's Deepgram start_time is relative to when THAT stream
+    # opened, so without this anchor every speaker has a different, meaningless zero.
+    MONO0 = time.monotonic()
+    WALL0 = time.time()
+
     # Try to get latest Deepgram key, fall back to prewarm STT
     fresh_stt = await create_stt_with_latest_key()
     stt: STT = fresh_stt if fresh_stt else ctx.proc.userdata["stt"]
@@ -449,11 +458,19 @@ async def entrypoint(ctx: JobContext):
             safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", participant.identity)[:60]
             rec["path"] = os.path.join(SPEAKER_AUDIO_DIR, f"{meeting_id}__{safe_id}.wav")
 
+        # Monotonic instant of this stream's FIRST pushed frame — Deepgram's start_time is
+        # relative to that first audio, so this is the anchor that maps a per-stream offset
+        # onto the meeting-wide clock. A LOCAL per invocation on purpose: a rejoin runs a
+        # fresh process_participant whose Deepgram zero resets, and must get a fresh anchor.
+        anchor = {"mono": None}
+
         async def feed_audio():
             try:
                 async for event in audio_stream:
                     if isinstance(event, rtc.AudioFrameEvent):
                         frame = event.frame
+                        if anchor["mono"] is None:
+                            anchor["mono"] = time.monotonic()
                         stt_stream.push_frame(frame)
                         if rec["path"]:
                             try:
@@ -507,8 +524,21 @@ async def entrypoint(ctx: JobContext):
                             continue
 
                         language = str(getattr(alt, "language", "uk") or "uk")
-                        start_time = getattr(alt, "start_time", segment_counter * 5.0)
-                        end_time = getattr(alt, "end_time", segment_counter * 5.0 + 4.0)
+                        # Base of this stream on the meeting-wide clock: seconds from the agent
+                        # connect to this stream's first pushed frame. Falls back to "now" if no
+                        # frame has been seen yet (shouldn't happen — a FINAL implies audio).
+                        stream_base = (anchor["mono"] if anchor["mono"] is not None else time.monotonic()) - MONO0
+                        dg_start = getattr(alt, "start_time", None)
+                        dg_end = getattr(alt, "end_time", None)
+                        if dg_start is None:
+                            # No per-word timing from Deepgram → place it at the current point on
+                            # the meeting clock (lags true speech by ~endpointing latency, not the
+                            # old shared segment_counter*5 which was on no clock at all).
+                            start_time = time.monotonic() - MONO0
+                            end_time = start_time
+                        else:
+                            start_time = stream_base + float(dg_start)
+                            end_time = stream_base + float(dg_end if dg_end is not None else dg_start)
                         confidence = getattr(alt, "confidence", 0.95)
 
                         segment = {
@@ -518,6 +548,9 @@ async def entrypoint(ctx: JobContext):
                             "language": language,
                             "startTime": start_time,
                             "endTime": end_time,
+                            # Absolute UTC millis so the report can align to the recording.
+                            "startEpochMs": round((WALL0 + start_time) * 1000),
+                            "endEpochMs": round((WALL0 + end_time) * 1000),
                             "confidence": confidence,
                         }
 

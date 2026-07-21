@@ -271,8 +271,14 @@ model TranscriptSegment {
   speaker     User?    @relation(fields: [speakerId], references: [id], onDelete: SetNull)
   content     String
   language    String? // ru | uk | en
+  // Meeting-global seconds (zero = agent connect ≈ meeting start). One clock across all
+  // speakers — unlike the per-participant Deepgram offsets these are derived from.
   startTime   Float
   endTime     Float
+  // Absolute UTC epoch millis of the spoken moment. Lets the report align the transcript to
+  // the recording (Recording.createdAt) exactly. Null on rows written before this shipped.
+  startEpochMs Float?
+  endEpochMs   Float?
   confidence  Float?
   isFinal     Boolean  @default(true)
   createdAt   DateTime @default(now())

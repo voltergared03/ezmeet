@@ -63,20 +63,44 @@ export async function POST(
     ? { meetingId, speakerId: track.speakerId }
     : { meetingId, speakerId: null, speakerName: track.speakerName };
 
+  // Re-transcription returns times relative to THIS speaker's own WAV (zero = stream open),
+  // but stored startTime is the meeting-global clock (all speakers share one zero). Writing
+  // the raw WAV-relative times would drop this speaker to ~0 and scramble transcript order.
+  // So preserve the speaker's position: shift the new times so their earliest lands where the
+  // speaker's earliest segment already was, and rebuild the absolute epochs from the same anchor.
+  const existing = await prisma.transcriptSegment.findMany({
+    where,
+    select: { startTime: true, startEpochMs: true },
+    orderBy: { startTime: 'asc' },
+  });
+  const base = existing.length ? existing[0].startTime : 0; // speaker's meeting-global start
+  const newMin = Math.min(...segments.map((s) => s.start));
+  const shift = base - newMin;
+  // WALL0 (agent connect epoch, ms) recovered from any epoch-bearing old row: it's constant
+  // across a meeting, so startEpochMs - startTime*1000 yields it. Null on old meetings.
+  const anchorRow = existing.find((r) => r.startEpochMs != null);
+  const wall0ms = anchorRow ? (anchorRow.startEpochMs as number) - anchorRow.startTime * 1000 : null;
+
   await prisma.$transaction([
     prisma.transcriptSegment.deleteMany({ where }),
     prisma.transcriptSegment.createMany({
-      data: segments.map((s) => ({
-        meetingId,
-        speakerId: track.speakerId || null,
-        speakerName: track.speakerName || null,
-        content: s.content,
-        language,
-        startTime: s.start,
-        endTime: s.end,
-        confidence: s.confidence,
-        isFinal: true,
-      })),
+      data: segments.map((s) => {
+        const st = s.start + shift;
+        const en = s.end + shift;
+        return {
+          meetingId,
+          speakerId: track.speakerId || null,
+          speakerName: track.speakerName || null,
+          content: s.content,
+          language,
+          startTime: st,
+          endTime: en,
+          startEpochMs: wall0ms != null ? wall0ms + st * 1000 : null,
+          endEpochMs: wall0ms != null ? wall0ms + en * 1000 : null,
+          confidence: s.confidence,
+          isFinal: true,
+        };
+      }),
     }),
     prisma.speakerTrack.update({ where: { id: trackId }, data: { detectedLanguage: language } }),
   ]);

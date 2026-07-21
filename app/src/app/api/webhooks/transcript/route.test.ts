@@ -106,4 +106,41 @@ describe('POST /api/webhooks/transcript — merge', () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(update).not.toHaveBeenCalled();
   });
+
+  it('persists absolute epochs on a new segment', async () => {
+    findFirst.mockResolvedValue(null as any);
+    await POST(jsonReq('POST', {
+      meetingId: 'm1', speakerId: 'u1', speakerName: 'Alice',
+      content: 'hi', language: 'uk', startTime: 5, endTime: 7,
+      startEpochMs: 1700000005000, endEpochMs: 1700000007000,
+    }));
+    const data = (create.mock.calls[0][0] as any).data;
+    expect(data.startEpochMs).toBe(1700000005000);
+    expect(data.endEpochMs).toBe(1700000007000);
+  });
+
+  it('leaves epochs null when the agent does not send them (older agent)', async () => {
+    findFirst.mockResolvedValue(null as any);
+    await POST(jsonReq('POST', {
+      meetingId: 'm1', speakerId: 'u1', speakerName: 'Alice',
+      content: 'hi', language: 'uk', startTime: 5, endTime: 7,
+    }));
+    const data = (create.mock.calls[0][0] as any).data;
+    expect(data.startEpochMs).toBeNull();
+    expect(data.endEpochMs).toBeNull();
+  });
+
+  it('extends the end epoch (keeps the first start) when merging', async () => {
+    findFirst.mockResolvedValue({ ...LAST, startEpochMs: 1700000000000, endEpochMs: 1700000002000 } as any);
+    await POST(jsonReq('POST', {
+      meetingId: 'm1', speakerId: 'u1', speakerName: 'Alice',
+      content: 'world', language: 'uk', startTime: 2.1, endTime: 3,
+      startEpochMs: 1700000002100, endEpochMs: 1700000003000,
+    }));
+    expect(create).not.toHaveBeenCalled();
+    const data = (update.mock.calls[0][0] as any).data;
+    expect(data.endEpochMs).toBe(1700000003000); // extended to the latest
+    expect('startEpochMs' in data).toBe(false);   // first row keeps its own start
+  });
+
 });
