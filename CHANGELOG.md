@@ -4,6 +4,34 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.24.0-beta.4] — 2026-07-21
+
+Meeting-report transcripts line up on one timeline, ClickUp changes flow back into Garely,
+and RDP v2 starts sharp every time.
+
+### Fixed
+- **Transcript timeline was offset from real time.** Each speaker's timestamps were measured
+  from the moment that person joined, so different speakers sat on different, unrelated clocks
+  — a line spoken 3 minutes in could show as "0:02". Every speaker is now placed on one
+  meeting-wide timeline, so the transcript reads in true order and matches when things were
+  actually said. Applies to meetings recorded from now on; existing transcripts are left as
+  they are (so older reports' citation links keep working).
+- **Tasks looked stuck in Garely after they'd moved on in ClickUp.** Renames made in ClickUp
+  never came back (the reverse sync only listened for status changes and deletions), so a task
+  renamed there kept its old AI-generated title here and seemed lost. Renames now sync back.
+  And custom ClickUp stages — "in control", "routine", anything a team adds between "to do" and
+  "done" — are now shown as *In progress* instead of *Open*, by ClickUp's own status type so it
+  works in any language.
+
+### Added
+- **Hourly ClickUp catch-up sync.** The live ClickUp→Garely webhook is fire-and-forget, so a
+  delivery missed during a deploy or a rate-limit used to drift forever. An hourly sweep now
+  reconciles every linked task's status and name, and quietly prunes dead links. It is
+  deletion-guarded: a task merely moved between lists is never mistaken for a deleted one.
+- **RDP v2 remembers HD and starts in it.** HD was per-session and defaulted off, so you had to
+  toggle it every time to get the crisp, device-pixel picture. It now defaults on and remembers
+  your choice.
+
 ## [1.24.0-beta.3] — 2026-07-17
 
 The AI can now write meeting content in Russian, chosen by an admin — independent of the
@@ -757,6 +785,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.24.0-beta.4]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.4
 [1.24.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.3
 [1.24.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.2
 [1.24.0-beta.1]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.1
