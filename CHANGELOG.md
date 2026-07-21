@@ -4,6 +4,15 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.24.0-beta.5] — 2026-07-21
+
+### Fixed
+- **Opening Garely while already signed in showed the login page.** A bookmark (or a
+  second tab) pointing straight at the login URL always rendered the sign-in form, even
+  for a user who was already logged in — the login page never redirected an authenticated
+  visitor into the app. It now bounces a signed-in user straight to where they were headed
+  (or the home page), and still shows the form for a genuinely signed-out or stale session.
+
 ## [1.24.0-beta.4] — 2026-07-21
 
 Meeting-report transcripts line up on one timeline, ClickUp changes flow back into Garely,
@@ -785,6 +794,7 @@ user-facing features, plus one user-facing fix.
   installable PWA with push notifications, full uk/en i18n, and a self-hosted
   one-command installer with automatic HTTPS.
 
+[1.24.0-beta.5]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.5
 [1.24.0-beta.4]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.4
 [1.24.0-beta.3]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.3
 [1.24.0-beta.2]: https://github.com/voltergared03/garely/releases/tag/v1.24.0-beta.2
