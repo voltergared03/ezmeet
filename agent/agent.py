@@ -82,6 +82,14 @@ SPEAKER_AUDIO_DIR = os.getenv("SPEAKER_AUDIO_DIR", "/speaker-audio") or ""
 if SPEAKER_AUDIO_DIR:
     try:
         os.makedirs(SPEAKER_AUDIO_DIR, exist_ok=True)
+        # The agent runs as root and writes WAVs here, but the app container (uid 1001,
+        # nextjs) prunes old ones in the daily cron. Deleting a file needs write on the
+        # DIRECTORY, so make it world-writable — otherwise the prune silently no-ops and
+        # this volume grows without bound (it was 7 GB before this was fixed).
+        try:
+            os.chmod(SPEAKER_AUDIO_DIR, 0o777)
+        except Exception as _ce:
+            logger.warning(f"speaker-audio chmod failed ({SPEAKER_AUDIO_DIR}): {_ce}")
     except Exception as _e:
         logger.warning(f"speaker-audio dir unavailable ({SPEAKER_AUDIO_DIR}): {_e}")
         SPEAKER_AUDIO_DIR = ""
