@@ -163,13 +163,22 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        echo "[backup] sidecar started — daily pg_dump, keeping 14"
+        set -o pipefail
+        echo "[backup] sidecar started — daily pg_dump (pipefail on), keeping 14"
         while true; do
           ts=$$(date +%F-%H%M)
-          if PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h eam-meet-db -U "$$POSTGRES_USER" "$$POSTGRES_DB" | gzip > "/backups/ezmeet-$$ts.sql.gz"; then
-            echo "[backup] wrote ezmeet-$$ts.sql.gz"
+          final="/backups/ezmeet-$$ts.sql.gz"
+          tmp="$$final.partial"
+          rm -f /backups/*.partial   # clear any leftover from a crashed run
+          # pipefail makes the pipeline fail when pg_dump fails, not only when gzip fails:
+          # a truncated dump used to exit 0 and get rotated in over a good backup. Write to a
+          # .partial (which the rotation glob never matches) and atomically rename only on a
+          # successful, NON-EMPTY dump, so a bad night can never destroy prior backups.
+          if PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h eam-meet-db -U "$$POSTGRES_USER" "$$POSTGRES_DB" | gzip > "$$tmp" && [ -s "$$tmp" ]; then
+            mv "$$tmp" "$$final"
+            echo "[backup] wrote ezmeet-$$ts.sql.gz ($$(wc -c < "$$final") bytes)"
           else
-            echo "[backup] FAILED at $$ts"; rm -f "/backups/ezmeet-$$ts.sql.gz"
+            echo "[backup] FAILED at $$ts — prior backups kept intact"; rm -f "$$tmp"
           fi
           ls -1t /backups/ezmeet-*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
           sleep 86400
