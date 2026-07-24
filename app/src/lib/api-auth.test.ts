@@ -32,6 +32,25 @@ describe('requireAuth', () => {
   });
 });
 
+describe('disabled accounts are cut off from the API too', () => {
+  it('requireAuth responds 403 for a disabled user with a valid session', async () => {
+    mockAuth.mockResolvedValue(mockSession({ status: 'disabled' }));
+    expect(status(await requireAuth())).toBe(403);
+  });
+
+  it('requireMeetingAccess responds 403 for a disabled user before checking access', async () => {
+    mockAuth.mockResolvedValue(mockSession({ status: 'disabled' }));
+    const r = await requireMeetingAccess('m1');
+    expect(status(r)).toBe(403);
+    expect(mockAccess).not.toHaveBeenCalled(); // short-circuits before the access query
+  });
+
+  it('requireAdmin responds 403 for a disabled admin', async () => {
+    mockAuth.mockResolvedValue(mockSession({ role: 'admin', status: 'disabled' }));
+    expect(status(await requireAdmin())).toBe(403);
+  });
+});
+
 describe('requireAdmin', () => {
   it('responds 401 when not signed in', async () => {
     mockAuth.mockResolvedValue(null);

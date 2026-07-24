@@ -100,6 +100,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
       strategy: 'jwt',
     },
     callbacks: {
+      /**
+       * Who may sign in at all. Without this, ANY Google account could sign in:
+       * the adapter creates the user and `createUser` enrolls them in the org, so a
+       * stranger became an active member. The domain allowlist only ever gated
+       * password self-registration, never SSO.
+       *
+       * Order matters — an already-provisioned account must never be locked out by
+       * a domain list that was mistyped or changed later:
+       *   1. known account  → allow (but refuse a disabled one, so offboarding bites
+       *                       at the door too)
+       *   2. first run      → allow, the setup wizard promotes the first sign-in to admin
+       *   3. new account    → allow only from an allowlisted domain; with no list,
+       *                       nobody self-provisions and admins invite instead.
+       */
+      async signIn({ user }) {
+        const email = (user?.email || '').trim().toLowerCase();
+        if (!email) return false;
+        try {
+          const existing = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
+            select: { status: true },
+          });
+          if (existing) return existing.status !== 'disabled';
+
+          if ((await prisma.user.count()) === 0) return true; // first-run setup
+
+          const { selfRegDomains } = await getAuthConfig();
+          const domain = email.split('@')[1] || '';
+          const ok = selfRegDomains.length > 0 && selfRegDomains.includes(domain);
+          if (!ok) console.warn('[auth] sign-in refused for un-allowlisted domain:', domain);
+          return ok;
+        } catch (e) {
+          // Fail CLOSED: if we can't tell who this is, don't provision them.
+          console.error('[auth] signIn check failed:', (e as Error).message);
+          return false;
+        }
+      },
       async jwt({ token, user, account }) {
         if (user) {
           token.id = user.id;

@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockReset } from 'vitest-mock-extended';
 import { prisma as prismaMock } from '@/lib/__mocks__/prisma';
 import { auth } from '@/lib/auth';
+import { userCanAccessMeeting } from '@/lib/access';
 import { createLivekitToken, createRoom } from '@/lib/livekit';
 import { mockSession, jsonReq, ctx } from '@/test/helpers';
 import { POST } from '@/app/api/meetings/[id]/join-token/route';
 
 vi.mock('@/lib/prisma');
 vi.mock('@/lib/auth', () => ({ auth: vi.fn() }));
+vi.mock('@/lib/access', () => ({ userCanAccessMeeting: vi.fn() }));
 vi.mock('@/lib/livekit', () => ({
   createLivekitToken: vi.fn(async () => 'lk-token'),
   createRoom: vi.fn(async () => {}),
@@ -29,6 +31,7 @@ beforeEach(() => {
   mockAuth.mockReset();
   vi.mocked(createLivekitToken).mockClear();
   vi.mocked(createRoom).mockClear();
+  vi.mocked(userCanAccessMeeting).mockReset();
 });
 
 describe('POST /api/meetings/[id]/join-token', () => {
@@ -48,6 +51,33 @@ describe('POST /api/meetings/[id]/join-token', () => {
     mockAuth.mockResolvedValue(null);
     prismaMock.meeting.findUnique.mockResolvedValue(meeting({ allowGuests: false }) as any);
     expect((await POST(jsonReq('POST', { guestName: 'Guest' }), ctx({ id: 'm1' }))).status).toBe(403);
+  });
+
+  it('403 when a signed-in NON-participant asks to join a PRIVATE meeting (allowGuests=false)', async () => {
+    mockAuth.mockResolvedValue(mockSession({ id: 'outsider' }));
+    prismaMock.meeting.findUnique.mockResolvedValue(meeting({ allowGuests: false }) as any);
+    vi.mocked(userCanAccessMeeting).mockResolvedValue(false);
+    const r = await POST(jsonReq('POST', {}), ctx({ id: 'm1' }));
+    expect(r.status).toBe(403);
+    expect(createLivekitToken).not.toHaveBeenCalled(); // no token minted for an outsider
+  });
+
+  it('lets a signed-in PARTICIPANT into a private meeting', async () => {
+    mockAuth.mockResolvedValue(mockSession({ id: 'member' }));
+    prismaMock.meeting.findUnique.mockResolvedValue(meeting({ allowGuests: false }) as any);
+    vi.mocked(userCanAccessMeeting).mockResolvedValue(true);
+    prismaMock.user.findUnique.mockResolvedValue({ preferences: {} } as any);
+    const r = await POST(jsonReq('POST', {}), ctx({ id: 'm1' }));
+    expect(r.status).toBe(200);
+  });
+
+  it('does NOT gate an OPEN meeting (allowGuests default true) for a signed-in member', async () => {
+    mockAuth.mockResolvedValue(mockSession({ id: 'member' }));
+    prismaMock.meeting.findUnique.mockResolvedValue(meeting() as any); // allowGuests: true
+    prismaMock.user.findUnique.mockResolvedValue({ preferences: {} } as any);
+    const r = await POST(jsonReq('POST', {}), ctx({ id: 'm1' }));
+    expect(r.status).toBe(200);
+    expect(userCanAccessMeeting).not.toHaveBeenCalled(); // open meeting → no access query
   });
 
   it('202 + creates a join request for a new guest (waiting room)', async () => {

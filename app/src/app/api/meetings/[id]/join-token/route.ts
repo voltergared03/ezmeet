@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { userCanAccessMeeting } from '@/lib/access';
 import { createLivekitToken, createRoom } from '@/lib/livekit';
 import { generateMeetingSlug } from '@/lib/utils';
 import { readConfig } from '@/lib/config';
@@ -122,6 +123,16 @@ export async function POST(
       participantId = session.user.id;
       isHost = meeting.createdById === participantId || id === 'quick';
       isAdmin = session.user.role === 'admin';
+      // A private meeting (guests disabled) is not open to just any signed-in member:
+      // being logged in is not the same as being invited. This mirrors the invite route
+      // (join/[token]) — an open meeting (allowGuests !== false, the default) stays
+      // joinable by anyone with the link, which is how invites are meant to work.
+      if (id !== 'quick' && !isHost && !isAdmin && meeting.allowGuests === false) {
+        const ok = await userCanAccessMeeting(meeting.id, participantId, session.user.role);
+        if (!ok) {
+          return NextResponse.json({ error: 'You do not have access to this meeting' }, { status: 403 });
+        }
+      }
       // Learned spokenLanguage wins; otherwise the user's UI language is a prior
       // (helps Deepgram break the uk↔ru tie). Guests have neither → agent uses
       // the workspace default (WS_LANGUAGE).

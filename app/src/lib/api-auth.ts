@@ -15,17 +15,30 @@ import { jsonError } from './http';
 //
 // Adopt incrementally — each migrated route should gain a test (Phase 2).
 
-/** Require any authenticated user. Returns the session, or a 401 response. */
+/**
+ * A disabled account keeps a valid JWT until it expires. The (app) layout bounces
+ * them out of the UI, but every API route stayed reachable — so "disabling" a
+ * user did not actually cut off their access to meetings, transcripts, recordings
+ * or the vault. Status is refreshed from the DB on every token read, so this costs
+ * nothing extra.
+ */
+function isDisabled(session: Session): boolean {
+  return session.user?.status === 'disabled';
+}
+
+/** Require any authenticated, active user. Returns the session, or a 401 / 403 response. */
 export async function requireAuth(): Promise<Session | Response> {
   const session = await auth();
   if (!session?.user) return jsonError('unauthorized', 401);
+  if (isDisabled(session)) return jsonError('forbidden', 403);
   return session;
 }
 
-/** Require an admin. Returns the session, or a 401 / 403 response. */
+/** Require an active admin. Returns the session, or a 401 / 403 response. */
 export async function requireAdmin(): Promise<Session | Response> {
   const session = await auth();
   if (!session?.user) return jsonError('unauthorized', 401);
+  if (isDisabled(session)) return jsonError('forbidden', 403);
   if (session.user.role !== 'admin') return jsonError('forbidden', 403);
   return session;
 }
@@ -37,6 +50,7 @@ export async function requireAdmin(): Promise<Session | Response> {
 export async function requireMeetingAccess(meetingId: string): Promise<Session | Response> {
   const session = await auth();
   if (!session?.user) return jsonError('unauthorized', 401);
+  if (isDisabled(session)) return jsonError('forbidden', 403);
   const ok = await userCanAccessMeeting(meetingId, session.user.id, session.user.role);
   if (!ok) return jsonError('forbidden', 403);
   return session;
@@ -50,6 +64,7 @@ export async function requireMeetingAccess(meetingId: string): Promise<Session |
 export async function requireOrg(): Promise<{ session: Session; orgId: string } | Response> {
   const session = await auth();
   if (!session?.user) return jsonError('unauthorized', 401);
+  if (isDisabled(session)) return jsonError('forbidden', 403);
   const orgId = await getCurrentOrgId(session);
   if (!orgId) return jsonError('no_org', 403);
   return { session, orgId };
