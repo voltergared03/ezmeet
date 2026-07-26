@@ -398,37 +398,59 @@ ${participantsLine}${departmentsLine}${customFieldsLine}
 TRANSCRIPT:
 ${numbered}`;
 
-  const res = await fetch(`${ds.baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${ds.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: ds.model,
-      messages: [
-        { role: 'system', content: 'You are a meeting analysis assistant. Always respond with valid JSON.' },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      // Large headroom: reasoning models spend much of the budget on hidden
-      // reasoning before the JSON, and a detailed report can be long.
-      max_tokens: Math.min(64000, ds.maxTokens ?? 64000), // configured value is a CEILING, never a floor (don't starve the report)
-      // Stream the response so a multi-minute generation doesn't trip fetch's
-      // header/idle timeouts (the full JSON only arrives at the very end).
-      stream: true,
-      stream_options: { include_usage: true },
-    }),
-  });
-  if (!res.ok || !res.body) {
-    const txt = res.ok ? '(no response body)' : await res.text().catch(() => '');
-    throw new Error(`DeepSeek ${res.status}: ${txt.slice(0, 200)}`);
-  }
+  // Bound the streamed call so a stalled provider can't hang the report forever (it would
+  // sit on `generating` with a permanent spinner). IDLE aborts when no chunk arrives for a
+  // while — a healthy stream emits tokens continuously; a stall goes silent. HARD is an
+  // absolute ceiling. On abort the fetch/reader throws → caller marks the report `failed`.
+  const AI_IDLE_MS = 120_000; // 2 min of silence → the provider stalled
+  const AI_HARD_MS = 12 * 60_000; // absolute ceiling for one generation
+  const ctl = new AbortController();
+  let idleTimer: ReturnType<typeof setTimeout>;
+  const bumpIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => ctl.abort(new Error(`DeepSeek stream idle for ${AI_IDLE_MS / 1000}s`)), AI_IDLE_MS);
+  };
+  const hardTimer = setTimeout(() => ctl.abort(new Error(`DeepSeek generation exceeded ${AI_HARD_MS / 60000}m`)), AI_HARD_MS);
 
-  // Accumulate the streamed completion (OpenAI-compatible SSE).
   let content = '';
   let usage: any = {};
-  for await (const chunk of sseJsonChunks(res.body.getReader())) {
-    content += chunkDelta(chunk);
-    if (chunk.usage) usage = chunk.usage;
+  try {
+    bumpIdle();
+    const res = await fetch(`${ds.baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ds.apiKey}`, 'Content-Type': 'application/json' },
+      signal: ctl.signal,
+      body: JSON.stringify({
+        model: ds.model,
+        messages: [
+          { role: 'system', content: 'You are a meeting analysis assistant. Always respond with valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        // Large headroom: reasoning models spend much of the budget on hidden
+        // reasoning before the JSON, and a detailed report can be long.
+        max_tokens: Math.min(64000, ds.maxTokens ?? 64000), // configured value is a CEILING, never a floor (don't starve the report)
+        // Stream the response so a multi-minute generation doesn't trip fetch's
+        // header/idle timeouts (the full JSON only arrives at the very end).
+        stream: true,
+        stream_options: { include_usage: true },
+      }),
+    });
+    if (!res.ok || !res.body) {
+      const txt = res.ok ? '(no response body)' : await res.text().catch(() => '');
+      throw new Error(`DeepSeek ${res.status}: ${txt.slice(0, 200)}`);
+    }
+
+    // Accumulate the streamed completion (OpenAI-compatible SSE).
+    for await (const chunk of sseJsonChunks(res.body.getReader())) {
+      bumpIdle(); // progress → reset the idle deadline
+      content += chunkDelta(chunk);
+      if (chunk.usage) usage = chunk.usage;
+    }
+  } finally {
+    clearTimeout(idleTimer!);
+    clearTimeout(hardTimer);
   }
 
   const rep = parseJsonLoose(content);
@@ -779,7 +801,7 @@ export async function generateMeetingReport(
   opts: { notify?: boolean } = {}
 ): Promise<{ topics: number }> {
   await prisma.meeting
-    .update({ where: { id: meetingId }, data: { reportStatus: 'generating', reportError: null } })
+    .update({ where: { id: meetingId }, data: { reportStatus: 'generating', reportError: null, reportStartedAt: new Date() } })
     .catch(() => {});
   try {
     const result = await generateReportInner(meetingId, opts);

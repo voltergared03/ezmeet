@@ -156,6 +156,21 @@ export async function getLinearConfig(): Promise<LinearConfig | null> {
 
 // ─────────────────────────── GraphQL transport ───────────────────────────
 
+/**
+ * A Linear error whose request was REJECTED — an HTTP 4xx (bad request) or a GraphQL
+ * validation error (`errors[]` on a 200). Either way the mutation did NOT apply, so retrying
+ * is safe. A timeout / 5xx / network failure throws a PLAIN error instead: the mutation may
+ * have landed server-side, so retrying a create would duplicate it.
+ */
+export class LinearRejectedError extends Error {
+  readonly status: number; // HTTP status, or 200 for a GraphQL-level rejection
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'LinearRejectedError';
+    this.status = status;
+  }
+}
+
 /** POST a GraphQL op to Linear. Raw API key in Authorization (NO "Bearer"). Never leaks the token. */
 async function lnGraphQL<T = any>(token: string, query: string, variables?: Record<string, unknown>): Promise<T> {
   const doFetch = () => fetch(LINEAR_API, {
@@ -172,11 +187,16 @@ async function lnGraphQL<T = any>(token: string, query: string, variables?: Reco
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    // 4xx = request refused, nothing created (safe to retry). 5xx = may have applied → plain.
+    if (res.status >= 400 && res.status < 500) {
+      throw new LinearRejectedError(`Linear HTTP ${res.status}: ${body.slice(0, 160)}`, res.status);
+    }
     throw new Error(`Linear HTTP ${res.status}: ${body.slice(0, 160)}`);
   }
   const json = await res.json() as { data?: T; errors?: { message?: string }[] };
   if (json.errors?.length) {
-    throw new Error(`Linear GraphQL: ${json.errors.map((e) => e.message).join('; ').slice(0, 200)}`);
+    // Reached Linear and was rejected at validation (bad assignee/state, etc.) → nothing created.
+    throw new LinearRejectedError(`Linear GraphQL: ${json.errors.map((e) => e.message).join('; ').slice(0, 200)}`, 200);
   }
   return json.data as T;
 }
@@ -274,10 +294,13 @@ async function createLinearIssue(token: string, input: IssueInput): Promise<{ id
   try {
     return await run(input);
   } catch (e) {
-    // A non-team assignee or a wrong stateId would reject — retry without either so
-    // the issue still lands (team default state, unassigned).
-    if (input.assigneeId || input.stateId) {
-      console.warn('[linear] create failed, retrying without assignee/state:', (e as Error).message);
+    // Retry-without-assignee/state ONLY when Linear REJECTED the input (a non-team assignee or
+    // wrong stateId) — that leaves nothing created, so a second create is safe. A timeout / 5xx
+    // is NOT a rejection: the first mutation may have applied, and retrying would create a
+    // DUPLICATE issue. Bail in that case (the row stays unpushed; the dedupe link on the next
+    // regeneration prevents a duplicate). Same class of bug ClickUp already fixed.
+    if ((e instanceof LinearRejectedError) && (input.assigneeId || input.stateId)) {
+      console.warn('[linear] create rejected, retrying without assignee/state:', e.message);
       const { assigneeId: _a, stateId: _s, ...rest } = input;
       return run(rest);
     }

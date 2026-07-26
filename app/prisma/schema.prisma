@@ -157,6 +157,9 @@ model Meeting {
   // Post-meeting AI report lifecycle (null = none yet)
   reportStatus           String? // generating | ready | failed
   reportError            String?      @db.Text
+  // When the current generation started — lets a backstop cron fail a report left
+  // stuck in `generating` because the process was killed mid-run (deploy/crash).
+  reportStartedAt        DateTime?
   // AI options
   transcriptionEnabled   Boolean      @default(true)
   aiReportEnabled        Boolean      @default(true)

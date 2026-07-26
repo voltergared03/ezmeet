@@ -180,6 +180,56 @@ describe('pushMeetingTasksToLinear', () => {
     expect(prismaMock.taskRow.update).not.toHaveBeenCalled();
   });
 
+  it('does NOT retry a create on a timeout/transport error — no duplicate issue', async () => {
+    mockReadConfig.mockResolvedValue({ LINEAR_ENABLED: 'true', LINEAR_TOKEN: 'tok', LINEAR_ROUTING_MODE: 'department' } as any);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'd1', name: 'Sales' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'g1', email: 'a@x.com' }] as any);
+    prismaMock.linearTaskLink.findUnique.mockResolvedValue(null as any);
+    const resp = (obj: any) => ({ ok: true, status: 200, json: async () => obj, text: async () => '' }) as Response;
+    let createCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      const q = JSON.parse(String(init?.body)).query as string;
+      if (q.includes('users(')) return resp({ data: { users: { nodes: [{ id: 'u_lin', email: 'a@x.com', active: true }] } } });
+      if (q.includes('teams(')) return resp({ data: { teams: { nodes: [{ id: 'team1', name: 'Sales' }] } } });
+      if (q.includes('issueCreate')) { createCalls++; throw new DOMException('timed out', 'TimeoutError'); }
+      return resp({ data: {} });
+    }) as any);
+
+    await pushMeetingTasksToLinear('m1', [item]);
+
+    expect(createCalls).toBe(1); // NOT retried — a lost response might mean the issue was created
+    expect(prismaMock.linearTaskLink.create).not.toHaveBeenCalled();
+  });
+
+  it('retries WITHOUT assignee/state only on a Linear REJECTION (bad assignee)', async () => {
+    mockReadConfig.mockResolvedValue({ LINEAR_ENABLED: 'true', LINEAR_TOKEN: 'tok', LINEAR_ROUTING_MODE: 'department' } as any);
+    prismaMock.department.findMany.mockResolvedValue([{ id: 'd1', name: 'Sales' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'g1', email: 'a@x.com' }] as any);
+    prismaMock.linearTaskLink.findUnique.mockResolvedValue(null as any);
+    prismaMock.linearTaskLink.create.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    const resp = (obj: any) => ({ ok: true, status: 200, json: async () => obj, text: async () => '' }) as Response;
+    const createInputs: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
+      const b = JSON.parse(String(init?.body)); const q = b.query as string;
+      if (q.includes('users(')) return resp({ data: { users: { nodes: [{ id: 'u_lin', email: 'a@x.com', active: true }] } } });
+      if (q.includes('teams(')) return resp({ data: { teams: { nodes: [{ id: 'team1', name: 'Sales' }] } } });
+      if (q.includes('issueCreate')) {
+        createInputs.push(b.variables.input);
+        if (createInputs.length === 1) return resp({ errors: [{ message: 'assignee is not a member of the team' }] });
+        return resp({ data: { issueCreate: { success: true, issue: { id: 'iss1', url: 'https://linear.app/iss1' } } } });
+      }
+      return resp({ data: {} });
+    }) as any);
+
+    await pushMeetingTasksToLinear('m1', [item]);
+
+    expect(createInputs.length).toBe(2); // rejected → retried
+    expect(createInputs[0].assigneeId).toBe('u_lin');
+    expect(createInputs[1].assigneeId).toBeUndefined(); // second attempt drops the bad assignee
+    expect(prismaMock.linearTaskLink.create).toHaveBeenCalled();
+  });
+
   it('is a no-op when Linear is disabled', async () => {
     mockReadConfig.mockResolvedValue({ LINEAR_ENABLED: 'false' } as any);
     const { fetchMock } = installGraphQL([]);

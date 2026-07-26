@@ -48,6 +48,8 @@ cat > /var/spool/cron/crontabs/root <<'EOF'
 # Catch-up sweep for the ClickUp mirror: the webhook is fire-and-forget, so any missed
 # delivery (redeploy, rate limit, disabled hook) would otherwise drift forever.
 25 * * * *  /usr/local/bin/run-cron-job clickup-reconcile >/proc/1/fd/1 2>&1
+# Release meeting reports stuck in "generating" because a process died mid-run.
+*/10 * * * * /usr/local/bin/run-cron-job report-backstop >/proc/1/fd/1 2>&1
 */30 * * * * /usr/local/bin/run-cron-job linear-health >/proc/1/fd/1 2>&1
 # Prune RDP-v2 file-transfer drive: delete staged files older than 7 days so the shared
 # host disk (pgdata/recordings/backups) can't be exhausted by accumulated transfers.
