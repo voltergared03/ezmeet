@@ -32,15 +32,30 @@ export const PATCH = withRoute('rows.update', async (req: NextRequest, ctx: Ctx)
   if (!parsed.success) return jsonError('invalid_body', 400);
 
   const fields = await prisma.field.findMany({ where: { tableId: row.tableId }, select: { id: true, type: true, options: true } });
-  const fieldsToSet: Prisma.RowUpdateInput = {};
-  if (parsed.data.position !== undefined) fieldsToSet.position = parsed.data.position;
-  if (parsed.data.data !== undefined) {
-    const patch = stripHidden(parsed.data.data as Record<string, unknown>, perm.hiddenFields);
-    fieldsToSet.data = mergeRowData(fields, (row.data ?? {}) as Record<string, unknown>, patch);
-  }
-  const updated = await prisma.row.update({ where: { id }, data: fieldsToSet });
-  if (parsed.data.data !== undefined) {
-    await syncRowReverseLinks(fields, id, (row.data ?? {}) as Record<string, unknown>, (updated.data ?? {}) as Record<string, unknown>);
+  const patch = parsed.data.data !== undefined
+    ? stripHidden(parsed.data.data as Record<string, unknown>, perm.hiddenFields)
+    : undefined;
+
+  // Merge under a row lock. `data` is one JSON blob keyed by field id, so a plain
+  // read-here / merge-in-JS / write-whole-blob loses a concurrent edit to a DIFFERENT cell
+  // (both read the same snapshot, the second write clobbers the first). SELECT … FOR UPDATE
+  // serialises writers on this row, so each merge runs against the freshest committed data.
+  const { updated, before } = await prisma.$transaction(async (tx) => {
+    const fieldsToSet: Prisma.RowUpdateInput = {};
+    if (parsed.data.position !== undefined) fieldsToSet.position = parsed.data.position;
+    let cur: Record<string, unknown> = (row.data ?? {}) as Record<string, unknown>;
+    if (patch !== undefined) {
+      const locked = await tx.$queryRaw<{ data: unknown }[]>(
+        Prisma.sql`SELECT data FROM "Row" WHERE id = ${id} FOR UPDATE`,
+      );
+      cur = (locked[0]?.data ?? {}) as Record<string, unknown>;
+      fieldsToSet.data = mergeRowData(fields, cur, patch);
+    }
+    const u = await tx.row.update({ where: { id }, data: fieldsToSet });
+    return { updated: u, before: cur };
+  });
+  if (patch !== undefined) {
+    await syncRowReverseLinks(fields, id, before, (updated.data ?? {}) as Record<string, unknown>);
   }
   const [enriched] = await enrichLinks([{ ...updated, data: presentRowData((updated.data ?? {}) as Record<string, unknown>, fields) }], fields, r.orgId, r.session);
   return NextResponse.json(enriched);
