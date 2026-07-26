@@ -11,6 +11,7 @@ import {
   updateTaskField,
   deleteTaskField,
   listTaskFields,
+  myOpenTasks,
 } from '@/lib/tasks';
 import { getCurrentOrgId } from '@/lib/org';
 
@@ -241,5 +242,28 @@ describe('listTaskFields — client FieldT projection (P3.3)', () => {
     const { getSystemTasksTable } = await import('@/lib/system-tasks-table');
     vi.mocked(getSystemTasksTable).mockResolvedValueOnce(null as any);
     expect(await listTaskFields({ user: { id: 'u1' } } as any)).toEqual([]);
+  });
+});
+
+describe('myOpenTasks — dashboard ordering', () => {
+  const row = (title: string, priority: string) => ({
+    id: title, position: 0, createdAt: new Date('2026-01-01T00:00:00Z'),
+    data: { fT: title, fP: priority, fS: 'open' }, taskMeta: null, assignments: [], collaborators: [], _count: { comments: 0, attachments: 0 },
+  });
+
+  it('orders by severity (high → medium → low), not alphabetically', async () => {
+    // Regression: a string sort ranked low ('l') above medium ('m'), so the dashboard
+    // buried the more urgent task under a less urgent one.
+    prismaMock.row.findMany.mockResolvedValue([row('L', 'low'), row('H', 'high'), row('M', 'medium')] as any);
+    const out = await myOpenTasks({ user: { id: 'u1' } } as any);
+    expect(out.map((t) => t.priority)).toEqual(['high', 'medium', 'low']);
+  });
+
+  it('drops done tasks and unknown priorities sort last', async () => {
+    prismaMock.row.findMany.mockResolvedValue([
+      row('done', 'high'), row('none', ''), row('hi', 'high'),
+    ].map((r, i) => (i === 0 ? { ...r, data: { ...r.data, fS: 'done' } } : r)) as any);
+    const out = await myOpenTasks({ user: { id: 'u1' } } as any);
+    expect(out.map((t) => t.title)).toEqual(['hi', 'none']); // done filtered; blank priority last
   });
 });

@@ -503,6 +503,15 @@ export async function countTasks(orgId: string | null | undefined, since?: Date)
 }
 
 /** The session user's open tasks for the dashboard widget (lead/co-assignee). */
+// Severity order for the dashboard's "my tasks" list. A plain string sort put
+// low ('l') before medium ('m'), burying the more urgent task; rank by severity
+// instead (high first). Unknown/empty priorities sort last.
+const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+function priorityRank(v: unknown): number {
+  const r = PRIORITY_RANK[String(v ?? '').toLowerCase()];
+  return r === undefined ? 3 : r;
+}
+
 export async function myOpenTasks(session: Session, take = 8): Promise<MeetingTaskDTO[]> {
   const orgId = await getCurrentOrgId(session);
   const prov = await resolveRead(orgId);
@@ -512,9 +521,9 @@ export async function myOpenTasks(session: Session, take = 8): Promise<MeetingTa
   let rows = (await prisma.row.findMany({ where: { tableId: prov.table.id, assignments: { some: { userId } } }, include: rowInclude })) as unknown as LoadedRow[];
   rows = rows.filter((r) => ((r.data as Cells)?.[f.status]) !== "done");
   rows.sort((a, b) => {
-    const pa = String((a.data as Cells)?.[f.priority] ?? "");
-    const pb = String((b.data as Cells)?.[f.priority] ?? "");
-    if (pa !== pb) return pa < pb ? -1 : 1; // matches legacy priority-string asc
+    const pa = priorityRank((a.data as Cells)?.[f.priority]);
+    const pb = priorityRank((b.data as Cells)?.[f.priority]);
+    if (pa !== pb) return pa - pb; // high → medium → low (was an alphabetical string sort)
     const da = (a.data as Cells)?.[f.dueDate] as string | undefined;
     const db = (b.data as Cells)?.[f.dueDate] as string | undefined;
     if (da && db && da !== db) return da < db ? -1 : 1;
