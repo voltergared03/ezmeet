@@ -587,6 +587,33 @@ export default function GuacamoleClient({
         </div>
       )}
 
+      {/* A dropped tunnel / guacd error used to leave just a black screen — no message,
+          no way out but the tiny red pill dot. Show what happened and how to recover. */}
+      {dead && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, background: 'rgba(4,7,12,.86)', padding: 24, textAlign: 'center' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(248,113,113,.14)', color: '#f87171' }}>
+            <Power size={22} />
+          </div>
+          <div style={{ color: '#e7e9ee', fontSize: 16, fontWeight: 600 }}>
+            {status === 'tunnel-error' ? 'Втрачено зʼєднання з сервером' : status === 'error' ? 'Помилка зʼєднання' : 'Сесію завершено'}
+          </div>
+          <div style={{ color: 'rgba(231,233,238,.6)', fontSize: 13, maxWidth: 360, lineHeight: 1.5 }}>
+            {status === 'disconnected'
+              ? 'Віддалений сеанс закрито. Можна підключитися знову.'
+              : 'Мережа або віддалений сервер розірвали зʼєднання. Спробуй підключитися знову.'}
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => onExit?.()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 600 }}
+            >
+              <RotateCw size={15} /> Підключитися знову
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* floating, draggable status pill — grab the body to reposition; buttons stay clickable */}
       <div
         ref={pillRef}
