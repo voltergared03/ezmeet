@@ -1311,14 +1311,40 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
         if (st) body.status = st;
         if (source) body.custom_fields = [{ id: source.fieldId, value: source.optionId }];
 
+        // Re-adopt an already-mirrored task instead of duplicating it. After a
+        // disconnect+reconnect to the SAME workspace, the old ClickUp task still exists and
+        // its dedupe link survives (disable only clears local ownership). Without this the
+        // migrate would create a SECOND task and repoint the link, orphaning the first.
+        const meetingId = row.taskMeta?.meetingId;
+        const dedupeKey = meetingId
+          ? dedupeKeyFor(meetingId, body.name, row.taskMeta?.departmentId ?? null, row.taskMeta?.parentRowId ? parentTitle.get(row.taskMeta.parentRowId) ?? null : null)
+          : null;
+        if (meetingId && dedupeKey) {
+          const link = await prisma.clickUpTaskLink.findUnique({ where: { meetingId_dedupeKey: { meetingId, dedupeKey } } }).catch(() => null);
+          if (link) {
+            try {
+              const t = await cuJson<{ id?: string }>(cfg.token, `/task/${link.clickupTaskId}`);
+              if (t?.id) { // still exists → re-own the row, refresh the link, DON'T create a dup
+                await markRowOwned(row.id, link.clickupTaskId, link.clickupUrl);
+                await prisma.clickUpTaskLink.update({ where: { id: link.id }, data: { syncedAt: new Date(), listId, title: body.name } }).catch(() => {});
+                migrated++;
+                continue;
+              }
+            } catch (e) {
+              if (e instanceof ClickUpHttpError && e.status === 404) {
+                await prisma.clickUpTaskLink.delete({ where: { id: link.id } }).catch(() => {}); // gone (different workspace) → create fresh below
+              } else { skipped++; continue; } // transport error → skip rather than risk a duplicate
+            }
+          }
+        }
+
         const res = await createClickUpTask(cfg.token, listId, body);
         await markRowOwned(row.id, res.id, res.url);
         // Meeting tasks: record a dedupe link so report regeneration updates (not dups).
-        if (row.taskMeta?.meetingId) {
-          const dedupeKey = dedupeKeyFor(row.taskMeta.meetingId, body.name, row.taskMeta.departmentId ?? null, row.taskMeta.parentRowId ? parentTitle.get(row.taskMeta.parentRowId) ?? null : null);
+        if (meetingId && dedupeKey) {
           await prisma.clickUpTaskLink.upsert({
-            where: { meetingId_dedupeKey: { meetingId: row.taskMeta.meetingId, dedupeKey } },
-            create: { meetingId: row.taskMeta.meetingId, dedupeKey, clickupTaskId: res.id, clickupUrl: res.url, listId, title: body.name },
+            where: { meetingId_dedupeKey: { meetingId, dedupeKey } },
+            create: { meetingId, dedupeKey, clickupTaskId: res.id, clickupUrl: res.url, listId, title: body.name },
             update: { clickupTaskId: res.id, clickupUrl: res.url, listId, title: body.name, syncedAt: new Date() },
           }).catch(() => {});
         }

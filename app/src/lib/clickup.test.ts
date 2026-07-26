@@ -624,6 +624,69 @@ describe('migrateAllTasksToClickUp', () => {
 
     expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_INBOX/task'))).toBe(true);
   });
+
+  it('re-adopts an already-mirrored task on reconnect instead of creating a duplicate', async () => {
+    // Regression: disable→enable clears the row's local ownership (TaskRow.clickupTaskId)
+    // but KEEPS the ClickUpTaskLink. The backfill must GET the still-live task and re-own
+    // the row in place — never POST a second task and orphan the first.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.row.findMany.mockResolvedValue([
+      { id: 'r1', data: { fT: 'Reconnect task', fS: 'done' }, taskMeta: { meetingId: 'm1', departmentId: 'dIT', parentRowId: null }, assignments: [{ userId: 'u1' }] },
+    ] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com', clickupListId: null }] as any);
+    prismaMock.department.findMany.mockResolvedValue([itDept] as any);
+    prismaMock.clickUpTaskLink.findUnique.mockResolvedValue({ id: 'lnk1', clickupTaskId: 'CU1', clickupUrl: 'https://app.clickup.com/t/CU1', listId: 'L_IT' } as any);
+    prismaMock.clickUpTaskLink.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+
+    const { calls } = stubFetch((u, method) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.endsWith('/team')) return j({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }] }] });
+      if (u.includes('/list/L_IT/field')) return j({ fields: [] });
+      if (u.endsWith('/task/CU1') && method === 'GET') return j({ id: 'CU1', name: 'Reconnect task' }); // still alive
+      return undefined;
+    });
+
+    const res = await migrateAllTasksToClickUp();
+
+    expect(res.migrated).toBe(1);
+    expect(calls.some((c) => c.method === 'GET' && c.url.endsWith('/task/CU1'))).toBe(true); // checked liveness
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_IT/task'))).toBe(false); // NO duplicate created
+    expect(prismaMock.clickUpTaskLink.create).not.toHaveBeenCalled();
+    expect(prismaMock.clickUpTaskLink.update).toHaveBeenCalled(); // link refreshed, not replaced
+    expect(prismaMock.taskRow.update).toHaveBeenCalled(); // row re-owned
+  });
+
+  it('drops a stale link when the task is gone (404) and creates a fresh one', async () => {
+    // The other reconnect case: the task was deleted in ClickUp (or the workspace changed),
+    // so the surviving link points at nothing. Delete the dead link and create anew.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.row.findMany.mockResolvedValue([
+      { id: 'r1', data: { fT: 'Ghost task' }, taskMeta: { meetingId: 'm1', departmentId: 'dIT', parentRowId: null }, assignments: [{ userId: 'u1' }] },
+    ] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com', clickupListId: null }] as any);
+    prismaMock.department.findMany.mockResolvedValue([itDept] as any);
+    prismaMock.clickUpTaskLink.findUnique.mockResolvedValue({ id: 'lnk1', clickupTaskId: 'CUdead', clickupUrl: 'https://x', listId: 'L_IT' } as any);
+    prismaMock.clickUpTaskLink.delete.mockResolvedValue({} as any);
+    prismaMock.clickUpTaskLink.upsert.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+
+    const { calls } = stubFetch((u, method) => {
+      const j = (b: unknown) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) }) as Response;
+      if (u.endsWith('/team')) return j({ teams: [{ id: 'team1', members: [{ user: { id: 111, email: 'a@x.com' } }] }] });
+      if (u.includes('/list/L_IT/field')) return j({ fields: [] });
+      if (u.endsWith('/task/CUdead') && method === 'GET') return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' } as Response;
+      if (u.includes('/list/L_IT/task') && method === 'POST') return j({ id: 'CUnew', url: 'https://app.clickup.com/t/CUnew' });
+      return undefined;
+    });
+
+    const res = await migrateAllTasksToClickUp();
+
+    expect(res.migrated).toBe(1);
+    expect(prismaMock.clickUpTaskLink.delete).toHaveBeenCalledWith({ where: { id: 'lnk1' } }); // dead link purged
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/list/L_IT/task'))).toBe(true); // fresh task created
+    expect(prismaMock.clickUpTaskLink.upsert).toHaveBeenCalled(); // new link recorded
+  });
 });
 
 describe('getFallbackStats', () => {
