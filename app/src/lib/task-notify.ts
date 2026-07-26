@@ -6,7 +6,7 @@
 import { prisma } from "./prisma";
 import { sendEmail } from "./email";
 import { notify } from "./notify";
-import { getTranslator, workspaceLocale } from "./i18n-server";
+import { getTranslator, workspaceLocale, workspaceTimezone } from "./i18n-server";
 import { publicBaseUrl } from "./config";
 import { esc } from "./email/html";
 import { getSystemTasksTable } from "./system-tasks-table";
@@ -55,9 +55,12 @@ export function pickEmailRecipients(users: Recipient[], actorId: string): string
   return [...seen];
 }
 
-function fmtDate(d: Date, locale: string): string {
+function fmtDate(d: Date, locale: string, tz?: string): string {
   try {
-    return new Date(d).toLocaleDateString(locale === "uk" ? "uk-UA" : "en-US", { day: "numeric", month: "short", year: "numeric" });
+    return new Date(d).toLocaleDateString(locale === "uk" ? "uk-UA" : "en-US", {
+      day: "numeric", month: "short", year: "numeric",
+      ...(tz ? { timeZone: tz } : {}), // a due date can shift a day if formatted in UTC
+    });
   } catch {
     return new Date(d).toISOString().slice(0, 10);
   }
@@ -103,11 +106,12 @@ export async function notifyTaskAssigned(taskId: string, assigneeId: string | nu
     if (!u?.email || (u.preferences as Record<string, unknown> | null)?.actionItemNotif === false) return;
 
     const locale = await workspaceLocale();
+    const tz = await workspaceTimezone();
     const t = getTranslator(locale);
     const url = `${await publicBaseUrl()}/tasks?task=${taskId}`;
     const rows = [
       `<strong style="color:#e8eaed">${esc(task.title)}</strong>`,
-      task.dueDate ? `${esc(t("emails.task.dueLabel"))}: ${esc(fmtDate(task.dueDate, locale))}` : "",
+      task.dueDate ? `${esc(t("emails.task.dueLabel"))}: ${esc(fmtDate(task.dueDate, locale, tz))}` : "",
       meetingTitle ? `${esc(t("emails.task.meetingLabel"))}: ${esc(meetingTitle)}` : "",
     ];
     await sendEmail({
@@ -153,11 +157,12 @@ export async function notifyTaskUpdated(
     if (emails.length === 0) return;
 
     const locale = await workspaceLocale();
+    const tz = await workspaceTimezone();
     const t = getTranslator(locale);
     const url = `${await publicBaseUrl()}/tasks?task=${taskId}`;
     const rows = [`<strong style="color:#e8eaed">${esc(task.title)}</strong>`];
     if (changes.status !== undefined) rows.push(esc(t("emails.task.changeStatus", { value: statusLabel(t, changes.status) })));
-    if (changes.dueDate !== undefined) rows.push(esc(t("emails.task.changeDue", { value: changes.dueDate ? fmtDate(changes.dueDate, locale) : "—" })));
+    if (changes.dueDate !== undefined) rows.push(esc(t("emails.task.changeDue", { value: changes.dueDate ? fmtDate(changes.dueDate, locale, tz) : "—" })));
 
     const html = shell(t, { heading: t("emails.task.updatedHeading"), sub: t("emails.task.updatedBy", { name: actor.name || "" }), rows, ctaUrl: url });
     const text = `${t("emails.task.updatedHeading")}: ${task.title}\n${url}`;

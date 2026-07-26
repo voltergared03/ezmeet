@@ -6,7 +6,7 @@
  */
 import { prisma } from "./prisma";
 import { sendEmail, getSmtpConfig } from "./email";
-import { getTranslator, workspaceLocale } from "./i18n-server";
+import { getTranslator, workspaceLocale, workspaceTimezone } from "./i18n-server";
 import { publicBaseUrl } from "./config";
 import { esc } from "./email/html";
 import { buildCalendar, googleCalendarUrl, type IcsEvent } from "./ics";
@@ -45,6 +45,7 @@ export async function sendMeetingInvite(meetingId: string, kind: InviteKind = "i
     // only fall back to it when a meeting somehow has no joinToken.
     const joinUrl = meeting.joinToken ? `${appUrl}/join/${meeting.joinToken}` : `${appUrl}/room/${meeting.id}`;
     const locale = await workspaceLocale();
+    const tz = await workspaceTimezone();
     const t = getTranslator(locale);
 
     // The ORGANIZER email MUST equal the authenticated From address (the SMTP
@@ -86,6 +87,7 @@ export async function sendMeetingInvite(meetingId: string, kind: InviteKind = "i
 
     const when = start.toLocaleString(locale === "uk" ? "uk-UA" : "en-US", {
       weekday: "short", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+      timeZone: tz, // render in the workspace zone, not the server's UTC
     });
     const heading =
       kind === "cancel" ? t("emails.inviteMeeting.cancelledHeading")

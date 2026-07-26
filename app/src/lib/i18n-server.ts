@@ -46,6 +46,17 @@ export async function reportLocale(): Promise<ReportLanguage> {
   return 'en';
 }
 
+/** Workspace timezone (WS_TIMEZONE) → the configured default. Used to render meeting
+ *  times, invites and due dates in the org's wall-clock rather than the server's UTC. */
+export async function workspaceTimezone(): Promise<string> {
+  try {
+    const cfg = await readConfig(['WS_TIMEZONE']);
+    return (cfg.WS_TIMEZONE || '').trim() || CONFIG_DEFAULTS.WS_TIMEZONE;
+  } catch {
+    return CONFIG_DEFAULTS.WS_TIMEZONE;
+  }
+}
+
 /** Workspace default UI language (WS_LANGUAGE) → 'en'. */
 export async function workspaceLocale(): Promise<Locale> {
   try {

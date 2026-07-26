@@ -4,7 +4,8 @@ import { sendEmail } from '@/lib/email';
 import { notify } from '@/lib/notify';
 import { notifyChatMeetingReminder } from '@/lib/chat-notify';
 import { notifyWebhookMeetingReminder } from '@/lib/webhooks';
-import { getTranslator, workspaceLocale } from '@/lib/i18n-server';
+import { getTranslator, workspaceLocale, workspaceTimezone } from '@/lib/i18n-server';
+import { fmtTime } from '@/lib/utils';
 import { publicBaseUrl } from '@/lib/config';
 import { esc } from '@/lib/email/html';
 import { withRoute } from '@/lib/with-route';
@@ -35,13 +36,14 @@ async function getHandler(req: NextRequest) {
   // Reminder emails are a single batched send to mixed recipients (members +
   // guests), so they go out in the workspace's default language.
   const locale = await workspaceLocale();
+  const tz = await workspaceTimezone();
   const t = getTranslator(locale);
   let notified = 0;
   let emailed = 0;
 
   for (const m of meetings) {
     const startStr = m.scheduledAt
-      ? new Date(m.scheduledAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+      ? fmtTime(new Date(m.scheduledAt), tz) // workspace wall-clock, not server UTC
       : '';
 
     // In-app notifications for participant users

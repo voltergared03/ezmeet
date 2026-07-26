@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { generateMeetingSlug } from '@/lib/utils';
+import { nextOccurrenceAfter } from '@/lib/recurrence';
+import { workspaceTimezone } from '@/lib/i18n-server';
 import { syncMeetingToGoogle } from '@/lib/calendar-sync';
 import { withRoute } from '@/lib/with-route';
 
@@ -11,23 +13,6 @@ import { withRoute } from '@/lib/with-route';
 // series a single step ahead. Missed occurrences are skipped (we advance to the
 // next future slot) so a long-dormant series doesn't create a burst.
 
-function nextOccurrenceAfter(from: Date, type: string, now: number): Date {
-  const d = new Date(from);
-  const step = () => {
-    switch (type) {
-      case 'daily': d.setUTCDate(d.getUTCDate() + 1); break;
-      case 'biweekly': d.setUTCDate(d.getUTCDate() + 14); break;
-      case 'monthly': d.setUTCMonth(d.getUTCMonth() + 1); break;
-      case 'weekly':
-      default: d.setUTCDate(d.getUTCDate() + 7); break;
-    }
-  };
-  step();
-  let guard = 0;
-  while (d.getTime() <= now && guard++ < 1000) step();
-  return d;
-}
-
 async function getHandler(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
@@ -35,6 +20,7 @@ async function getHandler(req: NextRequest) {
   }
 
   const now = Date.now();
+  const tz = await workspaceTimezone();
   const due = await prisma.meeting.findMany({
     where: {
       recurrenceMaterialized: false,
@@ -58,7 +44,7 @@ async function getHandler(req: NextRequest) {
     }
     const type = rec.type;
     const seriesId = rec.seriesId || generateMeetingSlug();
-    const nextAt = nextOccurrenceAfter(m.scheduledAt, type, now);
+    const nextAt = nextOccurrenceAfter(m.scheduledAt, type, now, tz);
     const roomSlug = generateMeetingSlug();
     // The joinToken is the STABLE link shared in calendar invites — it migrates
     // forward to each new occurrence so the same /join URL always lands in the
