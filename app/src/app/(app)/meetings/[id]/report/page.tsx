@@ -26,6 +26,7 @@ import type {
   Meeting,
 } from './lib/types';
 import { transformApiData, formatTimestamp } from './lib/transform';
+import { useSaveErrorToast } from '@/components/save-toast';
 import { ReportAssigneeDropdown } from './components/ReportAssigneeDropdown';
 import { PriorityChip } from './components/PriorityChip';
 import { ReportCard } from './components/ReportCard';
@@ -36,6 +37,7 @@ import { QuizManager } from './components/QuizManager';
 
 export default function MeetingReportPage() {
   const tr = useTranslations();
+  const { showSaveError, saveToast } = useSaveErrorToast();
   const locale = useLocale();
   const tz = useWorkspaceTz();
   const params = useParams();
@@ -208,6 +210,7 @@ export default function MeetingReportPage() {
   // multi-assignee set (виконавці) via /assignees; a guest (no account) can't
   // join the set, so it replaces the set as the sole lead (legacy behaviour).
   const toggleAssignee = useCallback(async (itemId: string, opt: AssignOption, isSelected: boolean) => {
+    const prevItems = actionItems; // snapshot for revert if the write is rejected
     if (opt.id) {
       setActionItems((prev) =>
         prev.map((item) => {
@@ -220,9 +223,11 @@ export default function MeetingReportPage() {
         })
       );
       try {
-        if (isSelected) await fetch(`/api/tasks/${itemId}/assignees?userId=${opt.id}`, { method: 'DELETE' });
-        else await fetch(`/api/tasks/${itemId}/assignees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: opt.id }) });
-      } catch (e) { console.error(e); }
+        const res = isSelected
+          ? await fetch(`/api/tasks/${itemId}/assignees?userId=${opt.id}`, { method: 'DELETE' })
+          : await fetch(`/api/tasks/${itemId}/assignees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: opt.id }) });
+        if (!res.ok) { setActionItems(prevItems); showSaveError(tr('common.saveFailed')); } // rejected → revert the optimistic assignee change
+      } catch (e) { console.error(e); setActionItems(prevItems); showSaveError(tr('common.saveFailed')); }
     } else {
       setActionItems((prev) =>
         prev.map((item) =>
@@ -232,10 +237,11 @@ export default function MeetingReportPage() {
         )
       );
       try {
-        await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: itemId, assigneeIds: [] }) });
-      } catch (e) { console.error(e); }
+        const res = await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: itemId, assigneeIds: [] }) });
+        if (!res.ok) { setActionItems(prevItems); showSaveError(tr('common.saveFailed')); }
+      } catch (e) { console.error(e); setActionItems(prevItems); showSaveError(tr('common.saveFailed')); }
     }
-  }, []);
+  }, [actionItems, showSaveError, tr]);
 
   // Jump from an extended-report citation to the cited moment in the transcript.
   const jumpToTime = useCallback((t: number) => {
@@ -405,24 +411,27 @@ export default function MeetingReportPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: id, status: nextStatus }),
       });
-      if (!res.ok) setActionItems(prevItems); // revert on failure
+      if (!res.ok) { setActionItems(prevItems); showSaveError(tr('common.saveFailed')); } // revert + surface on failure
     } catch (e) {
       console.error(e);
       setActionItems(prevItems);
+      showSaveError(tr('common.saveFailed'));
     }
-  }, [actionItems]);
+  }, [actionItems, showSaveError, tr]);
 
   const deleteActionItem = useCallback(async (id: string) => {
     if (!window.confirm(tr('report.deleteActionItemConfirm'))) return;
+    const prevItems = actionItems;
     setActionItems((prev) => prev.filter((item) => item.id !== id));
     try {
-      await fetch('/api/tasks', {
+      const res = await fetch('/api/tasks', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: id }),
       });
-    } catch (e) { console.error(e); }
-  }, []);
+      if (!res.ok) { setActionItems(prevItems); showSaveError(tr('common.saveFailed')); } // delete rejected → put it back
+    } catch (e) { console.error(e); setActionItems(prevItems); showSaveError(tr('common.saveFailed')); }
+  }, [actionItems, showSaveError, tr]);
 
   const copySummary = useCallback(() => {
     if (!report) return;
@@ -982,6 +991,7 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      {saveToast}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px clamp(14px, 4vw, 28px) 80px' }}>
         {/* ─── Header ─────────────────────────────────────────────── */}
         <div style={{ marginBottom: 24 }}>

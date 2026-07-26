@@ -1395,6 +1395,7 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
   const [status, setStatus] = useState("open");
   const [newCells, setNewCells] = useState<Record<string, unknown>>({}); // custom-field values for a NEW task (no row yet)
   const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [meetingQ, setMeetingQ] = useState("");
@@ -1422,7 +1423,7 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
       setTitle(""); setDesc(""); setMeetingId("");
       setAssigneeIds([]); setPriority("medium"); setDueDate(""); setStatus("open"); setDepartmentId(""); setNewCells({});
     }
-    setMeetingOpen(false); setAssigneeOpen(false); setMeetingQ("");
+    setMeetingOpen(false); setAssigneeOpen(false); setMeetingQ(""); setSaveErr(null);
   }, [open, task?.id]);
 
   if (!open) return null;
@@ -1451,36 +1452,40 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
 
   const save = async () => {
     if (!valid || saving) return;
-    setSaving(true);
+    setSaving(true); setSaveErr(null);
     try {
-      if (isNew) {
-        await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, description: desc || null, meetingId: meetingId || null, assigneeId: assigneeIds[0] || null, assigneeIds, priority, dueDate: dueDate || null, departmentId: departmentId || null, cells: newCells }),
-        });
-      } else {
-        await fetch("/api/tasks", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ taskId: task!.id, title, description: desc || null, meetingId: meetingId || null, assigneeIds, priority, dueDate: dueDate || null, status, departmentId: departmentId || null }),
-        });
-      }
+      const res = isNew
+        ? await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, description: desc || null, meetingId: meetingId || null, assigneeId: assigneeIds[0] || null, assigneeIds, priority, dueDate: dueDate || null, departmentId: departmentId || null, cells: newCells }),
+          })
+        : await fetch("/api/tasks", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ taskId: task!.id, title, description: desc || null, meetingId: meetingId || null, assigneeIds, priority, dueDate: dueDate || null, status, departmentId: departmentId || null }),
+          });
+      // Was: fire-and-forget → onSaved() closed the drawer and refetched even on a
+      // rejected save, so the edit silently reverted. Keep the drawer open on failure.
+      if (!res.ok) { setSaveErr(tr('common.saveFailed')); return; }
       onSaved();
-    } finally { setSaving(false); }
+    } catch { setSaveErr(tr('common.saveFailed')); }
+    finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
     if (!task) return;
-    setSaving(true);
+    setSaving(true); setSaveErr(null);
     try {
-      await fetch("/api/tasks", {
+      const res = await fetch("/api/tasks", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskId: task.id }),
       });
+      if (!res.ok) { setSaveErr(tr('common.saveFailed')); return; }
       onSaved();
-    } finally { setSaving(false); }
+    } catch { setSaveErr(tr('common.saveFailed')); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -1738,6 +1743,11 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
           </div>
         )}
 
+        {saveErr && (
+          <div role="alert" style={{ padding: "10px 22px", color: "var(--red)", fontSize: 13, background: "color-mix(in oklab, var(--red) 10%, transparent)", borderTop: "1px solid color-mix(in oklab, var(--red) 25%, transparent)" }}>
+            {saveErr}
+          </div>
+        )}
         {/* Footer */}
         <div style={{ padding: "14px 22px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
           {!isNew && !(task?.clickupManaged || task?.linearManaged) && (

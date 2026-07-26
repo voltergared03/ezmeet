@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { ChevronLeft, Plus, Table2, MoreHorizontal, Pencil, Trash2, Share2, Lock, Download, ArrowRightLeft } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Spinner } from '@/components/ui/spinner';
+import { useSaveErrorToast } from '@/components/save-toast';
 import { GridView } from '../components/GridView';
 import { GridToolbar } from '../components/GridToolbar';
 import { KanbanView } from '../components/KanbanView';
@@ -24,6 +25,7 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 export default function BaseDetailPage() {
   const t = useTranslations('database');
   const tc = useTranslations('common');
+  const { showSaveError, saveToast } = useSaveErrorToast();
   const router = useRouter();
   const { baseId } = useParams<{ baseId: string }>();
   const search = useSearchParams();
@@ -195,9 +197,13 @@ export default function BaseDetailPage() {
     if (res.ok) { const row: RowT = await res.json(); setRows((rs) => [...rs, { ...row, data: row.data || {} }]); }
   }
   async function updateCell(rowId: string, fieldId: string, value: unknown) {
+    const prev = rows.find((r) => r.id === rowId)?.data;
     setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, data: { ...r.data, [fieldId]: value } } : r)));
-    const res = await fetch(`/api/rows/${rowId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ data: { [fieldId]: value } }) });
-    if (res.ok) { const updated = await res.json(); setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, data: updated.data || {} } : r))); }
+    try {
+      const res = await fetch(`/api/rows/${rowId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ data: { [fieldId]: value } }) });
+      if (res.ok) { const updated = await res.json(); setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, data: updated.data || {} } : r))); }
+      else { setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, data: prev ?? {} } : r))); showSaveError(tc('saveFailed')); } // server rejected → revert, don't leave a phantom edit
+    } catch { setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, data: prev ?? {} } : r))); showSaveError(tc('saveFailed')); }
   }
   async function addField(name: string, type: FieldType, options?: unknown) {
     if (!activeTableId) return;
@@ -329,6 +335,7 @@ export default function BaseDetailPage() {
 
   return (
     <div style={{ padding: '18px clamp(12px, 3vw, 28px)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {saveToast}
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <Link href="/database" className="btn btn-ghost btn-icon" style={{ width: 32, height: 32 }}><ChevronLeft size={18} /></Link>

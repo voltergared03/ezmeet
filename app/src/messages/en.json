@@ -28,7 +28,8 @@
     "meetings": "{count, plural, one {# meeting} other {# meetings}}",
     "done": "Done",
     "retry": "Retry",
-    "loadError": "Couldn't load."
+    "loadError": "Couldn't load.",
+    "saveFailed": "Couldn't save — try again."
   },
   "nav": {
     "home": "Home",
