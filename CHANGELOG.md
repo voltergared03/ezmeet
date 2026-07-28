@@ -4,6 +4,53 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.24.0-beta.6] — 2026-07-28
+
+A full security-and-reliability audit pass: closes access-control holes, stops the
+disk and backups from silently failing, and makes rejected edits and dropped
+sessions visible instead of vanishing.
+
+### Security
+- **Anyone with a Google account could sign in.** Google sign-in had no sign-up gate, so
+  any Google account could log in and be enrolled as an active workspace member. New
+  accounts are now admitted only when their email domain is on the allowlist; existing
+  members always keep access.
+- **A disabled account could still reach the API.** Disabling a user hid the app but left
+  every API route reachable with their existing session. Disabled accounts are now rejected
+  at the API too.
+- **A private meeting could be joined by any member.** Anyone signed in could request a join
+  token for a meeting by its id, even one with guests turned off. Private meetings now check
+  membership before issuing a token; open meetings are unaffected.
+
+### Fixed
+- **A failed database backup could destroy a good one.** If the nightly dump failed midway it
+  was still scored a success and could rotate out the last valid backup. The dump is now
+  written aside and only swapped in when it completes intact.
+- **The disk slowly filled with orphaned recording files.** Recording files with no database
+  reference, and per-speaker audio, were never cleaned up — a full disk eventually stops the
+  database from writing. Both are now pruned on the daily sweep.
+- **AI reports could hang, and Linear could get duplicate issues.** A report whose generation
+  stalled would sit "generating" forever; it now times out and is marked failed. And retrying
+  a Linear issue after a transient error could create a second copy; it now retries only when
+  nothing was actually created.
+- **Reminders, invites and due dates showed the wrong time.** They were formatted in the
+  server's UTC clock instead of the workspace timezone, and recurring meetings drifted an hour
+  across daylight-saving changes. Everything now uses the workspace timezone and keeps the
+  wall-clock time across DST.
+- **Two people editing the same task could lose an edit.** Simultaneous edits to different
+  fields of one row raced and the later save clobbered the earlier one. Edits to a row are now
+  serialised so both are kept.
+- **Reconnecting ClickUp duplicated every task.** Turning the ClickUp integration off and back
+  on re-created a second copy of every already-synced task. Re-enabling now re-adopts the
+  existing task instead of duplicating it.
+- **The dashboard ordered "my tasks" by priority wrong.** Priority sorted alphabetically, so
+  *low* appeared above *medium*. It now ranks high → medium → low.
+- **Edits that failed to save looked saved, then vanished.** In the task drawer, report action
+  items and grid cells, a rejected save was silently ignored and the change reappeared undone
+  on the next refresh. A failed save is now reverted and shown with a visible error.
+- **A dropped RDP session showed a black screen.** When an RDP v2 connection dropped it left a
+  black screen with no explanation. It now shows what happened and a button to reconnect.
+
 ## [1.24.0-beta.5] — 2026-07-21
 
 ### Fixed
