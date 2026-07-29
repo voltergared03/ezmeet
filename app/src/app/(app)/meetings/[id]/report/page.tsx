@@ -382,13 +382,27 @@ export default function MeetingReportPage() {
   // Reassign dropdown options: registered participants + guests (people who
   // joined by name — found in the participant list and/or as transcript speakers
   // with no account).
-  const regParticipants: AssignOption[] = (meeting?.participants || [])
-    .filter((p) => !!p.user)
-    .map((p) => ({ id: p.user!.id, name: p.user!.name, email: p.user!.email || '', image: p.user!.image }));
+  // Registered users on this meeting, deduped by User.id. Start from the participant
+  // rows, then fold in anyone who SPOKE with a registered account (transcript segments
+  // carry speakerId) — a registered speaker who joined under a display name unlike their
+  // account name used to be mislabeled an unregistered guest, so key on the id, not the name.
+  const regById = new Map<string, AssignOption>();
+  for (const p of meeting?.participants || []) {
+    if (p.user) regById.set(p.user.id, { id: p.user.id, name: p.user.name, email: p.user.email || '', image: p.user.image });
+  }
+  for (const s of meeting?.transcripts || []) {
+    if (s.speakerId && !regById.has(s.speakerId)) {
+      regById.set(s.speakerId, { id: s.speakerId, name: s.speakerUserName || s.speakerName || tr('report.unknownSpeaker'), email: '', image: s.speakerImage ?? null });
+    }
+  }
+  const regParticipants: AssignOption[] = [...regById.values()];
   const regNameSet = new Set(regParticipants.map((u) => u.name.toLowerCase()));
+  // Guests = people with NO account: guest participants + transcript speakers that have
+  // no speakerId. A speaker WITH a speakerId is registered (handled above) and must never
+  // fall through to a guest entry, regardless of what display name they spoke under.
   const guestNameSet = new Set<string>();
   for (const p of meeting?.participants || []) if (!p.user && p.guestName) guestNameSet.add(p.guestName);
-  for (const s of meeting?.transcripts || []) if (s.speakerName) guestNameSet.add(s.speakerName);
+  for (const s of meeting?.transcripts || []) if (!s.speakerId && s.speakerName) guestNameSet.add(s.speakerName);
   const guestOptions: AssignOption[] = [...guestNameSet]
     .filter((n) => n && !regNameSet.has(n.toLowerCase()))
     .map((n) => ({ id: null, name: n, guest: true }));

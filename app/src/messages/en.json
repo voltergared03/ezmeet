@@ -637,6 +637,7 @@
     "analytics": "Analytics",
     "recording": "Meeting recording",
     "unassigned": "Unassigned",
+    "unknownSpeaker": "Participant",
     "noUsers": "No users",
     "priorityHigh": "High",
     "priorityMedium": "Medium",

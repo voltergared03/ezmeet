@@ -17,7 +17,9 @@ export interface SpeakerTrackItem {
 
 export interface TranscriptSegment {
   id: string;
+  speakerId?: string | null; // User.id when the speaker is a registered user; null for a guest
   speakerName: string;
+  speakerUserName?: string | null; // registered account name (may differ from the spoken/STT label)
   speakerImage?: string | null;
   language: 'ua' | 'en' | 'ru';
   timestamp: string;

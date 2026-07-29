@@ -5,7 +5,13 @@ export function transformApiData(data: any): Meeting {
   // Transform transcripts: content -> text, startTime -> timestamp
   const transcripts = (data.transcripts || []).map((t: any) => ({
     id: t.id,
+    // The registered-user link (User.id) when this speaker has an account; null for a
+    // true guest. Carries through so the reassignment dropdown can tell a registered
+    // speaker (who may have joined under a display name ≠ their account name) apart from
+    // an unregistered guest, instead of matching by name and mislabeling them.
+    speakerId: t.speakerId ?? t.speaker?.id ?? null,
     speakerName: t.speakerName || t.speaker?.name || 'Unknown',
+    speakerUserName: t.speaker?.name ?? null, // account display name (≠ the spoken/STT label)
     speakerImage: t.speaker?.image || null,
     language: (t.language || 'uk').toLowerCase().replace('uk', 'ua') as 'ua' | 'en' | 'ru',
     timestamp: formatTimestamp(t.startTime || 0),
