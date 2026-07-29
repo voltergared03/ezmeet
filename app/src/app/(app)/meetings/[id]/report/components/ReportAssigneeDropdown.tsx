@@ -34,7 +34,15 @@ export function ReportAssigneeDropdown({
       const t = e.target as Node;
       if (ref.current && !ref.current.contains(t) && panelRef.current && !panelRef.current.contains(t)) setOpen(false);
     };
-    const onScroll = () => setOpen(false);
+    // Capture-phase scroll fires for ANY scroll in the document, including scrolling
+    // the list INSIDE the panel — which used to close the dropdown mid-scroll. Only
+    // close when the scroll happens OUTSIDE the panel (the page moved under a fixed
+    // portal, so it would otherwise detach from the button).
+    const onScroll = (e: Event) => {
+      const t = e.target as Node;
+      if (panelRef.current && panelRef.current.contains(t)) return; // scrolling the list itself — keep open
+      setOpen(false);
+    };
     document.addEventListener('mousedown', handler);
     window.addEventListener('scroll', onScroll, true);
     return () => {

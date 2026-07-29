@@ -14,13 +14,20 @@ export function PopMenu({ trigger, width = 200, small, label, align = 'right', c
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; bottom: number; openUp: boolean; maxH: number } | null>(null);
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
+    // Capture-phase scroll closes on page scroll (the fixed portal would detach),
+    // but must NOT fire when the user scrolls the menu's own overflow list.
+    const onScroll = (e: Event) => {
+      if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', close);
-    window.addEventListener('scroll', close, true);
-    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('scroll', close, true); };
+    window.addEventListener('scroll', onScroll, true);
+    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('scroll', onScroll, true); };
   }, [open]);
   return (
     <>
@@ -46,7 +53,7 @@ export function PopMenu({ trigger, width = 200, small, label, align = 'right', c
       </button>
       {open && pos && typeof document !== 'undefined' &&
         createPortal(
-          <div onMouseDown={(e) => e.stopPropagation()} style={{ position: 'fixed', left: pos.left, ...(pos.openUp ? { bottom: window.innerHeight - pos.bottom + 4 } : { top: pos.top + 4 }), width, maxHeight: pos.maxH, overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 14px 44px rgba(0,0,0,.55)', padding: 6, zIndex: 2000 }}>
+          <div ref={panelRef} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'fixed', left: pos.left, ...(pos.openUp ? { bottom: window.innerHeight - pos.bottom + 4 } : { top: pos.top + 4 }), width, maxHeight: pos.maxH, overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 14px 44px rgba(0,0,0,.55)', padding: 6, zIndex: 2000 }}>
             {children(() => setOpen(false))}
           </div>,
           document.body,
