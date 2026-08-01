@@ -4,6 +4,36 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.1] — 2026-08-01
+
+One remote-desktop client instead of two, and tabs that no longer break after an update.
+
+### Removed
+- **The experimental "V2 (beta)" remote desktop is gone.** Remote desktop had shipped two
+  parallel clients — the standard one and an opt-in V2 — and V2 proved the less reliable of
+  the pair in daily use. The standard client is now the only one: the V1/V2 switch has been
+  removed from the connect screen and every session uses the standard client automatically.
+  Nothing to change on your side; existing servers, access rules, clipboard and file transfer
+  all work exactly as before. This also retires the extra background services V2 needed.
+
+### Fixed
+- **A tab left open during an update stopped working.** After a new version was deployed, any
+  tab opened beforehand could hit an error and keep silently retrying, so buttons appeared to
+  do nothing until the page was manually force-reloaded. Such a tab now detects that it is out
+  of date and refreshes itself.
+
+### Meeting reports
+- **Meeting participants were listed as "not registered".** In the report's reassignment
+  dropdown, someone who joined under a display name different from their account name was
+  matched by name only, so they showed up a second time as an unregistered guest. Speakers are
+  now matched to their actual account, and people who spoke without being on the invite list
+  are assignable too.
+
+### Elsewhere
+- **Dropdown lists closed while being scrolled.** Long lists (such as the report's assignee
+  picker) dismissed themselves as soon as you scrolled inside them, which made them feel
+  disabled. They now stay open.
+
 ## [1.24.0-beta.6] — 2026-07-28
 
 A full security-and-reliability audit pass: closes access-control holes, stops the
