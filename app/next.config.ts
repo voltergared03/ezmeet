@@ -5,6 +5,20 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Version-skew protection. A tab opened BEFORE a deploy keeps calling Server Action
+  // ids from the old build; the new build doesn't have them, so the action fails
+  // ("Failed to find Server Action") and the client retries in a loop — the tab looks
+  // broken until a manual hard-reload. With a deploymentId Next stamps assets/action
+  // requests and, on a mismatch, does a hard navigation so the tab self-heals.
+  //
+  // The value must CHANGE per build (that's what makes a stale tab detectable) and be
+  // IDENTICAL in the client bundle and the server config — otherwise every request
+  // would look stale and reload-loop. That holds here because `output: 'standalone'`
+  // serialises this config into .next/required-server-files.json at build time and the
+  // runtime image ships no next.config.ts, so this expression is evaluated exactly once
+  // (at build) and never re-derived at runtime. The timestamp fallback keeps that
+  // guarantee even when no DEPLOYMENT_ID/GIT_SHA is passed in.
+  deploymentId: process.env.DEPLOYMENT_ID || process.env.GIT_SHA || `b${Date.now()}`,
   // The IronRDP web client ships as pre-bundled ESM with a base64-inlined WASM
   // module (no separate .wasm asset → no COOP/COEP / asset-serving needed). It is
   // imported client-side only (it calls customElements.define at module top level,
