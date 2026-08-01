@@ -122,10 +122,6 @@ services:
       eam-meet:
         condition: service_healthy
     mem_limit: 64m
-    # Mount the RDP drive-redirection volume so the scheduler can prune stale transfer files
-    # (guacd is the only other mount; without a retention job the drive grows unbounded).
-    volumes:
-      - eam-meet-guac-drive:/guac-drive
     logging: *default-logging
     networks:
       - eam-meet
@@ -219,54 +215,6 @@ services:
   # Keep it out of THIS file: a second definition would merge with the overlay's (compose
   # APPENDS volume lists), producing two mounts on the same container path.
 
-  # --- RDP v2 (Apache Guacamole) — coexists with v1; OPT-IN via `--profile rdp2` ---
-  # guacd does the native, multi-threaded FreeRDP decode; guac-tunnel (guacamole-lite)
-  # bridges the browser WebSocket to guacd with a Garely-minted token (creds injected
-  # server-side, never sent to the browser). Neither starts unless the profile is
-  # requested, so v1 (Devolutions Gateway) is untouched. Bring up with:
-  #   docker compose --profile rdp2 up -d --build guacd guac-tunnel
-  # Needs GUAC_TOKEN_KEY (32 bytes) in .env; expose guac-tunnel via host-nginx at /guac2.
-  guacd:
-    # Patched guacd 1.6.0: upstream never sends the RDP desktopScaleFactor (and hardcodes it
-    # to 0 on every resize), so a HiDPI client can only shrink the picture, never ask Windows
-    # to scale its UI. Our patch adds a `desktop-scale` parameter and plumbs it through both
-    # the connect-time settings and the display-update PDU. Rebuild after a guacd upgrade:
-    #   git clone --branch <ver> https://github.com/apache/guacamole-server.git && \
-    #   git apply desktop-scale.patch && \
-    #   docker build --build-arg BUILD_JOBS=2 --build-arg WITH_FREERDP='2\.11\.7' \
-    #     -t garely-guacd:<ver>-scale .
-    # The patch lives in rdp-gw2/desktop-scale.patch.
-    image: garely-guacd:1.6.0-scale
-    profiles: ["rdp2"]
-    restart: unless-stopped
-    mem_limit: 512m
-    # Writable target for RDP drive redirection (two-way file transfer). guacd creates a
-    # per-user subdir under here (create-drive-path) and mounts it as the "Garely" drive.
-    volumes:
-      - eam-meet-guac-drive:/guac-drive
-    logging: *default-logging
-    networks:
-      - eam-meet
-
-  guac-tunnel:
-    build: ./rdp-gw2
-    profiles: ["rdp2"]
-    restart: unless-stopped
-    environment:
-      - GUACD_HOST=guacd
-      - GUACD_PORT=4822
-      - GUAC_TOKEN_KEY=${GUAC_TOKEN_KEY}
-    ports:
-      # Loopback-only, same posture as the Devolutions Gateway (:7171). host-nginx
-      # reverse-proxies /guac2/ -> 127.0.0.1:8088. Never exposed publicly.
-      - "127.0.0.1:8088:8080"
-    mem_limit: 256m
-    logging: *default-logging
-    depends_on:
-      - guacd
-    networks:
-      - eam-meet
-
 volumes:
   eam-meet-pgdata:
   eam-meet-redis-data:
@@ -275,7 +223,6 @@ volumes:
   eam-meet-task-files:
   eam-meet-base-files:
   eam-meet-backups:
-  eam-meet-guac-drive:
 
 networks:
   eam-meet:

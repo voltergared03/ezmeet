@@ -8,7 +8,6 @@ import { decryptServerSecret } from '@/lib/server-credentials';
 import { rdpGatewayEnabled, rdpGatewayUrl } from '@/lib/rdp-gateway';
 import { mintConnectionToken } from '@/lib/rdp-token';
 import { rateLimit } from '@/lib/rate-limit';
-import { guacEnabled, guacTunnelUrl, mintGuacToken } from '@/lib/guac';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -36,39 +35,7 @@ export const POST = withRoute('servers.connect', async (req: NextRequest, ctx: C
   const clientIp =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || null;
 
-  // ── RDP v2 (Apache Guacamole) — opt-in via ?v=2, coexists with v1 below. guacd does
-  // native decode; the vault password is injected server-side into the encrypted guac
-  // token and, unlike v1, is NEVER returned to the browser (closes finding F-01).
-  if (req.nextUrl.searchParams.get('v') === '2') {
-    if (!guacEnabled()) return jsonError('guac_unconfigured', 503);
-    const sess = await prisma.serverSession.create({
-      data: { connectionId: conn.id, userId: r.session.user.id, orgId: r.orgId, status: 'active', clientIp, lastSeenAt: new Date() },
-      select: { id: true },
-    });
-    // Start guacd at the client's real viewport × devicePixelRatio so the first frame is
-    // crisp — without this it defaults to 1280×800 and relies on a post-connect display-update
-    // resize that doesn't reliably apply (looked "soft" until a manual fullscreen toggle).
-    const sp = req.nextUrl.searchParams;
-    const clampInt = (v: string | null, lo: number, hi: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? Math.min(hi, Math.max(lo, n)) : undefined; };
-    // Per-user drive path → each user's redirected "Garely" drive is isolated; one user's
-    // uploaded/staged files are never visible inside another user's session.
-    const driveUser = r.session.user.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'anon';
-    const gtoken = mintGuacToken({
-      hostname: conn.host,
-      port: conn.port,
-      username: conn.username,
-      password: decryptServerSecret(conn.secretCipher),
-      domain: conn.domain,
-      width: clampInt(sp.get('w'), 640, 5120),
-      height: clampInt(sp.get('h'), 480, 2880),
-      dpi: clampInt(sp.get('dpi'), 96, 240),
-      desktopScale: clampInt(sp.get('ds'), 100, 500),
-      drivePath: `/guac-drive/${driveUser}`,
-    });
-    return NextResponse.json({ method: 'guac', tunnelUrl: guacTunnelUrl(), token: gtoken, sessionId: sess.id });
-  }
-
-  // ── v1 (Devolutions Gateway / in-browser IronRDP) ──
+  // ── Devolutions Gateway / in-browser IronRDP ──
   if (!rdpGatewayEnabled()) return jsonError('gateway_unconfigured', 503);
 
   const password = decryptServerSecret(conn.secretCipher); // '' when no stored secret

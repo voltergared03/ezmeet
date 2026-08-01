@@ -28,11 +28,6 @@ echo
 EOF
 chmod +x /usr/local/bin/run-cron-job
 
-# The RDP-v2 drive-redirection volume is created root-owned, but guacd runs as uid 1000 and
-# must create per-user subdirs under it. Make it world-writable on start (idempotent) so file
-# transfer works even if the named volume is ever recreated.
-chmod 0777 /guac-drive 2>/dev/null || true
-
 mkdir -p /var/spool/cron/crontabs
 cat > /var/spool/cron/crontabs/root <<'EOF'
 # min hour dom mon dow  command  (secret is injected by run-cron-job, not stored here)
@@ -51,9 +46,6 @@ cat > /var/spool/cron/crontabs/root <<'EOF'
 # Release meeting reports stuck in "generating" because a process died mid-run.
 */10 * * * * /usr/local/bin/run-cron-job report-backstop >/proc/1/fd/1 2>&1
 */30 * * * * /usr/local/bin/run-cron-job linear-health >/proc/1/fd/1 2>&1
-# Prune RDP-v2 file-transfer drive: delete staged files older than 7 days so the shared
-# host disk (pgdata/recordings/backups) can't be exhausted by accumulated transfers.
-30 4 * * *  find /guac-drive -type f -mtime +7 -exec rm -f {} \; >/proc/1/fd/1 2>&1
 EOF
 
 echo "[cron] scheduler started — jobs target ${APP_URL}"

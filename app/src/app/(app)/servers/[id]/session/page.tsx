@@ -7,7 +7,6 @@ import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2, ShieldAlert, Cpu, MonitorPlay, Lock } from 'lucide-react';
 import type { ServerView, ActiveServerSession } from '../../lib/types';
 import RdpClient, { type Phase } from './RdpClient';
-import GuacamoleClient from './GuacamoleClient';
 
 const STYLES = `
 @keyframes sess-ring { 0% { transform: scale(.62); opacity:.6; } 100% { transform: scale(2.3); opacity:0; } }
@@ -20,8 +19,6 @@ const STYLES = `
 `;
 
 interface ConnectInfo {
-  method?: 'guac'; // RDP v2 (Guacamole); absent → v1 (IronRDP/DGW)
-  tunnelUrl?: string; // v2 only — the guac-tunnel wss base
   gatewayUrl: string;
   token: string;
   sessionId: string;
@@ -42,60 +39,11 @@ export default function ServerSessionPage() {
   const t = useTranslations('servers');
   const params = useParams<{ id: string }>();
   const id = params?.id;
-  // Opt-in RDP v2 (Guacamole). Seeds from ?v=2 or a saved choice; the toggle persists it.
-  // Read the URL client-side (NOT useSearchParams — that needs a Suspense boundary in
-  // Next 15 and crashed the whole session page for every user, v1 included).
-  const [v2, setV2] = useState(false);
-  useEffect(() => {
-    let saved = false;
-    let fromUrl = false;
-    try { saved = localStorage.getItem('garely-rdp-v2') === '1'; } catch { /* noop */ }
-    try { fromUrl = new URLSearchParams(window.location.search).get('v') === '2'; } catch { /* noop */ }
-    setV2(fromUrl || saved);
-  }, []);
-  const toggleV2 = (on: boolean) => {
-    setV2(on);
-    try { localStorage.setItem('garely-rdp-v2', on ? '1' : '0'); } catch { /* noop */ }
-  };
-
   const [server, setServer] = useState<ServerView | null>(null);
   const [stage, setStage] = useState<Stage>('loading');
   const [conn, setConn] = useState<ConnectInfo | null>(null);
   const [password, setPassword] = useState('');
   const [livePhase, setLivePhase] = useState<Phase>('init');
-  // v2 render scale (viewport × scale). guacd can't scale the Windows UI, so scale sets BOTH
-  // sharpness and UI size. Two modes only, no picker: normal 1× and HD 1.25× (the levels that
-  // read best in practice). HD is STICKY (persisted below) and defaults ON, so a user lands in
-  // the crisp device-pixel render without toggling each session — hdRef is what doConnect reads
-  // (avoids a stale closure); hd state drives the pill's button.
-  // Normal is a comfort choice (1× was too large). HD must equal devicePixelRatio: a render is
-  // pixel-exact only when its width == frame × dpr — anything less gets upscaled by the browser
-  // and looks soft no matter how high it is. On a dpr-2 Retina that means exactly 2×.
-  const SCALE_NORMAL = 1.25;
-  const HD_DESKTOP_SCALE = 150; // Windows UI scaling requested in HD (percent)
-  const hdRef = useRef(false);
-  const [hd, setHd] = useState(false);
-  const hdScaleRef = useRef(2);
-  const [hdScale, setHdScale] = useState(2);
-  useEffect(() => {
-    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
-    const v = Math.max(SCALE_NORMAL + 0.25, dpr); // never below normal — HD is always an upgrade
-    hdScaleRef.current = v;
-    setHdScale(v);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // Seed HD from the saved choice (default ON). Client-only + before the user clicks Connect
-  // (connect is user-triggered, never on mount), so doConnect reads the right hdRef. Read here
-  // rather than in useState/useRef initializers to avoid touching localStorage during SSR.
-  useEffect(() => {
-    let on = true; // never chosen → HD on by default
-    try {
-      const v = localStorage.getItem('garely-guac-hd');
-      if (v !== null) on = v === '1';
-    } catch { /* noop */ }
-    hdRef.current = on;
-    setHd(on);
-  }, []);
   // Guards against racing reconnects: rapid scale/HD changes fire several /connect requests, and
   // whichever RESPONSE lands last used to win — so the session could end up at an older scale
   // while the UI showed the newest one (this is what made the on-screen scale label lie).
@@ -126,20 +74,7 @@ export default function ServerSessionPage() {
     const seq = ++connectSeq.current; // only the newest connect may apply its result
     setStage('connecting');
     try {
-      // For v2, start guacd at viewport × the chosen scale. guacd can't scale the remote Windows
-      // UI (it sets no DesktopScaleFactor), so this single number sets both sharpness and UI size.
-      let url = `/api/servers/${id}/connect`;
-      if (v2) {
-        const s = hdRef.current ? hdScaleRef.current : SCALE_NORMAL;
-        const w = Math.round((window.innerWidth || 1280) * s);
-        const h = Math.round((window.innerHeight || 800) * s);
-        url += `?v=2&w=${w}&h=${h}`;
-        // HD renders at device-pixel density (crisp) and asks Windows to scale its UI to
-        // 150%, so the extra pixels buy sharpness instead of shrinking everything. Needs our
-        // patched guacd; a stock guacd ignores it (the picture is just crisp-and-small).
-        if (hdRef.current) url += `&ds=${HD_DESKTOP_SCALE}`;
-      }
-      const res = await fetch(url, { method: 'POST' });
+      const res = await fetch(`/api/servers/${id}/connect`, { method: 'POST' });
       if (seq !== connectSeq.current) return; // superseded by a newer connect — drop this response
       if (res.status === 403 || res.status === 404) return setStage('denied');
       if (res.status === 503) return setStage('gatewayPending');
@@ -151,16 +86,7 @@ export default function ServerSessionPage() {
     } catch {
       if (seq === connectSeq.current) setStage('error');
     }
-  }, [id, v2]);
-
-  // HD toggle: flip the mode, then reconnect so guacd starts at the new resolution (its live
-  // display-update resize is unreliable, especially when shrinking).
-  const toggleHd = useCallback(() => {
-    hdRef.current = !hdRef.current;
-    setHd(hdRef.current);
-    try { localStorage.setItem('garely-guac-hd', hdRef.current ? '1' : '0'); } catch { /* noop */ }
-    void doConnect();
-  }, [doConnect]);
+  }, [id]);
 
   // Connect entry: re-check live occupancy (so the warning is accurate at click time),
   // warn if someone else is already connected (RDP bumps the prior session for the same
@@ -230,26 +156,8 @@ export default function ServerSessionPage() {
           </span>
         </div>
 
-        {/* live session — RDP v2 (Guacamole) when the connect route returned method:'guac' */}
-        {stage === 'live' && conn && server && conn.method === 'guac' && (
-          <GuacamoleClient
-            key={conn.sessionId}
-            tunnelUrl={conn.tunnelUrl || ''}
-            token={conn.token}
-            serverName={server.name}
-            scale={hd ? hdScale : SCALE_NORMAL}
-            hd={hd}
-            onToggleHd={toggleHd}
-            onExit={() => {
-              setConn(null);
-              setLivePhase('init');
-              setStage('idle');
-            }}
-          />
-        )}
-
-        {/* live session — v1 (IronRDP / Devolutions Gateway) */}
-        {stage === 'live' && conn && server && conn.method !== 'guac' && (
+        {/* live session — IronRDP / Devolutions Gateway */}
+        {stage === 'live' && conn && server && (
           <RdpClient
             key={conn.sessionId}
             connectionId={id!}
@@ -332,25 +240,9 @@ export default function ServerSessionPage() {
                       </div>
                     );
                   })()}
-                  {/* RDP method — v1 (standard) vs v2 (Guacamole, beta) */}
-                  <div style={{ display: 'inline-flex', marginTop: 18, padding: 3, gap: 3, borderRadius: 999, border: '1px solid var(--border)', background: 'rgba(255,255,255,.03)' }}>
-                    {[{ on: false, label: 'Стандарт' }, { on: true, label: 'V2 (beta)' }].map((o) => (
-                      <button
-                        key={String(o.on)}
-                        onClick={() => toggleV2(o.on)}
-                        style={{
-                          padding: '5px 15px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-                          background: v2 === o.on ? 'var(--accent)' : 'transparent',
-                          color: v2 === o.on ? '#fff' : 'var(--muted)',
-                        }}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
                   <div>
                     <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => void onConnectClick()}>
-                      <MonitorPlay size={16} style={{ marginRight: 7 }} /> {t('connect')}{v2 ? ' · V2' : ''}
+                      <MonitorPlay size={16} style={{ marginRight: 7 }} /> {t('connect')}
                     </button>
                   </div>
                 </div>
