@@ -1133,6 +1133,20 @@ describe('Garely → ClickUp deletion', () => {
     expect(copies.map((c) => c.clickupTaskId).sort()).toEqual(['CUa', 'CUb', 'CUlegacy']);
   });
 
+  it('succeeds on an EMPTY response body — a real ClickUp DELETE returns no JSON', async () => {
+    // Regression: the helper parsed the body, so a successful delete threw
+    // "Unexpected end of JSON input". The task was gone from ClickUp while Garely kept
+    // the row and reported failure — an orphan in the opposite direction.
+    const { deleteClickUpTask } = await import('@/lib/clickup');
+    stubFetch((u, method) => {
+      if (u.includes('/task/CUdel') && method === 'DELETE') {
+        return { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); }, text: async () => '' } as unknown as Response;
+      }
+      return undefined;
+    });
+    await expect(deleteClickUpTask('pk_x', 'CUdel')).resolves.toBeUndefined();
+  });
+
   it('treats a 404 as success — the task is already gone', async () => {
     const { deleteClickUpTask } = await import('@/lib/clickup');
     stubFetch((u, method) => {

@@ -1462,12 +1462,19 @@ export async function clickUpCopiesForRows(rowIds: string[]): Promise<ClickUpCop
  */
 export async function deleteClickUpTask(token: string, clickupTaskId: string): Promise<void> {
   markSelfDeleted(clickupTaskId); // before the call: the echo can beat our own await
-  try {
-    await cuJson(token, `/task/${clickupTaskId}`, { method: 'DELETE' });
-  } catch (e) {
-    if (e instanceof ClickUpHttpError && e.status === 404) return;
-    throw e;
+  // NOT cuJson: a successful DELETE returns an EMPTY body, and res.json() on that
+  // throws "Unexpected end of JSON input". That read the task as a failed delete even
+  // though ClickUp had already removed it — so the Garely row was kept and the copy
+  // was orphaned the other way round. Only the status matters here.
+  let res = await cuFetch(token, `/task/${clickupTaskId}`, { method: 'DELETE' });
+  if (res.status === 429) {
+    const retryAfter = Math.min(Number(res.headers.get('retry-after')) || 1, 3);
+    await new Promise((r) => setTimeout(r, retryAfter * 1000));
+    res = await cuFetch(token, `/task/${clickupTaskId}`, { method: 'DELETE' });
   }
+  if (res.ok || res.status === 404) return; // 404 = already gone, which is the goal
+  const body = await res.text().catch(() => '');
+  throw new ClickUpHttpError('DELETE', `/task/${clickupTaskId}`, res.status, body);
 }
 
 /**
