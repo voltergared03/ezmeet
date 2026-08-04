@@ -433,8 +433,10 @@ export default function MeetingReportPage() {
     }
   }, [actionItems, showSaveError, tr]);
 
-  const deleteActionItem = useCallback(async (id: string) => {
-    if (!window.confirm(tr('report.deleteActionItemConfirm'))) return;
+  const deleteActionItem = useCallback(async (id: string, mirrored = false) => {
+    // A mirrored item also destroys every assignee's ClickUp copy, so say that rather
+    // than reuse the plain "delete this item?" wording.
+    if (!window.confirm(mirrored ? tr('tasks.confirmDeleteMirrored') : tr('report.deleteActionItemConfirm'))) return;
     const prevItems = actionItems;
     setActionItems((prev) => prev.filter((item) => item.id !== id));
     try {
@@ -443,7 +445,13 @@ export default function MeetingReportPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: id }),
       });
-      if (!res.ok) { setActionItems(prevItems); showSaveError(tr('common.saveFailed')); } // delete rejected → put it back
+      if (!res.ok) {
+        setActionItems(prevItems); // delete rejected → put it back
+        // Surface the server's reason (403 not admin/assignee, 502 some ClickUp copies
+        // survived) instead of a generic "couldn't save".
+        const msg = await res.json().then((d) => d?.error).catch(() => null);
+        showSaveError(msg || tr('common.saveFailed'));
+      }
     } catch (e) { console.error(e); setActionItems(prevItems); showSaveError(tr('common.saveFailed')); }
   }, [actionItems, showSaveError, tr]);
 
@@ -1195,9 +1203,13 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                           )}
                         </div>
                       </div>
-                      {isAdmin && !(item.clickupManaged || item.linearManaged) && (
+                      {/* A ClickUp-mirrored item IS deletable now (it removes the ClickUp
+                          copies too — deleteActionItem confirms that separately). Linear
+                          stays hidden: there is no delete path there, so the issue would
+                          be orphaned. */}
+                      {isAdmin && !item.linearManaged && (
                         <button
-                          onClick={() => deleteActionItem(item.id)}
+                          onClick={() => deleteActionItem(item.id, item.clickupManaged)}
                           title={tr('report.deleteActionItem')}
                           style={{
                             width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginTop: 1,

@@ -457,10 +457,19 @@ function SubtaskList({ parent, mobile, onOpen, onChange }: {
       if (!res.ok) onChange(prev); // revert on failure instead of silently diverging
     } catch { onChange(prev); }
   };
-  const del = (s: Subtask, e: React.MouseEvent) => {
+  const del = async (s: Subtask, e: React.MouseEvent) => {
     e.stopPropagation();
+    // Mirrored subtasks delete their ClickUp copies too — one stray click on a trash
+    // icon should not do that silently.
+    if (s.clickupManaged && !window.confirm(tr("tasks.confirmDeleteMirrored"))) return;
+    const prev = subs;
     onChange(subs.filter(x => x.id !== s.id));
-    fetch("/api/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: s.id }) }).catch(() => {});
+    try {
+      // Was fire-and-forget: a rejected delete (not admin/assignee, or some ClickUp
+      // copies survived) still vanished from the list and reappeared on refresh.
+      const res = await fetch("/api/tasks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: s.id }) });
+      if (!res.ok) onChange(prev);
+    } catch { onChange(prev); }
   };
   const add = async () => {
     const title = newTitle.trim();
