@@ -293,9 +293,17 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"Agent joining room: {ctx.room.name}")
 
     room_name = ctx.room.name
-    meeting_id = await get_meeting_id(room_name)
-    if not meeting_id:
+    meeting = await get_meeting(room_name)
+    if not meeting:
         logger.warning(f"Could not find meeting for room {room_name}")
+        return
+    meeting_id = meeting["id"]
+
+    # The per-meeting switch was stored but never honoured — turning transcription off
+    # in the form still transcribed. Leave the room instead: no STT, no live captions
+    # and, with no segments written, no AI report built on them either.
+    if meeting.get("transcriptionEnabled") is False:
+        logger.info(f"Transcription disabled for meeting {meeting_id} — agent leaving")
         return
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
@@ -681,8 +689,12 @@ async def entrypoint(ctx: JobContext):
         await finalize_speaker_track(meeting_id, info)
 
 
-async def get_meeting_id(room_name: str) -> str | None:
-    """Look up meeting ID by LiveKit room name."""
+async def get_meeting(room_name: str) -> dict | None:
+    """Look up the meeting by LiveKit room name.
+
+    Returns the whole record, not just the id: the caller also needs
+    transcriptionEnabled, which decides whether this agent transcribes at all.
+    """
     try:
         async with httpx.AsyncClient() as client:
             res = await client.get(
@@ -694,9 +706,9 @@ async def get_meeting_id(room_name: str) -> str | None:
             if res.status_code == 200:
                 meetings = res.json()
                 if meetings and len(meetings) > 0:
-                    return meetings[0]["id"]
+                    return meetings[0]
     except Exception as e:
-        logger.error(f"Failed to get meeting ID: {e}")
+        logger.error(f"Failed to get meeting: {e}")
     return None
 
 

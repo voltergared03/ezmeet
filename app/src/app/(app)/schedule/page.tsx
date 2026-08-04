@@ -38,6 +38,7 @@ export default function SchedulePage() {
     description: '',
     transcription: true,
     aiReport: true,
+    taskCreation: true,
     allowGuests: true,
     departmentId: '',
   });
@@ -160,6 +161,7 @@ export default function SchedulePage() {
           recurrence: form.recurring !== 'none' ? { type: form.recurring } : null,
           transcriptionEnabled: form.transcription,
           aiReportEnabled: form.aiReport,
+          taskCreationEnabled: form.taskCreation,
           allowGuests: form.allowGuests,
           departmentId: form.departmentId || null,
           participants: selectedUsers.map(u => ({ userId: u.id })),
@@ -471,6 +473,7 @@ export default function SchedulePage() {
             </div>
             <Toggle label={t('schedule.toggleTranscription')} value={form.transcription} onChange={(v) => set('transcription', v)} />
             <Toggle label={t('schedule.toggleAiReport')} value={form.aiReport} onChange={(v) => set('aiReport', v)} />
+            <Toggle label={t('schedule.toggleTaskCreation')} value={form.taskCreation} onChange={(v) => set('taskCreation', v)} />
             <Toggle label={t('schedule.toggleAllowGuests')} value={form.allowGuests} onChange={(v) => set('allowGuests', v)} />
           </div>
 

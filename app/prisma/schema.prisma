@@ -163,6 +163,9 @@ model Meeting {
   // AI options
   transcriptionEnabled   Boolean      @default(true)
   aiReportEnabled        Boolean      @default(true)
+  // Off = the report is still written (summary/decisions/topics), but the meeting
+  // creates NO tasks: none locally and none pushed to ClickUp/Linear.
+  taskCreationEnabled    Boolean      @default(true)
   allowGuests            Boolean      @default(true)
   agenda                 Json?
   departmentId           String?

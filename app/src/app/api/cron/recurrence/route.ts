@@ -69,6 +69,7 @@ async function getHandler(req: NextRequest) {
             joinToken: stableToken,
             transcriptionEnabled: m.transcriptionEnabled,
             aiReportEnabled: m.aiReportEnabled,
+            taskCreationEnabled: m.taskCreationEnabled,
             allowGuests: m.allowGuests,
             agenda: m.agenda ?? Prisma.JsonNull,
             status: 'scheduled',

@@ -169,9 +169,16 @@ async function generateReportInner(
   // and the persistence step can resolve a department NAME → id.
   const meetingMeta = await prisma.meeting.findUnique({
     where: { id: meetingId },
-    select: { departmentId: true, orgId: true, scheduledAt: true },
+    select: { departmentId: true, orgId: true, scheduledAt: true, aiReportEnabled: true, taskCreationEnabled: true },
   });
   if (!meetingMeta) throw new Error('Meeting not found');
+  // The per-meeting AI switches were stored but never read — turning them off in the
+  // form changed nothing. Enforce them here, at the single entry point that writes a
+  // report, so "off" actually means off.
+  if (!meetingMeta.aiReportEnabled) {
+    console.log(`[report] ${meetingId}: aiReportEnabled=false → skipping generation`);
+    return { topics: 0 };
+  }
   const meetingDeptId = meetingMeta.departmentId ?? null;
   const orgId = meetingMeta.orgId; // non-null: every meeting carries its org
   const decisionDateIso = (meetingMeta.scheduledAt ?? new Date()).toISOString();
@@ -518,6 +525,14 @@ ${numbered}`;
   };
 
   const rawTopics = Array.isArray(rep.topics) ? rep.topics : [];
+  // Task creation off → drop the model's tasks HERE, before anything reads them.
+  // Everything downstream (the persisted report JSON, the task Rows, the ClickUp and
+  // Linear pushes, the notifications) derives from `topics`, so this one gate keeps
+  // them consistent — the alternative, skipping only the writes, would still show
+  // phantom tasks in the report's detailed tab that exist nowhere and can't be worked.
+  if (!meetingMeta.taskCreationEnabled) {
+    for (const t of rawTopics) if (t && typeof t === 'object') (t as { tasks?: unknown }).tasks = [];
+  }
   const topics = rawTopics.map((t: any) => ({
     title: String(t.title || '').trim(),
     discussion: String(t.discussion || '').trim(),

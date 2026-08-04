@@ -122,7 +122,7 @@ async function patchHandler(
   // Update meeting fields
   const allowedFields: Record<string, any> = {};
   const editable = ['title', 'description', 'scheduledAt', 'durationMin', 'recurrence',
-    'transcriptionEnabled', 'aiReportEnabled', 'allowGuests', 'status', 'agenda'];
+    'transcriptionEnabled', 'aiReportEnabled', 'taskCreationEnabled', 'allowGuests', 'status', 'agenda'];
   for (const key of editable) {
     if (key in meetingData) {
       if (key === 'scheduledAt' && meetingData[key]) {

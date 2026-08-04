@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       participants = [],
       transcriptionEnabled,
       aiReportEnabled,
+      taskCreationEnabled,
       allowGuests,
       agenda = null,
       departmentId = null,
@@ -115,6 +116,8 @@ export async function POST(req: NextRequest) {
     const wsCfg = await readConfig(['WS_LIVE_TRANSCRIPTION', 'WS_AI_SUMMARY', 'WS_GUEST_ACCESS', 'WS_MAX_DURATION_MIN']);
     const effTranscription = transcriptionEnabled ?? (wsCfg.WS_LIVE_TRANSCRIPTION !== 'false');
     const effAiReport = aiReportEnabled ?? (wsCfg.WS_AI_SUMMARY !== 'false');
+    // No workspace-level key yet: tasks follow the report unless set per meeting.
+    const effTaskCreation = taskCreationEnabled ?? true;
     const effAllowGuests = allowGuests ?? (wsCfg.WS_GUEST_ACCESS !== 'false');
     const maxDur = num(wsCfg, 'WS_MAX_DURATION_MIN') || 240;
     const dur = Math.min(Math.max(parseInt(String(durationMin), 10) || 60, 5), maxDur);
@@ -138,6 +141,7 @@ export async function POST(req: NextRequest) {
         joinToken,
         transcriptionEnabled: effTranscription,
         aiReportEnabled: effAiReport,
+        taskCreationEnabled: effTaskCreation,
         allowGuests: effAllowGuests,
         agenda,
         departmentId: typeof departmentId === 'string' && departmentId ? departmentId : null,

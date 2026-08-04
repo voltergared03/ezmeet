@@ -161,6 +161,7 @@ async function applyGoogleEvent(
       joinToken: generateMeetingSlug(),
       transcriptionEnabled: wsCfg.WS_LIVE_TRANSCRIPTION !== 'false',
       aiReportEnabled: wsCfg.WS_AI_SUMMARY !== 'false',
+      taskCreationEnabled: true,
       allowGuests: wsCfg.WS_GUEST_ACCESS !== 'false',
       status: 'scheduled',
       orgId: conn.orgId,
