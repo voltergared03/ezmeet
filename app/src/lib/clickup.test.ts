@@ -1116,3 +1116,70 @@ describe('reconcileClickUpTasks (catch-up sweep)', () => {
     expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+describe('Garely → ClickUp deletion', () => {
+  it('collects EVERY copy: split links by rowId plus a legacy link with no rowId', async () => {
+    // Regression: the connect-time backfill writes links carrying neither rowId nor
+    // assigneeUserId. Enumerating by rowId alone missed those, so the Garely row was
+    // deleted while its ClickUp task lived on, unreachable from Garely.
+    const { clickUpCopiesForRows } = await import('@/lib/clickup');
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([
+      { id: 'l1', clickupTaskId: 'CUa', clickupUrl: 'u1', listId: 'L1' },
+      { id: 'l2', clickupTaskId: 'CUb', clickupUrl: 'u2', listId: 'L2' },
+    ] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([{ clickupTaskId: 'CUlegacy', clickupUrl: 'u3' }] as any);
+
+    const copies = await clickUpCopiesForRows(['r1']);
+    expect(copies.map((c) => c.clickupTaskId).sort()).toEqual(['CUa', 'CUb', 'CUlegacy']);
+  });
+
+  it('treats a 404 as success — the task is already gone', async () => {
+    const { deleteClickUpTask } = await import('@/lib/clickup');
+    stubFetch((u, method) => {
+      if (u.includes('/task/CUgone') && method === 'DELETE') {
+        return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' } as Response;
+      }
+      return undefined;
+    });
+    await expect(deleteClickUpTask('pk_x', 'CUgone')).resolves.toBeUndefined();
+  });
+
+  it('reports failures instead of swallowing them, so the caller keeps the Garely row', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { deleteClickUpCopies } = await import('@/lib/clickup');
+    stubFetch((u, method) => {
+      if (method !== 'DELETE') return undefined;
+      if (u.includes('/task/CUok')) return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' } as Response;
+      return { ok: false, status: 500, json: async () => ({}), text: async () => 'boom' } as Response;
+    });
+    const res = await deleteClickUpCopies([
+      { clickupTaskId: 'CUok', clickupUrl: null, listId: null, linkId: null },
+      { clickupTaskId: 'CUbad', clickupUrl: null, listId: null, linkId: null },
+    ]);
+    expect(res.deleted).toEqual(['CUok']);
+    expect(res.failed.map((f) => f.clickupTaskId)).toEqual(['CUbad']);
+  });
+
+  it('refuses every copy when ClickUp is disconnected rather than stranding them', async () => {
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_ENABLED: 'false' });
+    const { deleteClickUpCopies } = await import('@/lib/clickup');
+    const { fetchMock } = installFetch();
+    const res = await deleteClickUpCopies([{ clickupTaskId: 'CU1', clickupUrl: null, listId: null, linkId: null }]);
+    expect(res.deleted).toEqual([]);
+    expect(res.failed[0].error).toBe('clickup_disabled');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('drops the webhook echo of our own delete instead of re-entering the destructive branch', async () => {
+    // Deleting via the API makes ClickUp fire taskDeleted straight back at us. The row
+    // is already gone; re-running the branch is at best wasted, at worst a second delete.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    const { deleteClickUpTask, applyClickUpEvent } = await import('@/lib/clickup');
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({}), text: async () => '{}' }) as Response);
+    await deleteClickUpTask('pk_x', 'CUecho');
+
+    await applyClickUpEvent('taskDeleted', 'CUecho');
+    expect(prismaMock.clickUpTaskLink.deleteMany).not.toHaveBeenCalled();
+    expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+  });
+});

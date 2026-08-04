@@ -414,7 +414,8 @@
     "uploading": "Uploading…",
     "fileTooLarge": "File too large (max 25 MB)",
     "uploadFailed": "Upload failed",
-    "download": "Download"
+    "download": "Download",
+    "confirmDeleteMirrored": "This also permanently deletes the task in ClickUp, including every assignee’s copy. This cannot be undone from Garely."
   },
   "archive": {
     "title": "Meeting archive",
@@ -502,7 +503,8 @@
     "errorTitleRequired": "Title is required",
     "errorTitleTooShort": "Too short — minimum 3 characters",
     "errorDateRequired": "Select a date",
-    "errorTimeRequired": "Select a time"
+    "errorTimeRequired": "Select a time",
+    "toggleTaskCreation": "Create tasks"
   },
   "auth": {
     "welcome": "Welcome to {name}",
@@ -1435,7 +1437,9 @@
     "meetingHasRecording": "This meeting has a recording. Delete the recording first, then the meeting.",
     "joinRequestNotFound": "Request not found",
     "requestIdAndActionRequired": "requestId and action are required",
-    "invalidCurrentPassword": "Incorrect current password"
+    "invalidCurrentPassword": "Incorrect current password",
+    "clickupDeleteForbidden": "Only an admin or the task's assignee can delete a task that is mirrored in ClickUp",
+    "clickupDeletePartial": "Deleted {done} of {total} ClickUp copies — the task was kept so nothing is orphaned. Try again."
   },
   "chat": {
     "reportReady": "📋 {title} — meeting report ready",

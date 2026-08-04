@@ -3,7 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { requireAuth } from "@/lib/api-auth";
 import { userCanViewTask } from "@/lib/access";
 import { notifyTaskAssigned, notifyTaskUpdated } from "@/lib/task-notify";
-import { listTasks, createTask, updateTask, deleteTask, authorizeTaskMutation, listTaskFields, isClickUpManaged } from "@/lib/tasks";
+import { listTasks, createTask, updateTask, deleteTask, authorizeTaskMutation, listTaskFields, isClickUpManaged, taskMirrors, taskRowIdsWithSubtasks } from "@/lib/tasks";
+import { clickUpCopiesForRows, deleteClickUpCopies, purgeClickUpLinksForRows } from "@/lib/clickup";
 import { z } from "zod";
 import { validateBody } from "@/lib/validate";
 
@@ -141,12 +142,46 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: authz.error === "taskNotFound" ? t("taskNotFound") : authz.error }, { status: authz.status });
   }
 
-  if (await isClickUpManaged(taskId)) return NextResponse.json({ error: t("clickupManaged") }, { status: 409 });
+  // Linear has no delete path (lib/linear.ts never deletes an issue), so a
+  // Linear-mirrored task stays blocked — otherwise the Garely row would vanish and
+  // leave the issue orphaned.
+  const mirrors = await taskMirrors(taskId);
+  if (mirrors.linear) return NextResponse.json({ error: t("clickupManaged") }, { status: 409 });
+
+  // Deleting a mirrored task destroys work in someone else's ClickUp list, under the
+  // admin's API token. Meeting access alone is too broad a key for that (any attendee
+  // of a cross-team call would qualify), so narrow it to admin or the task's own lead
+  // assignee. Local-only tasks keep the ordinary permission model.
+  if (mirrors.clickup) {
+    const isAdmin = session.user.role === "admin";
+    if (!isAdmin && authz.assigneeId !== session.user.id) {
+      return NextResponse.json({ error: t("clickupDeleteForbidden") }, { status: 403 });
+    }
+  }
 
   try {
+    if (mirrors.clickup) {
+      // ClickUp FIRST, and only then the local rows: the reverse order orphans copies
+      // in several people's lists with no Garely task left to find them by. Subtasks
+      // are swept with the parent because deleteTask() deletes their rows too.
+      const rowIds = await taskRowIdsWithSubtasks(taskId);
+      const copies = await clickUpCopiesForRows(rowIds);
+      const { deleted, failed } = await deleteClickUpCopies(copies);
+      if (failed.length) {
+        console.error("[tasks] ClickUp delete failed for", taskId, failed);
+        return NextResponse.json(
+          { error: t("clickupDeletePartial", { done: deleted.length, total: copies.length }) },
+          { status: 502 },
+        );
+      }
+      // Links are keyed to rows that are about to disappear; drop them here so no link
+      // outlives its Row and strands the reconcile sweep.
+      await purgeClickUpLinksForRows(rowIds);
+    }
     await deleteTask(taskId);
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error("[tasks] delete failed", taskId, e);
     return NextResponse.json({ error: t("taskNotFound") }, { status: 404 });
   }
 }

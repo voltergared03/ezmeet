@@ -1750,8 +1750,18 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
         )}
         {/* Footer */}
         <div style={{ padding: "14px 22px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-          {!isNew && !(task?.clickupManaged || task?.linearManaged) && (
-            <button className="btn btn-sm" onClick={handleDelete} disabled={saving}
+          {/* Deletable unless Linear owns it — Linear has no delete path, so removing
+              the Garely row there would orphan the issue. A ClickUp-mirrored task IS
+              deletable now, but it also destroys the ClickUp copies (one per assignee),
+              so it asks first; a plain local task keeps the old one-click behaviour. */}
+          {!isNew && !task?.linearManaged && (
+            <button
+              className="btn btn-sm"
+              disabled={saving}
+              onClick={() => {
+                if (task?.clickupManaged && !window.confirm(tr("tasks.confirmDeleteMirrored"))) return;
+                void handleDelete();
+              }}
               style={{ color: "var(--red)", borderColor: "color-mix(in oklab, var(--red) 30%, transparent)" }}>
               <Trash2 size={13} /> {tr("common.delete")}
             </button>

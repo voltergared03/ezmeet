@@ -989,6 +989,11 @@ export async function applyClickUpEvent(event: string, clickupTaskId: string): P
     if (!rowId) return; // not a task Garely pushed → ignore
 
     if (event === 'taskDeleted') {
+      // Our own delete echoes back here within seconds. The row and its links are
+      // already gone by then, so re-entering this branch is at best wasted work and at
+      // worst — once a delete is ever scoped to a single assignee's copy — a second,
+      // unintended row deletion. Drop the echo.
+      if (wasSelfDeleted(clickupTaskId)) return;
       // Drop this ClickUp task's link(s), then decide by what's LEFT for the row:
       // any OTHER ClickUp copy still bound to this row (split copies carry rowId) → keep
       // the row; none left → this was the sole/last copy → remove the row. Deleting one
@@ -1387,4 +1392,121 @@ export async function disableClickUpSync(): Promise<void> {
   // Clear the per-user routing cache too — a reconnect to a DIFFERENT workspace must
   // re-resolve the personal space/lists rather than reuse stale ids.
   await writeConfig({ CLICKUP_MIGRATION: '', CLICKUP_PERSONAL_SPACE_ID: '', CLICKUP_PERSONAL_LISTS: '' });
+}
+
+// ─────────────── Garely → ClickUp deletion ───────────────
+
+/**
+ * ClickUp task ids Garely itself just deleted.
+ *
+ * Deleting a task through the API makes ClickUp fire `taskDeleted` straight back at
+ * our webhook. Without this, that echo re-enters the destructive branch of
+ * applyClickUpEvent for a row we already removed. Held briefly in memory: the echo
+ * arrives within seconds, and a missed suppression is harmless (the branch is
+ * idempotent — it would just find nothing left to delete).
+ */
+const selfDeleted = new Map<string, number>();
+const SELF_DELETE_TTL_MS = 5 * 60_000;
+
+export function markSelfDeleted(clickupTaskId: string): void {
+  const now = Date.now();
+  for (const [id, at] of selfDeleted) if (now - at > SELF_DELETE_TTL_MS) selfDeleted.delete(id);
+  selfDeleted.set(clickupTaskId, now);
+}
+
+export function wasSelfDeleted(clickupTaskId: string): boolean {
+  const at = selfDeleted.get(clickupTaskId);
+  if (at === undefined) return false;
+  if (Date.now() - at > SELF_DELETE_TTL_MS) { selfDeleted.delete(clickupTaskId); return false; }
+  return true;
+}
+
+export type ClickUpCopy = { clickupTaskId: string; clickupUrl: string | null; listId: string | null; linkId: string | null };
+
+/**
+ * Every ClickUp task mirroring these Garely rows.
+ *
+ * Two sources on purpose. Split copies carry `rowId` on their link, but the
+ * connect-time backfill writes links with NEITHER rowId nor assigneeUserId, so a
+ * rowId-only lookup silently misses a live copy — and we would then delete the Garely
+ * row while its ClickUp task lived on, unreachable. TaskRow.clickupTaskId (the lead)
+ * closes that gap.
+ */
+export async function clickUpCopiesForRows(rowIds: string[]): Promise<ClickUpCopy[]> {
+  if (!rowIds.length) return [];
+  const [links, metas] = await Promise.all([
+    prisma.clickUpTaskLink.findMany({
+      where: { rowId: { in: rowIds } },
+      select: { id: true, clickupTaskId: true, clickupUrl: true, listId: true },
+    }),
+    prisma.taskRow.findMany({
+      where: { rowId: { in: rowIds }, clickupTaskId: { not: null } },
+      select: { clickupTaskId: true, clickupUrl: true },
+    }),
+  ]);
+  const byId = new Map<string, ClickUpCopy>();
+  for (const l of links) {
+    byId.set(l.clickupTaskId, { clickupTaskId: l.clickupTaskId, clickupUrl: l.clickupUrl, listId: l.listId, linkId: l.id });
+  }
+  for (const m of metas) {
+    const id = m.clickupTaskId as string;
+    if (!byId.has(id)) byId.set(id, { clickupTaskId: id, clickupUrl: m.clickupUrl, listId: null, linkId: null });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Delete one ClickUp task. A 404 counts as success — the task is already gone, which
+ * is exactly the state the caller wants. Anything else throws so the caller can keep
+ * the Garely row rather than orphan a copy nobody can reach again.
+ */
+export async function deleteClickUpTask(token: string, clickupTaskId: string): Promise<void> {
+  markSelfDeleted(clickupTaskId); // before the call: the echo can beat our own await
+  try {
+    await cuJson(token, `/task/${clickupTaskId}`, { method: 'DELETE' });
+  } catch (e) {
+    if (e instanceof ClickUpHttpError && e.status === 404) return;
+    throw e;
+  }
+}
+
+/**
+ * Delete every ClickUp copy of the given rows, then report what happened.
+ *
+ * ClickUp goes FIRST and the caller only removes the Garely rows when `failed` is
+ * empty. The reverse order is what produces orphans: a timeout half-way through would
+ * leave copies alive in several people's lists with no Garely task left to find them by.
+ */
+export async function deleteClickUpCopies(
+  copies: ClickUpCopy[],
+): Promise<{ deleted: string[]; failed: { clickupTaskId: string; error: string }[] }> {
+  const deleted: string[] = [];
+  const failed: { clickupTaskId: string; error: string }[] = [];
+  if (!copies.length) return { deleted, failed };
+  const cfg = await getClickUpConfig();
+  if (!cfg) {
+    // Integration off/disconnected: refuse rather than pretend. Deleting the row here
+    // would strand every copy, and a later reconnect would re-adopt them as ghosts.
+    return { deleted, failed: copies.map((c) => ({ clickupTaskId: c.clickupTaskId, error: 'clickup_disabled' })) };
+  }
+  for (const c of copies) {
+    try {
+      await deleteClickUpTask(cfg.token, c.clickupTaskId);
+      deleted.push(c.clickupTaskId);
+    } catch (e) {
+      failed.push({ clickupTaskId: c.clickupTaskId, error: (e as Error).message.slice(0, 200) });
+    }
+  }
+  return { deleted, failed };
+}
+
+/**
+ * Drop the link rows for Garely rows that are about to be deleted.
+ *
+ * A link outliving its Row points at an id that no longer resolves: the reconcile
+ * sweep then trusts it, never prunes it, and can mistake it for a real deletion.
+ */
+export async function purgeClickUpLinksForRows(rowIds: string[]): Promise<void> {
+  if (!rowIds.length) return;
+  await prisma.clickUpTaskLink.deleteMany({ where: { rowId: { in: rowIds } } });
 }

@@ -414,7 +414,8 @@
     "uploading": "Завантаження…",
     "fileTooLarge": "Файл завеликий (макс. 25 МБ)",
     "uploadFailed": "Не вдалося завантажити",
-    "download": "Скачати"
+    "download": "Скачати",
+    "confirmDeleteMirrored": "Це також назавжди видалить таску в ClickUp, зокрема копію кожного виконавця. З Garely це не відкотити."
   },
   "archive": {
     "title": "Архів мітингів",
@@ -502,7 +503,8 @@
     "errorTitleRequired": "Назва обов'язкова",
     "errorTitleTooShort": "Закоротко — мінімум 3 символи",
     "errorDateRequired": "Виберіть дату",
-    "errorTimeRequired": "Виберіть час"
+    "errorTimeRequired": "Виберіть час",
+    "toggleTaskCreation": "Створювати таски"
   },
   "auth": {
     "welcome": "Вітаємо в {name}",
@@ -1435,7 +1437,9 @@
     "quickMeetingTitle": "Швидкий мітинг",
     "joinRequestNotFound": "Запит не знайдено",
     "requestIdAndActionRequired": "requestId та action обовʼязкові",
-    "invalidCurrentPassword": "Невірний поточний пароль"
+    "invalidCurrentPassword": "Невірний поточний пароль",
+    "clickupDeleteForbidden": "Видалити таску, віддзеркалену в ClickUp, може лише адміністратор або її виконавець",
+    "clickupDeletePartial": "Видалено {done} з {total} копій у ClickUp — таску збережено, щоб нічого не загубилось. Спробуйте ще раз."
   },
   "chat": {
     "reportReady": "📋 {title} — звіт по мітингу готовий",

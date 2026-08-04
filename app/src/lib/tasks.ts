@@ -834,6 +834,15 @@ export async function updateTask(
 }
 
 /** Delete a task Row. Subtasks have NO FK cascade (TaskRow.parentRowId is soft) — delete them explicitly first. */
+/**
+ * Delete a task Row and its subtask Rows. LOCAL ONLY — never call ClickUp from here.
+ *
+ * This is not the only delete path: report regeneration wipes every source:'ai' Row of
+ * a meeting before rebuilding them (lib/regenerate.ts). If ClickUp propagation lived in
+ * this function, a single Regenerate click would hard-delete every mirrored ClickUp task
+ * of that meeting — with its comments and time tracking. Propagation therefore belongs
+ * to the user-intent HTTP path alone (api/tasks DELETE), and must stay there.
+ */
 export async function deleteTask(taskId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const subs = await tx.taskRow.findMany({ where: { parentRowId: taskId }, select: { rowId: true } });
@@ -850,6 +859,25 @@ export async function deleteTask(taskId: string): Promise<void> {
 export async function isClickUpManaged(taskId: string): Promise<boolean> {
   const tr = await prisma.taskRow.findUnique({ where: { rowId: taskId }, select: { clickupTaskId: true, linearIssueId: true } });
   return !!(tr?.clickupTaskId || tr?.linearIssueId);
+}
+
+/**
+ * Which external tracker owns this task.
+ *
+ * `isClickUpManaged` above answers "either", which was fine while both trackers were
+ * equally undeletable. Deletion is not symmetric: ClickUp copies can now be deleted,
+ * Linear issues cannot (lib/linear.ts has no delete call), so a Linear-mirrored task
+ * must stay blocked or its issue would be orphaned by a Garely delete.
+ */
+export async function taskMirrors(taskId: string): Promise<{ clickup: boolean; linear: boolean }> {
+  const tr = await prisma.taskRow.findUnique({ where: { rowId: taskId }, select: { clickupTaskId: true, linearIssueId: true } });
+  return { clickup: !!tr?.clickupTaskId, linear: !!tr?.linearIssueId };
+}
+
+/** The task's own row id plus its subtask row ids (nesting is capped at one level). */
+export async function taskRowIdsWithSubtasks(taskId: string): Promise<string[]> {
+  const subs = await prisma.taskRow.findMany({ where: { parentRowId: taskId }, select: { rowId: true } });
+  return [taskId, ...subs.map((s) => s.rowId)];
 }
 
 /**
