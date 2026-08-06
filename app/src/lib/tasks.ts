@@ -807,9 +807,18 @@ export async function updateTask(
   if (fields.status !== undefined) patch[f.status] = fields.status;
   if (fields.dueDate !== undefined) patch[f.dueDate] = fields.dueDate ?? '';
   applyCustomCells(patch, fields.cells, [f.title, f.description, f.status, f.priority, f.dueDate, f.assignee]);
-  const mergedData = mergeRowData(flds, before, patch);
 
   await prisma.$transaction(async (tx) => {
+    // Merge under a row lock. `data` is ONE JSON blob keyed by field id, so reading it
+    // outside the transaction (as this did) and writing the whole blob back loses a
+    // concurrent edit to a DIFFERENT cell — the same last-writer-wins bug already fixed
+    // for /api/rows, which never got applied to the task path. SELECT … FOR UPDATE
+    // serialises writers so each merge runs against the freshest committed data.
+    const locked = await tx.$queryRaw<{ data: unknown }[]>(
+      Prisma.sql`SELECT data FROM "Row" WHERE id = ${taskId} FOR UPDATE`,
+    );
+    const fresh = (locked[0]?.data ?? {}) as Cells;
+    const mergedData = mergeRowData(flds, fresh, patch);
     await tx.row.update({
       where: { id: taskId },
       data: { data: mergedData as Prisma.InputJsonValue, ...(fields.sortOrder !== undefined ? { position: fields.sortOrder } : {}) },
@@ -869,9 +878,20 @@ export async function isClickUpManaged(taskId: string): Promise<boolean> {
  * Linear issues cannot (lib/linear.ts has no delete call), so a Linear-mirrored task
  * must stay blocked or its issue would be orphaned by a Garely delete.
  */
-export async function taskMirrors(taskId: string): Promise<{ clickup: boolean; linear: boolean }> {
-  const tr = await prisma.taskRow.findUnique({ where: { rowId: taskId }, select: { clickupTaskId: true, linearIssueId: true } });
-  return { clickup: !!tr?.clickupTaskId, linear: !!tr?.linearIssueId };
+export async function taskMirrors(rowIds: string[]): Promise<{ clickup: boolean; linear: boolean }> {
+  if (!rowIds.length) return { clickup: false, linear: false };
+  // Across the WHOLE tree, not just the row the user clicked. deleteTask() removes the
+  // subtask rows too, so a mirrored SUBTASK under a local parent would otherwise skip
+  // both the Linear block and the narrower delete permission — and its ClickUp copies
+  // would be orphaned with the parent reported as un-mirrored.
+  const rows = await prisma.taskRow.findMany({
+    where: { rowId: { in: rowIds } },
+    select: { clickupTaskId: true, linearIssueId: true },
+  });
+  return {
+    clickup: rows.some((r) => !!r.clickupTaskId),
+    linear: rows.some((r) => !!r.linearIssueId),
+  };
 }
 
 /** The task's own row id plus its subtask row ids (nesting is capped at one level). */

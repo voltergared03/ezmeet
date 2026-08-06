@@ -27,7 +27,8 @@ vi.mock('@/lib/clickup', () => ({
   purgeClickUpLinksForRows: vi.fn(async () => undefined),
 }));
 import { clickUpCopiesForRows, deleteClickUpCopies } from '@/lib/clickup';
-vi.mock('@/lib/access', () => ({ userCanViewTask: vi.fn(async () => true) }));
+import { userCanAccessMeeting } from '@/lib/access';
+vi.mock('@/lib/access', () => ({ userCanViewTask: vi.fn(async () => true), userCanAccessMeeting: vi.fn(async () => true) }));
 vi.mock('@/lib/task-notify', () => ({ notifyTaskAssigned: vi.fn(), notifyTaskUpdated: vi.fn() }));
 vi.mock('next-intl/server', () => ({ getTranslations: vi.fn(async () => (k: string) => k) }));
 
@@ -190,6 +191,26 @@ describe('DELETE /api/tasks — authorization', () => {
   });
 });
 
+describe('POST /api/tasks — meetingId access', () => {
+  it('403 when the caller cannot access the meeting they file the task into', async () => {
+    // Without this, anyone could inject an action item into another team's meeting
+    // report and learn its title/time by self-assigning.
+    mockAuth.mockResolvedValue(mockSession({ id: 'u1', role: 'member' }));
+    vi.mocked(userCanAccessMeeting).mockResolvedValue(false);
+    const r = await POST(jsonReq('POST', { title: 'x', meetingId: 'm-secret' }));
+    expect(r.status).toBe(403);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('creates when the caller does have access', async () => {
+    mockAuth.mockResolvedValue(mockSession({ id: 'u1', role: 'member' }));
+    vi.mocked(userCanAccessMeeting).mockResolvedValue(true);
+    mockCreate.mockResolvedValue({ task: { id: 't1' }, assignees: [] } as any);
+    const r = await POST(jsonReq('POST', { title: 'x', meetingId: 'm-ok' }));
+    expect(r.status).toBe(201);
+  });
+});
+
 describe('DELETE /api/tasks — ClickUp propagation', () => {
   it('still refuses a Linear-mirrored task: there is no delete path, the issue would be orphaned', async () => {
     mockAuth.mockResolvedValue(mockSession({ id: 'u1', role: 'admin' }));
@@ -227,6 +248,21 @@ describe('DELETE /api/tasks — ClickUp propagation', () => {
     const r = await DELETE(jsonReq('DELETE', { taskId: 't1' }));
     expect(r.status).toBe(502);
     expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it('evaluates the mirror gate over the WHOLE tree, not just the clicked row', async () => {
+    // A mirrored SUBTASK under a local parent used to skip both the Linear block and
+    // the narrower permission check, orphaning its ClickUp copies.
+    mockAuth.mockResolvedValue(mockSession({ id: 'u1', role: 'admin' }));
+    mockAuthz.mockResolvedValue({ meetingId: 'm1', assigneeId: 'u1' });
+    vi.mocked(taskRowIdsWithSubtasks).mockResolvedValue(['t1', 'sub1']);
+    vi.mocked(taskMirrors).mockResolvedValue({ clickup: true, linear: false });
+    vi.mocked(clickUpCopiesForRows).mockResolvedValue([{ clickupTaskId: 'CUs', clickupUrl: null, listId: null, linkId: 'l1' }]);
+    vi.mocked(deleteClickUpCopies).mockResolvedValue({ deleted: ['CUs'], failed: [] });
+
+    const r = await DELETE(jsonReq('DELETE', { taskId: 't1' }));
+    expect(r.status).toBe(200);
+    expect(vi.mocked(taskMirrors)).toHaveBeenCalledWith(['t1', 'sub1']); // tree, not 't1'
   });
 
   it('deletes every copy — including subtasks — before removing the Garely rows', async () => {

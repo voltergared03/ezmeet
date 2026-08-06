@@ -291,6 +291,21 @@ async function deleteHandler(
   // and remove the linked Google event while the row (externalId) still exists.
   await sendMeetingInvite(id, 'cancel').catch(() => {});
   await syncMeetingToGoogle(id, 'delete').catch(() => {});
+
+  // TaskRow.meetingId is a plain column with NO foreign key (schema.prisma documents
+  // that referential cleanup lives in app code), so deleting the meeting used to leave
+  // its AI task Rows behind forever — pointing at a meeting that no longer exists, and
+  // un-editable for anyone who is not an admin because the permission check resolves
+  // through that dead meeting. Sweep them with the meeting.
+  const taskRows = await prisma.taskRow.findMany({ where: { meetingId: id }, select: { rowId: true } });
+  const taskRowIds = taskRows.map((t) => t.rowId);
+  if (taskRowIds.length) {
+    // Links first: a ClickUpTaskLink outliving its Row strands the reconcile sweep.
+    // The ClickUp tasks themselves are deliberately left alone — deleting a meeting is
+    // not a mandate to destroy work already under way in someone else's tracker.
+    await prisma.clickUpTaskLink.deleteMany({ where: { rowId: { in: taskRowIds } } }).catch(() => {});
+    await prisma.row.deleteMany({ where: { id: { in: taskRowIds } } }); // cascades TaskRow + Row*
+  }
   await prisma.meeting.delete({ where: { id } });
 
   return NextResponse.json({ success: true });

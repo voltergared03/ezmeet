@@ -245,6 +245,31 @@ describe('listTaskFields — client FieldT projection (P3.3)', () => {
   });
 });
 
+describe('updateTask — concurrent cell edits', () => {
+  it('merges against the row read INSIDE the transaction, not the pre-transaction snapshot', async () => {
+    // Regression: the merge used a snapshot read before the transaction, so two people
+    // editing DIFFERENT cells of one task raced and the later write clobbered the
+    // earlier. /api/rows got SELECT … FOR UPDATE; the task path never did.
+    const { updateTask } = await import('@/lib/tasks');
+    prismaMock.row.findUnique.mockResolvedValue({
+      id: 't1', data: { fT: 'old title', fD: 'stale' }, table: { id: 'tbl', base: { orgId: 'org-A' } },
+    } as any);
+    prismaMock.field.findMany.mockResolvedValue([
+      { id: 'fT', type: 'text', options: null }, { id: 'fD', type: 'text', options: null },
+    ] as any);
+    // someone else committed a description change between the snapshot and the write
+    prismaMock.$queryRaw.mockResolvedValue([{ data: { fT: 'old title', fD: 'THEIR EDIT' } }] as any);
+    prismaMock.row.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+
+    await updateTask('t1', { title: 'my title' });
+
+    const written = (prismaMock.row.update.mock.calls[0][0] as any).data.data;
+    expect(written.fT).toBe('my title');      // our change applied
+    expect(written.fD).toBe('THEIR EDIT');    // and theirs survived
+  });
+});
+
 describe('myOpenTasks — dashboard ordering', () => {
   const row = (title: string, priority: string) => ({
     id: title, position: 0, createdAt: new Date('2026-01-01T00:00:00Z'),

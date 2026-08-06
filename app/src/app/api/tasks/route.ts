@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { requireAuth } from "@/lib/api-auth";
-import { userCanViewTask } from "@/lib/access";
+import { userCanViewTask, userCanAccessMeeting } from "@/lib/access";
 import { notifyTaskAssigned, notifyTaskUpdated } from "@/lib/task-notify";
 import { listTasks, createTask, updateTask, deleteTask, authorizeTaskMutation, listTaskFields, isClickUpManaged, taskMirrors, taskRowIdsWithSubtasks } from "@/lib/tasks";
 import { clickUpCopiesForRows, deleteClickUpCopies, purgeClickUpLinksForRows } from "@/lib/clickup";
@@ -80,6 +80,13 @@ export async function POST(req: NextRequest) {
   if (v.data.parentId && (await isClickUpManaged(v.data.parentId))) {
     return NextResponse.json({ error: (await getTranslations("errors"))("clickupManaged") }, { status: 409 });
   }
+  // meetingId came straight from the body and was only checked for EXISTENCE, so anyone
+  // could file a task into a meeting they cannot open: it renders as an action item in
+  // that meeting's report, and self-assigning then exposes the meeting's title and time
+  // back through GET /api/tasks/[id]. Same gate the parentId path already uses.
+  if (v.data.meetingId && !(await userCanAccessMeeting(v.data.meetingId, session.user.id, session.user.role))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const result = await createTask(session, v.data);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
@@ -145,7 +152,9 @@ export async function DELETE(req: NextRequest) {
   // Linear has no delete path (lib/linear.ts never deletes an issue), so a
   // Linear-mirrored task stays blocked — otherwise the Garely row would vanish and
   // leave the issue orphaned.
-  const mirrors = await taskMirrors(taskId);
+  // The whole tree, because deleteTask() takes the subtask rows with the parent.
+  const rowIds = await taskRowIdsWithSubtasks(taskId);
+  const mirrors = await taskMirrors(rowIds);
   if (mirrors.linear) return NextResponse.json({ error: t("clickupManaged") }, { status: 409 });
 
   // Deleting a mirrored task destroys work in someone else's ClickUp list, under the
@@ -164,7 +173,6 @@ export async function DELETE(req: NextRequest) {
       // ClickUp FIRST, and only then the local rows: the reverse order orphans copies
       // in several people's lists with no Garely task left to find them by. Subtasks
       // are swept with the parent because deleteTask() deletes their rows too.
-      const rowIds = await taskRowIdsWithSubtasks(taskId);
       const copies = await clickUpCopiesForRows(rowIds);
       const { deleted, failed } = await deleteClickUpCopies(copies);
       if (failed.length) {
