@@ -4,6 +4,37 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.3] — 2026-08-06
+
+Fixes from a full audit of the codebase.
+
+### Fixed
+- **The "Transcription" switch still did nothing.** It was wired up last release, but the
+  lookup the transcription service uses never returned the setting, so it carried on
+  transcribing regardless of what the meeting said. It now actually stops.
+- **Edits to the same task could overwrite each other.** Two people changing different
+  fields of one task at the same time — one the description, one the due date — and the
+  second save silently discarded the first. Both changes are now kept.
+- **Deleting a task left parts of it behind in ClickUp.** If the task had subtasks that
+  were mirrored, those copies stayed in ClickUp with nothing left in Garely pointing at
+  them. The whole task, subtasks included, is now removed on both sides — and a subtask
+  belonging to Linear correctly blocks the delete, as it already did for a whole task.
+- **Tasks survived the meeting they belonged to.** Deleting a meeting left its tasks in
+  the board forever, referring to a meeting that no longer existed, and nobody except an
+  admin could edit or remove them. They are now cleaned up with the meeting. Tasks already
+  pushed to ClickUp are deliberately left there — deleting a meeting here should not
+  destroy work someone has started elsewhere.
+- **A task could be filed into a meeting you cannot open.** It then appeared as an action
+  item in that meeting's report, and revealed the meeting's title and time. Filing a task
+  into a meeting now requires access to it.
+
+### Housekeeping
+- Reminder emails could go out twice: the scheduler was running the same jobs both on the
+  host and inside the app, so every reminder fired from two places at once. The duplicate
+  schedule has been removed.
+- Freed 20 GB on the server (accumulated build leftovers) and added a weekly clean-up so
+  it does not build up again.
+
 ## [1.25.0-beta.2] — 2026-08-05
 
 Tasks can now be deleted on both sides, meetings can be told not to create tasks at
