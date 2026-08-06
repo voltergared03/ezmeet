@@ -854,7 +854,11 @@
     "goHome": "Go home",
     "waitingTitle": "Waiting for approval",
     "waitingDesc": "The host needs to let you into the meeting. Please wait...",
-    "connecting": "Connecting to the room..."
+    "connecting": "Connecting to the room...",
+    "leaveTitle": "Leave or end the meeting?",
+    "leaveBody": "You're the only one here. Leaving keeps the meeting open, so anyone who arrives later can still join. Ending it closes the meeting and produces the report.",
+    "leaveOnly": "Just leave",
+    "endForAll": "End the meeting"
   },
   "setup": {
     "stepToken": "Token",

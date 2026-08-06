@@ -102,7 +102,9 @@ export async function POST(req: NextRequest) {
           if (meeting.status !== 'live') {
             await prisma.meeting.update({
               where: { id: meeting.id },
-              data: { status: 'live' },
+              // startedAt is the only honest start time (see schema): stamped once per
+              // attempt so the held-ness check can measure how long the room was open.
+              data: { status: 'live', ...(meeting.startedAt ? {} : { startedAt: new Date() }) },
             });
             console.log(`Meeting set to live: ${meeting.id}`);
           }

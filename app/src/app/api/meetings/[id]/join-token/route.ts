@@ -34,6 +34,7 @@ export async function POST(
           livekitRoom: roomName,
           joinToken: joinSlug,
           status: 'live',
+          startedAt: new Date(), // quick meetings are born live — stamp the attempt now
           scheduledAt: new Date(),
           durationMin: 60,
           orgId: await requireCurrentOrgId(session),
@@ -96,7 +97,7 @@ export async function POST(
     if (meeting.status === 'scheduled') {
       await prisma.meeting.update({
         where: { id: meeting.id },
-        data: { status: 'live' },
+        data: { status: 'live', ...(meeting.startedAt ? {} : { startedAt: new Date() }) },
       }).catch(() => {});
     }
 
@@ -106,7 +107,7 @@ export async function POST(
       const roomName = `meet-${meeting.id}`;
       meeting = await prisma.meeting.update({
         where: { id: meeting.id },
-        data: { livekitRoom: roomName, status: 'live' },
+        data: { livekitRoom: roomName, status: 'live', ...(meeting.startedAt ? {} : { startedAt: new Date() }) },
       });
     }
 

@@ -160,6 +160,17 @@ model Meeting {
   // When the current generation started — lets a backstop cron fail a report left
   // stuck in `generating` because the process was killed mid-run (deploy/crash).
   reportStartedAt        DateTime?
+  // First human join of the CURRENT attempt. There is no honest start time otherwise:
+  // createdAt is days old for a scheduled meeting, scheduledAt is wrong whenever the
+  // meeting starts late, and endedAt is written by whichever of three paths gets there
+  // first. Stamped once per attempt (idempotent), cleared when a meeting is reopened.
+  startedAt              DateTime?
+  // Verdict that this attempt was abandoned — someone opened the room and left without
+  // holding the meeting. Its own column rather than a reportStatus value, because
+  // reportStatus:null already legitimately means "aiReportEnabled was off".
+  noShowAt               DateTime?
+  // Human override: "it did happen". Beats every automatic signal.
+  heldConfirmedAt        DateTime?
   // AI options
   transcriptionEnabled   Boolean      @default(true)
   aiReportEnabled        Boolean      @default(true)

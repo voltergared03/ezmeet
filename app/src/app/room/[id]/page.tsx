@@ -414,11 +414,32 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
       setScreenOn(true);
     } catch { /* user cancelled */ }
   };
-  const leaveMeeting = () => {
+  const [leaveChoice, setLeaveChoice] = useState(false);
+
+  const exitRoom = () => {
     room.disconnect();
     if (isGuest) router.push('/');
     else if (meetingId === 'quick') router.push('/');
     else router.push(`/meetings/${meetingId}/report`);
+  };
+
+  // Leaving a room you are ALONE in is ambiguous — usually "back in a minute", not
+  // "we're done". Ask, instead of guessing. Everyone else (guests, quick meetings, or
+  // anyone leaving a room that still has people in it) keeps the old one-click exit.
+  //
+  // This is a convenience, not the safety net: closing the tab skips it entirely, which
+  // is why the real protection is the server-side abandoned-attempt check.
+  const leaveMeeting = () => {
+    const alone = participants.filter((p) => !p.identity.startsWith('agent-')).length <= 1;
+    if (alone && !isGuest && meetingId !== 'quick') { setLeaveChoice(true); return; }
+    exitRoom();
+  };
+
+  const endMeetingForEveryone = async () => {
+    // Records a human verdict that the meeting happened, so the report is produced even
+    // though the session was short and quiet.
+    await fetch(`/api/meetings/${meetingId}/end`, { method: 'POST' }).catch(() => {});
+    exitRoom();
   };
 
   /* ── elapsed time ──────────────────── */
@@ -1203,6 +1224,37 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
           .room-controls { gap: 2px !important; padding: 6px 4px !important; }
         }
       `}</style>
+
+      {/* Leaving a room you are alone in: "stepping out" and "we're done" look identical
+          to the server, so ask rather than guess. Declining just leaves — the meeting
+          stays open for whoever arrives next. */}
+      {leaveChoice && (
+        <div
+          onClick={() => setLeaveChoice(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(6,8,12,.62)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            style={{ width: 'min(420px, 100%)', background: 'var(--card, #16181d)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, padding: '20px 22px', color: '#e8e8ea', boxShadow: '0 24px 70px -20px rgba(0,0,0,.75)' }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{tr('room.leaveTitle')}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: '#a9a9b4', marginBottom: 18 }}>{tr('room.leaveBody')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button className="btn btn-primary" onClick={exitRoom} style={{ width: '100%', fontWeight: 600 }}>
+                {tr('room.leaveOnly')}
+              </button>
+              <button className="btn" onClick={() => void endMeetingForEveryone()} style={{ width: '100%' }}>
+                {tr('room.endForAll')}
+              </button>
+              <button className="btn btn-ghost" onClick={() => setLeaveChoice(false)} style={{ width: '100%', color: 'var(--muted)' }}>
+                {tr('common.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

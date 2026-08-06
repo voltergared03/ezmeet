@@ -18,6 +18,7 @@ import { provisionSystemTasksTable } from './system-tasks-table';
 import { provisionSystemDecisionsTable } from './system-decisions-table';
 import { createTaskFromAI, aiCellsFromModel, AI_FILLABLE_TYPES } from './tasks';
 import { pushMeetingTasksToClickUp, type ClickUpPushItem } from './clickup';
+import { classifyMeetingAttempt, discardAttemptRecordings } from './meeting-attempt-facts';
 import { pushMeetingTasksToLinear } from './linear';
 import { notifyChatReportReady } from './chat-notify';
 import { notifyWebhookReportReady } from './webhooks';
@@ -815,6 +816,39 @@ export async function generateMeetingReport(
   meetingId: string,
   opts: { notify?: boolean } = {}
 ): Promise<{ topics: number }> {
+  // Abandoned-attempt gate. This sits BEFORE everything — the report row, assignee
+  // notifications, the emailed report, the chat post, the report.ready webhook, CRM,
+  // ClickUp and Linear — because this function is the single choke point every
+  // irreversible side effect flows through. A rule that ran afterwards could only
+  // delete a report whose consequences had already shipped.
+  //
+  // Only on first generation: a manual regenerate (notify:false) is a human explicitly
+  // asking, and must never be second-guessed.
+  if (opts.notify !== false) {
+    let verdict = await classifyMeetingAttempt(meetingId);
+    if (verdict.verdict === 'abandoned') {
+      // The only reason a real meeting's last writes can lag this check is the agent's
+      // store_segment retry ladder (1.5s + 3s + 4.5s). Wait it out and re-read — the
+      // cost is paid ONLY when we are about to suppress, never on the happy path.
+      await new Promise((r) => setTimeout(r, 10_000));
+      verdict = await classifyMeetingAttempt(meetingId);
+    }
+    if (verdict.verdict === 'abandoned') {
+      console.log(`[report] ${meetingId}: attempt abandoned (${verdict.reason}) → no report, no notifications`);
+      const m = await prisma.meeting.findUnique({ where: { id: meetingId }, select: { startedAt: true } });
+      await discardAttemptRecordings(meetingId, m?.startedAt ?? null).catch(() => {});
+      await prisma.meeting
+        .update({ where: { id: meetingId }, data: { reportStatus: null, reportError: null, noShowAt: new Date() } })
+        .catch(() => {});
+      // The meeting still ends and still lands in the archive — guarded so a late
+      // background job can never re-end a meeting a NEWER session has made live.
+      await prisma.meeting
+        .updateMany({ where: { id: meetingId, status: 'live' }, data: { status: 'ended', endedAt: new Date() } })
+        .catch(() => {});
+      return { topics: 0 };
+    }
+  }
+
   await prisma.meeting
     .update({ where: { id: meetingId }, data: { reportStatus: 'generating', reportError: null, reportStartedAt: new Date() } })
     .catch(() => {});
