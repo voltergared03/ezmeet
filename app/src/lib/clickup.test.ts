@@ -3,7 +3,7 @@ import { mockReset } from 'vitest-mock-extended';
 import { prisma as prismaMock } from '@/lib/__mocks__/prisma';
 import { readConfig } from '@/lib/config';
 import {
-  mapPriority, normName, dedupeKeyFor, listIdForDepartment,
+  normName, dedupeKeyFor, listIdForDepartment,
   pushMeetingTasksToClickUp, garelyStatusToClickUp, clickUpStatusToGarely,
   verifyClickUpSignature, applyClickUpEvent, migrateAllTasksToClickUp, getFallbackStats,
   type ClickUpConfig, type ClickUpPushItem,
@@ -28,21 +28,6 @@ vi.mock('@/lib/system-tasks-table', () => ({
 const mockReadConfig = vi.mocked(readConfig);
 
 // ─────────────────────────── pure mappers ───────────────────────────
-
-describe('mapPriority', () => {
-  it('maps Garely priority → ClickUp native priority', () => {
-    expect(mapPriority('high')).toBe(2);
-    expect(mapPriority('medium')).toBe(3);
-    expect(mapPriority('low')).toBe(4);
-    expect(mapPriority('HIGH')).toBe(2); // case-insensitive
-  });
-  it('returns null for unknown/empty so the field is omitted', () => {
-    expect(mapPriority(null)).toBeNull();
-    expect(mapPriority(undefined)).toBeNull();
-    expect(mapPriority('urgent')).toBeNull();
-    expect(mapPriority('')).toBeNull();
-  });
-});
 
 describe('normName', () => {
   it('trims, lowercases, collapses whitespace', () => {
@@ -161,7 +146,7 @@ describe('pushMeetingTasksToClickUp', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('creates a ClickUp task in the department\'s mapped list with assignee, priority, due date and Source', async () => {
+  it('creates a ClickUp task in the department\'s mapped list with assignee, due date and Source', async () => {
     mockReadConfig.mockResolvedValue(enabledConfig);
     prismaMock.department.findMany.mockResolvedValue([itDept] as any);
     prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'A@x.com', clickupListId: null }] as any);
@@ -176,7 +161,7 @@ describe('pushMeetingTasksToClickUp', () => {
     expect(post).toBeTruthy();
     expect(post!.body.name).toBe('Ship the app');
     expect(post!.body.assignees).toEqual([111]); // email matched case-insensitively
-    expect(post!.body.priority).toBe(2);
+    expect(post!.body).not.toHaveProperty('priority'); // priority is ClickUp's to set, not ours
     expect(post!.body.due_date).toBe(new Date('2026-07-01T00:00:00Z').getTime());
     expect(post!.body.custom_fields).toEqual([{ id: 'fSrc', value: 'optGC' }]);
 
@@ -1114,6 +1099,39 @@ describe('reconcileClickUpTasks (catch-up sweep)', () => {
     const res = await reconcileClickUpTasks();
     expect(res.deleted).toBe(0); // a 5xx must never be read as "deleted"
     expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('priority is never pushed to ClickUp', () => {
+  // Priority is owned by ClickUp, not Garely: tasks land there without one, and a
+  // priority set by hand is never overwritten by a later sync.
+  it('omits priority when creating a meeting task', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([itDept] as any);
+    pushPrismaMocks();
+    const { calls } = installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [{ ...itTask, priority: 'high' }]);
+
+    const post = calls.find((c) => c.method === 'POST' && c.url.includes('/list/L_IT/task'));
+    expect(post).toBeTruthy();
+    expect(post!.body).not.toHaveProperty('priority');
+  });
+
+  it('omits priority when updating an existing task, so a manual one survives', async () => {
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.department.findMany.mockResolvedValue([itDept] as any);
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', email: 'a@x.com', clickupListId: null }] as any);
+    prismaMock.clickUpTaskLink.findUnique.mockResolvedValue({ id: 'lnk1', clickupTaskId: 'CU1', clickupUrl: 'https://x', listId: 'L_IT' } as any);
+    prismaMock.clickUpTaskLink.update.mockResolvedValue({} as any);
+    prismaMock.taskRow.update.mockResolvedValue({} as any);
+    const { calls } = installFetch();
+
+    await pushMeetingTasksToClickUp('m1', [{ ...itTask, priority: 'low' }]);
+
+    const put = calls.find((c) => c.method === 'PUT' && c.url.includes('/task/CU1'));
+    expect(put).toBeTruthy();
+    expect(put!.body).not.toHaveProperty('priority');
   });
 });
 

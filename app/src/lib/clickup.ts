@@ -56,6 +56,9 @@ export interface ClickUpConfig {
 export interface ClickUpPushItem {
   rowId: string;
   title: string;
+  // Garely priority. NOT sent to ClickUp — tasks are created there without one, so a
+  // priority set by hand in ClickUp is never overwritten by a sync. The field stays
+  // because regenerate.ts passes this same array to the Linear push, which does use it.
   priority: string | null; // high | medium | low
   dueDate: Date | null;
   departmentId: string | null;
@@ -69,16 +72,6 @@ export interface ClickUpPushItem {
 }
 
 // ─────────────────────────── pure mappers (unit-tested) ───────────────────────────
-
-/** Garely priority → ClickUp native priority. null/unknown → omit (no priority). */
-export function mapPriority(p: string | null | undefined): number | null {
-  switch ((p || '').toLowerCase()) {
-    case 'high': return 2; // High (1=Urgent reserved)
-    case 'medium': return 3; // Normal
-    case 'low': return 4; // Low
-    default: return null;
-  }
-}
 
 /** Normalize a name for matching/dedup: trim, lowercase, collapse whitespace. */
 export function normName(s: string | null | undefined): string {
@@ -355,7 +348,6 @@ type CreateBody = {
   name: string;
   description?: string;
   assignees?: number[];
-  priority?: number;
   due_date?: number;
   due_date_time?: boolean;
   status?: string; // status NAME (migration sets it for done/in-progress; omit → list default "New")
@@ -535,7 +527,6 @@ interface SplitMeetingTask {
   title: string;
   departmentId: string | null;
   parentTitle: string | null;
-  priority: number | null;
   dueDateMs: number | null;
   statusName?: string | null; // migrate carries the current status name for done/in-progress
 }
@@ -624,7 +615,6 @@ async function syncSplitMeetingTask(
       if (existing) {
         // Update content only (preserve human status/assignee changes on the ClickUp side).
         const body: Record<string, unknown> = { name: item.title };
-        if (item.priority != null) body.priority = item.priority;
         if (item.dueDateMs != null) { body.due_date = item.dueDateMs; body.due_date_time = false; }
         await cuJson(cfg.token, `/task/${existing.clickupTaskId}`, { method: 'PUT', body: JSON.stringify(body) });
         // listId is deliberately NOT rewritten: this PUT changes content only, and ClickUp's
@@ -637,7 +627,6 @@ async function syncSplitMeetingTask(
       } else {
         const source = await resolveSourceField(cfg.token, t.listId, fieldCache);
         const body: CreateBody = { name: item.title, assignees: [t.clickupUserId] };
-        if (item.priority != null) body.priority = item.priority;
         if (item.dueDateMs != null) { body.due_date = item.dueDateMs; body.due_date_time = false; }
         if (item.statusName) body.status = item.statusName;
         if (source) body.custom_fields = [{ id: source.fieldId, value: source.optionId }];
@@ -733,7 +722,7 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           }
           const c = await syncSplitMeetingTask(cfg, fieldCache, {
             meetingId, rowId: item.rowId, title: item.title, departmentId: item.departmentId,
-            parentTitle: item.parentTitle, priority: mapPriority(item.priority),
+            parentTitle: item.parentTitle,
             dueDateMs: item.dueDate ? item.dueDate.getTime() : null,
           }, targets);
           created += c.created; updated += c.updated;
@@ -763,7 +752,6 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
         const description = unmatched.length ? unmatched.map((e) => `Unassigned in ClickUp: ${e}`).join('\n') : undefined;
 
         const source = await resolveSourceField(cfg.token, listId, fieldCache);
-        const prio = mapPriority(item.priority);
         const dedupeKey = dedupeKeyFor(meetingId, item.title, item.departmentId, item.parentTitle);
         const existing = await prisma.clickUpTaskLink.findUnique({
           where: { meetingId_dedupeKey: { meetingId, dedupeKey } },
@@ -774,7 +762,6 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           // changes made on the ClickUp side; those were set at create time).
           const body: Record<string, unknown> = { name: item.title };
           if (description) body.description = description;
-          if (prio != null) body.priority = prio;
           if (item.dueDate) { body.due_date = item.dueDate.getTime(); body.due_date_time = false; }
           await cuJson(cfg.token, `/task/${existing.clickupTaskId}`, { method: 'PUT', body: JSON.stringify(body) });
           // listId not rewritten: content-only PUT, and the task never moved (v2 can't).
@@ -795,7 +782,6 @@ export async function pushMeetingTasksToClickUp(meetingId: string, items: ClickU
           const body: CreateBody = { name: item.title };
           if (description) body.description = description;
           if (assignees.length) body.assignees = assignees;
-          if (prio != null) body.priority = prio;
           if (item.dueDate) { body.due_date = item.dueDate.getTime(); body.due_date_time = false; }
           if (source) body.custom_fields = [{ id: source.fieldId, value: source.optionId }];
           const res = await createClickUpTask(cfg.token, listId, body);
@@ -1278,7 +1264,7 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
             meetingId: row.taskMeta.meetingId, rowId: row.id, title: str(data[f.title]) || '(untitled)',
             departmentId: row.taskMeta.departmentId ?? null,
             parentTitle: row.taskMeta.parentRowId ? parentTitle.get(row.taskMeta.parentRowId) ?? null : null,
-            priority: mapPriority(str(data[f.priority])), dueDateMs: dueMs,
+            dueDateMs: dueMs,
             statusName: garelyStatusToClickUp(str(data[f.status])) ?? null,
           }, targets);
           if (c.created || c.updated) migrated++; else skipped++;
@@ -1308,8 +1294,6 @@ export async function migrateAllTasksToClickUp(): Promise<{ migrated: number; sk
         const body: CreateBody = { name: str(data[f.title]) || '(untitled)' };
         if (unmatched.length) body.description = unmatched.map((e) => `Unassigned in ClickUp: ${e}`).join('\n');
         if (assignees.length) body.assignees = assignees;
-        const prio = mapPriority(str(data[f.priority]));
-        if (prio != null) body.priority = prio;
         const due = str(data[f.dueDate]);
         if (due) { const ms = Date.parse(due); if (!Number.isNaN(ms)) { body.due_date = ms; body.due_date_time = false; } }
         const st = garelyStatusToClickUp(str(data[f.status]));
