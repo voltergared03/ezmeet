@@ -4,6 +4,37 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.2] — 2026-08-05
+
+Tasks can now be deleted on both sides, meetings can be told not to create tasks at
+all, and ClickUp keeps ownership of priorities.
+
+### Added
+- **Deleting a task in Garely now deletes it in ClickUp too.** Until now it did not
+  work at all in that direction: a task that had been mirrored simply refused to
+  delete, which is why every synced task stayed put no matter what you did with it.
+  It now goes from both sides — including every assignee's copy when a task was split
+  between several people, and any subtasks. If ClickUp cannot be reached, the task
+  stays in Garely rather than quietly disappearing here while living on there, and
+  you are told how many copies were removed so you can retry.
+  Deleting a mirrored task is limited to an admin or the person it is assigned to,
+  and it asks for confirmation first, since it destroys the ClickUp task for everyone.
+- **A per-meeting switch for creating tasks.** Turn it off and the meeting still
+  produces a full report — summary, decisions, topics — but no tasks at all, neither
+  in Garely nor in ClickUp. Existing meetings are unaffected: everything keeps
+  creating tasks unless you say otherwise.
+
+### Changed
+- **Garely no longer sets task priority in ClickUp.** Tasks arrive there with no
+  priority, so the team decides it in ClickUp and a later sync never overwrites that
+  choice. Priorities already set on existing tasks are left alone.
+
+### Fixed
+- **The "Transcription" and "AI report" switches did nothing.** Both had been saved
+  with the meeting and carried into recurring occurrences for a long time, but nothing
+  ever read them — turning transcription off still transcribed, turning the report off
+  still generated it. All three switches now do what they say.
+
 ## [1.25.0-beta.1] — 2026-08-01
 
 One remote-desktop client instead of two, and tabs that no longer break after an update.
