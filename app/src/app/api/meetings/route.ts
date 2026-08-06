@@ -21,7 +21,10 @@ export async function GET(req: NextRequest) {
     }
     const meetings = await prisma.meeting.findMany({
       where: { livekitRoom },
-      select: { id: true, livekitRoom: true, status: true, title: true },
+      // transcriptionEnabled is what the STT agent gates on when it joins the room
+      // (agent.py get_meeting). Omit it and the agent reads undefined, the gate never
+      // fires, and turning transcription off in the form silently does nothing.
+      select: { id: true, livekitRoom: true, status: true, title: true, transcriptionEnabled: true },
       take: 1,
     });
     return NextResponse.json(meetings);
