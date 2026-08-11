@@ -4,6 +4,29 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.4] — 2026-08-07
+
+### Fixed
+- **One person glancing into a meeting could end it before it began.** If somebody opened
+  a scheduled meeting a few minutes early, realised it was the wrong one and left, the
+  meeting was marked finished — often at the very minute it was supposed to start, so
+  everyone arriving on time found a closed meeting. A report was then written from those
+  few seconds of silence, and sent out by email with its tasks.
+  Garely now recognises an abandoned attempt: a session that was short, where nothing was
+  really said and nothing was captured. Such a meeting quietly ends without a report and
+  without notifying anyone. Everything else is treated as a real meeting — including
+  meetings with transcription switched off, ad-hoc meetings, and calls with outside
+  guests, none of which leave the usual traces.
+  It also no longer leaves a stray few-second recording behind, which used to stop the
+  real meeting from being recorded later.
+
+### Added
+- **Leaving a meeting you are alone in now asks what you meant.** Stepping out for a
+  moment and finishing the meeting look the same from the outside, so Garely asks: leave
+  and keep the meeting open for whoever arrives next, or end it and produce the report.
+  Ending this way always produces the report, however short the meeting was. Guests, quick
+  meetings, and leaving a meeting that still has people in it are unchanged.
+
 ## [1.25.0-beta.3] — 2026-08-06
 
 Fixes from a full audit of the codebase.
