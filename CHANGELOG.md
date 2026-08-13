@@ -4,6 +4,23 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.5] — 2026-08-13
+
+### Fixed
+- **ClickUp stopped talking back to Garely, and nothing said so.** For five hours this
+  afternoon, work done in ClickUp never reached Garely: statuses stayed as they were,
+  renamed tasks kept their old titles, and deleted tasks stayed on the board. ClickUp had
+  blocked the connection after Garely answered too slowly too many times, and the check
+  that exists to repair exactly this kept reporting everything was fine — a blocked
+  connection looks identical to a working one unless you ask ClickUp how it is doing.
+  The slowness itself is gone: Garely now confirms receipt straight away and does the work
+  behind it, and a burst of changes to the same task costs one lookup rather than one per
+  change. The same delay sat in front of every signed request, so a busy stretch in ClickUp
+  could briefly make the whole of Garely unresponsive for everyone; that is fixed too.
+  The half-hourly check now notices a blocked connection and restores it on its own.
+  Nothing was lost in the meantime — the hourly catch-up sweep kept task statuses correct
+  throughout.
+
 ## [1.25.0-beta.4] — 2026-08-07
 
 ### Fixed
