@@ -6,6 +6,7 @@ import {
   normName, dedupeKeyFor, listIdForDepartment,
   pushMeetingTasksToClickUp, garelyStatusToClickUp, clickUpStatusToGarely,
   verifyClickUpSignature, applyClickUpEvent, migrateAllTasksToClickUp, getFallbackStats,
+  enqueueClickUpEvent, clickUpQueueDepth, clickUpQueueIdle, ensureClickUpWebhook,
   type ClickUpConfig, type ClickUpPushItem,
 } from '@/lib/clickup';
 import { createHmac } from 'crypto';
@@ -1213,5 +1214,108 @@ describe('Garely → ClickUp deletion', () => {
     await applyClickUpEvent('taskDeleted', 'CUecho');
     expect(prismaMock.clickUpTaskLink.deleteMany).not.toHaveBeenCalled();
     expect(prismaMock.row.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────── inbound event queue ───────────────────────────
+
+describe('enqueueClickUpEvent', () => {
+  /** Let the drain run to completion (it is kicked off without being awaited). */
+  async function settle(): Promise<void> {
+    await clickUpQueueIdle();
+    expect(clickUpQueueDepth()).toBe(0);
+  }
+
+  it('coalesces a burst of events for one task instead of reading it once per event', async () => {
+    // The reason the webhook got suspended: twelve edits to one task during a burst used to
+    // mean twelve ClickUp reads, against a ~100/min budget. Applying re-reads the task's
+    // CURRENT state anyway, so every event but the last is redundant work.
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: {}, table: { base: { orgId: 'org1' } } } as any);
+    prismaMock.taskRow.updateMany.mockResolvedValue({} as any);
+    prismaMock.$transaction.mockResolvedValue([] as any);
+    const { calls } = stubFetch(() => undefined);
+
+    for (let i = 0; i < 8; i++) enqueueClickUpEvent('taskStatusUpdated', 'CU1');
+    await settle();
+
+    const reads = calls.filter((c) => c.url.includes('/task/CU1'));
+    expect(reads.length).toBeGreaterThanOrEqual(1); // the state still gets applied…
+    expect(reads.length).toBeLessThanOrEqual(2); // …but eight events do not cost eight reads
+  });
+
+  it('does not let a later status event downgrade a queued deletion', async () => {
+    // Order is not guaranteed across a burst. Collapsing taskDeleted into taskUpdated would
+    // turn "remove the row" into "go read a task ClickUp has already destroyed".
+    mockReadConfig.mockResolvedValue(enabledConfig);
+    prismaMock.clickUpTaskLink.findFirst.mockResolvedValue({ rowId: 'r1' } as any);
+    prismaMock.clickUpTaskLink.deleteMany.mockResolvedValue({ count: 1 } as any);
+    prismaMock.clickUpTaskLink.findMany.mockResolvedValue([] as any);
+    prismaMock.taskRow.findMany.mockResolvedValue([] as any);
+    prismaMock.row.deleteMany.mockResolvedValue({ count: 1 } as any);
+    prismaMock.row.findUnique.mockResolvedValue({ data: {}, table: { base: { orgId: 'org1' } } } as any);
+    stubFetch(() => undefined);
+
+    // The first enqueue occupies the drain, so the next two queue up behind it in one tick.
+    enqueueClickUpEvent('taskStatusUpdated', 'CUbusy');
+    enqueueClickUpEvent('taskDeleted', 'CUqdel');
+    enqueueClickUpEvent('taskStatusUpdated', 'CUqdel');
+    await settle();
+
+    expect(prismaMock.row.deleteMany).toHaveBeenCalled(); // the deletion survived
+  });
+});
+
+// ─────────────────────────── webhook self-heal ───────────────────────────
+
+describe('ensureClickUpWebhook', () => {
+  const hook = (over: Record<string, unknown> = {}) => ({
+    id: 'wh1', endpoint: 'https://meet.example.com/api/webhooks/clickup',
+    events: ['taskStatusUpdated', 'taskUpdated', 'taskDeleted'], ...over,
+  });
+
+  it('reactivates a webhook ClickUp suspended, keeping the id and the stored secret', async () => {
+    // ClickUp suspends after repeated delivery failures and leaves the row in place —
+    // same id, same endpoint, same events. Matching on those alone made this cron report
+    // ok every 30 minutes while nothing was actually being delivered.
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_WEBHOOK_ID: 'wh1' });
+    const { calls } = stubFetch((u, method) =>
+      u.includes('/webhook') && method === 'GET'
+        ? ({ ok: true, status: 200, json: async () => ({ webhooks: [hook({ health: { status: 'suspended', fail_count: 407 } })] }), text: async () => '' }) as Response
+        : undefined,
+    );
+
+    expect(await ensureClickUpWebhook()).toEqual({ ok: true });
+
+    const put = calls.find((c) => c.method === 'PUT');
+    expect(put?.url).toContain('/webhook/wh1');
+    expect(put?.body.status).toBe('active');
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false); // not re-created…
+    expect(calls.some((c) => c.method === 'POST')).toBe(false); // …so the secret still matches
+  });
+
+  it('leaves a healthy webhook alone', async () => {
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_WEBHOOK_ID: 'wh1' });
+    const { calls } = stubFetch((u, method) =>
+      u.includes('/webhook') && method === 'GET'
+        ? ({ ok: true, status: 200, json: async () => ({ webhooks: [hook({ health: { status: 'active', fail_count: 0 } })] }), text: async () => '' }) as Response
+        : undefined,
+    );
+
+    expect(await ensureClickUpWebhook()).toEqual({ ok: true });
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
+  });
+
+  it('treats the transient "failing" state as healthy — it recovers on its own', async () => {
+    mockReadConfig.mockResolvedValue({ ...enabledConfig, CLICKUP_WEBHOOK_ID: 'wh1' });
+    const { calls } = stubFetch((u, method) =>
+      u.includes('/webhook') && method === 'GET'
+        ? ({ ok: true, status: 200, json: async () => ({ webhooks: [hook({ health: { status: 'failing', fail_count: 3 } })] }), text: async () => '' }) as Response
+        : undefined,
+    );
+
+    expect(await ensureClickUpWebhook()).toEqual({ ok: true });
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
   });
 });

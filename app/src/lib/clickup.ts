@@ -860,11 +860,32 @@ export async function ensureClickUpWebhook(): Promise<{ ok: boolean; error?: str
       // need. Comparing the endpoint alone used to be enough — but then adding an event to
       // WEBHOOK_EVENTS was a silent no-op: the existing hook matched on endpoint and was never
       // re-created, so the new event simply never arrived.
-      const list = await cuJson<{ webhooks?: { id: string; endpoint: string; events?: string[] }[] }>(cfg.token, `/team/${teamId}/webhook`);
+      const list = await cuJson<{ webhooks?: { id: string; endpoint: string; events?: string[]; health?: { status?: string } }[] }>(cfg.token, `/team/${teamId}/webhook`);
       const found = (list.webhooks || []).find((w) => w.id === stored.CLICKUP_WEBHOOK_ID);
       const subscribed = new Set(found?.events || []);
       const hasAllEvents = WEBHOOK_EVENTS.every((e) => subscribed.has(e));
-      if (found && found.endpoint === endpoint && hasAllEvents) return { ok: true };
+      // ClickUp suspends a webhook after ~100 failed deliveries and then LEAVES IT IN PLACE:
+      // same id, same endpoint, same events — just dead. Matching on those three alone made
+      // this cron a no-op against the exact failure it exists to repair. On 2026-08-13 it
+      // reported ok every 30 minutes for five hours while nothing was being delivered.
+      // ('failing' is the transient warning state and recovers on its own — don't touch it.)
+      const suspended = found?.health?.status === 'suspended';
+      if (found && found.endpoint === endpoint && hasAllEvents && !suspended) return { ok: true };
+      if (found && suspended && found.endpoint === endpoint && hasAllEvents) {
+        // Reactivate in place rather than re-creating: a fresh webhook comes with a fresh
+        // secret, and between ClickUp minting it and us storing it every delivery would fail
+        // signature verification. Fall through to delete+recreate only if this doesn't take.
+        try {
+          await cuJson(cfg.token, `/webhook/${found.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ endpoint, events: WEBHOOK_EVENTS, status: 'active' }),
+          });
+          console.warn('[clickup] webhook was suspended by ClickUp — reactivated', found.id);
+          return { ok: true };
+        } catch (e) {
+          console.error('[clickup] reactivate failed, re-creating:', (e as Error).message);
+        }
+      }
       // Endpoint or event set drifted → drop the stale webhook before re-creating.
       if (found) await cuJson(cfg.token, `/webhook/${stored.CLICKUP_WEBHOOK_ID}`, { method: 'DELETE' }).catch(() => {});
     }
@@ -1026,6 +1047,67 @@ export async function applyClickUpEvent(event: string, clickupTaskId: string): P
   } catch (e) {
     console.error('[clickup] applyClickUpEvent failed:', (e as Error).message);
   }
+}
+
+// ─────────────────────────── inbound event queue ───────────────────────────
+
+/**
+ * ClickUp's webhook is registered team-wide, so EVERY task touched anywhere in the
+ * workspace lands on our endpoint — including bursts from other tools writing to ClickUp.
+ * Applying an event inline was two mistakes at once: ClickUp waited on a ClickUp API round
+ * trip before it got its 200 (and counts a slow delivery as a failure), and N simultaneous
+ * events meant N simultaneous outbound calls against a ~100/min budget, so a burst spent
+ * its whole quota on 429s and landed nothing.
+ *
+ * So the route acks immediately and drops the event here instead. Two properties matter:
+ *  - Coalescing. Events key by task id, and applying one re-reads that task's CURRENT state
+ *    from ClickUp anyway — so twelve edits to one task during a burst cost one GET, not twelve.
+ *  - A concurrency floor. Draining a few at a time keeps us inside the rate limit, so a long
+ *    queue drains slowly and completely instead of failing fast and wholesale.
+ *
+ * Lossy by design: the queue lives in memory, so a redeploy mid-burst drops what is left.
+ * That is what the hourly reconcile sweep is for — it converges whatever the fast path missed.
+ */
+const eventQueue = new Map<string, string>(); // clickupTaskId → latest event for it
+const QUEUE_MAX = 2_000; // a runaway-producer backstop, far above any real burst
+const DRAIN_CONCURRENCY = 3;
+let drainPromise: Promise<void> | null = null; // non-null ⇔ a drain is in flight
+
+export function enqueueClickUpEvent(event: string, clickupTaskId: string): void {
+  // A deletion is terminal — never let a later status event overwrite it and turn a
+  // "remove the row" into a "go read a task that no longer exists".
+  if (eventQueue.get(clickupTaskId) === 'taskDeleted') return;
+  eventQueue.set(clickupTaskId, event);
+  if (eventQueue.size > QUEUE_MAX) {
+    const oldest = eventQueue.keys().next().value;
+    if (oldest !== undefined) eventQueue.delete(oldest);
+  }
+  // Safe against double-starting: the drain runs synchronously up to its first await, and
+  // nothing else can enqueue in that window.
+  if (!drainPromise) drainPromise = drainClickUpEvents().finally(() => { drainPromise = null; });
+}
+
+async function drainClickUpEvents(): Promise<void> {
+  while (eventQueue.size) {
+    const batch: [string, string][] = [];
+    for (const [taskId, event] of eventQueue) {
+      batch.push([taskId, event]);
+      eventQueue.delete(taskId);
+      if (batch.length >= DRAIN_CONCURRENCY) break;
+    }
+    // applyClickUpEvent never throws, so one poisonous id can't stall the drain.
+    await Promise.all(batch.map(([taskId, event]) => applyClickUpEvent(event, taskId)));
+  }
+}
+
+/** How many events are still waiting (diagnostics + tests). */
+export function clickUpQueueDepth(): number {
+  return eventQueue.size;
+}
+
+/** Resolves once the queue has fully drained. Test seam — nothing in the app waits on this. */
+export function clickUpQueueIdle(): Promise<void> {
+  return drainPromise ?? Promise.resolve();
 }
 
 // ─────────────────────────── reconcile (catch-up sweep, ClickUp → Garely) ───────────────────────────

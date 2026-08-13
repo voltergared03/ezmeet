@@ -12,8 +12,22 @@ const SECRET = authSecretOrDev();
 export const TWOFA_COOKIE = 'eam_2fa';
 const SESSION_TTL_SEC = 12 * 60 * 60; // re-prompt after 12h / on a new device
 
+// scrypt is a deliberately slow KDF — ~75 ms per derivation on the prod host — and
+// scryptSync BLOCKS the event loop for every millisecond of it. The key depends only on
+// (AUTH_SECRET, purpose), both fixed for the life of the process, so derive each one once.
+// Uncached, every signed inbound webhook paid 75 ms of blocking CPU just to decrypt the
+// shared secret, which capped the whole server at ~13 requests/second: a burst of ClickUp
+// deliveries on 2026-08-13 stalled behind it until ClickUp timed the deliveries out and
+// suspended the webhook.
+const keyCache = new Map<string, Buffer>();
+
 function keyFor(purpose: string): Buffer {
-  return crypto.scryptSync(SECRET, `eam-2fa-${purpose}`, 32);
+  let key = keyCache.get(purpose);
+  if (!key) {
+    key = crypto.scryptSync(SECRET, `eam-2fa-${purpose}`, 32);
+    keyCache.set(purpose, key);
+  }
+  return key;
 }
 
 // Cookie HMAC key — derived with SHA-256 (NOT scrypt) so the Edge middleware
