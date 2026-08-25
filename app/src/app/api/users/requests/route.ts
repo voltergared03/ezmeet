@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { unsuppressEmail } from '@/lib/suppression';
 import { sendEmail } from '@/lib/email';
 import { readConfig, CONFIG_DEFAULTS, publicBaseUrl } from '@/lib/config';
 import { getTranslator } from '@/lib/i18n-server';
@@ -67,6 +68,8 @@ async function postHandler(req: NextRequest) {
       } as any,
       select: { id: true, name: true, email: true, image: true, role: true, lastLogin: true, createdAt: true },
     });
+    // Someone re-approved after being deleted must be reachable again.
+    await unsuppressEmail(reqRow.email);
     const orgId = await getCurrentOrgId(session);
     if (orgId) await ensureMembership(orgId, user.id, 'MEMBER');
     await prisma.registrationRequest.update({

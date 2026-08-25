@@ -36,6 +36,65 @@ beforeEach(() => {
   mockFetch.mockReset();
 });
 
+describe('syncConnection: attendees → participants', () => {
+  /** One new event carrying `attendees`, synced in. */
+  async function syncWithAttendees(emails: string[]) {
+    mockFetch
+      .mockResolvedValueOnce(ok({
+        items: [{
+          id: 'ev1', etag: '"e1"', status: 'confirmed', summary: 'Planning',
+          start: { dateTime: '2026-06-15T10:00:00Z' },
+          end: { dateTime: '2026-06-15T11:00:00Z' },
+          attendees: emails.map((email) => ({ email })),
+        }],
+        nextSyncToken: 'st-new',
+      }))
+      .mockResolvedValueOnce(ok({ etag: '"e2"' }));
+    prismaMock.meeting.findFirst.mockResolvedValue(null as any);
+    prismaMock.meeting.create.mockResolvedValue({ id: 'm1' } as any);
+    prismaMock.meeting.findUnique.mockResolvedValue({ id: 'm1', joinToken: 'tok1' } as any);
+    prismaMock.meetingParticipant.findFirst.mockResolvedValue(null as any);
+    prismaMock.meetingParticipant.create.mockResolvedValue({} as any);
+    await syncConnection(conn());
+  }
+
+  it('does NOT re-create someone who was deleted from Garely', async () => {
+    // The bug this closes: deleting a user only nulls `userId` on their participant
+    // rows, and a shared calendar event keeps its attendee list forever. The guest
+    // branch stores the raw address, so every sync resurrected the person we had just
+    // deleted — and they kept receiving invites, reminders and reports with no user
+    // record left to remove them from.
+    prismaMock.suppressedEmail.findMany.mockResolvedValue([{ email: 'gone@x.com' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([] as any);
+
+    await syncWithAttendees(['gone@x.com']);
+
+    expect(prismaMock.meetingParticipant.create).not.toHaveBeenCalled();
+    expect(prismaMock.meetingParticipant.upsert).not.toHaveBeenCalled();
+  });
+
+  it('still imports a genuine outside guest', async () => {
+    // Suppression must not cost us the feature: an external attendee is a real guest.
+    prismaMock.suppressedEmail.findMany.mockResolvedValue([] as any);
+    prismaMock.user.findMany.mockResolvedValue([] as any);
+
+    await syncWithAttendees(['client@outside.com']);
+
+    const arg = prismaMock.meetingParticipant.create.mock.calls[0][0] as any;
+    expect(arg.data.guestEmail).toBe('client@outside.com');
+  });
+
+  it('drops only the suppressed attendee, keeping the others on the same event', async () => {
+    prismaMock.suppressedEmail.findMany.mockResolvedValue([{ email: 'gone@x.com' }] as any);
+    prismaMock.user.findMany.mockResolvedValue([] as any);
+
+    await syncWithAttendees(['gone@x.com', 'client@outside.com']);
+
+    const created = prismaMock.meetingParticipant.create.mock.calls.map((c) => (c[0] as any).data.guestEmail);
+    expect(created).toEqual(['client@outside.com']);
+  });
+});
+
 describe('syncConnection (Google → Garely)', () => {
   it('creates a meeting from a new timed event and patches the join link back', async () => {
     mockFetch

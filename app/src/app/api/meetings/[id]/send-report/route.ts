@@ -8,6 +8,7 @@ import { getTranslator, workspaceLocale } from '@/lib/i18n-server';
 import { esc } from '@/lib/email/html';
 import { withRoute } from '@/lib/with-route';
 import { tasksForReport } from '@/lib/tasks';
+import { filterSuppressed } from '@/lib/suppression';
 
 // POST — email the meeting report (summary, decisions, action items, follow-ups) to participants
 async function postHandler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ async function postHandler(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     include: {
       createdBy: { select: { email: true } },
-      participants: { include: { user: { select: { email: true } } } },
+      participants: { include: { user: { select: { email: true, status: true } } } },
       reports: {
         orderBy: { generatedAt: 'desc' },
         take: 1,
@@ -41,12 +42,17 @@ async function postHandler(req: NextRequest, { params }: { params: Promise<{ id:
   const emails = new Set<string>();
   if (meeting.createdBy?.email) emails.add(meeting.createdBy.email);
   for (const p of meeting.participants) {
+    if (p.user?.status === 'disabled') continue; // blocked account — no meeting content by mail
     if (p.user?.email) emails.add(p.user.email);
     if (p.guestEmail) emails.add(p.guestEmail);
   }
+  // Deleted people survive on the participant list as calendar-imported guests, and a
+  // report is the whole discussion — see lib/suppression.
+  const kept = await filterSuppressed(emails);
+  // The requester asked for this copy, so they get it regardless of the list.
   const reqEmail = session.user.email;
-  if (reqEmail) emails.add(reqEmail);
-  const recipients = [...emails];
+  if (reqEmail) kept.push(reqEmail);
+  const recipients = [...new Set(kept)];
   if (recipients.length === 0) return NextResponse.json({ error: t('emails.report.errors.noRecipients') }, { status: 400 });
 
   const decisions = (Array.isArray(report.decisions) ? report.decisions : []) as any[];

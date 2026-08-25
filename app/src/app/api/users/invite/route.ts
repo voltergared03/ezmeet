@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { unsuppressEmail } from '@/lib/suppression';
 import { sendEmail } from '@/lib/email';
 import { readConfig, CONFIG_DEFAULTS, publicBaseUrl, getAuthConfig } from '@/lib/config';
 import crypto from 'node:crypto';
@@ -47,6 +48,8 @@ async function postHandler(req: NextRequest) {
       },
     });
     created = true;
+    // Someone re-invited after being deleted must be reachable again.
+    await unsuppressEmail(email);
   }
 
   // Multi-tenancy: ensure the (new or existing) invited user is in the current org.

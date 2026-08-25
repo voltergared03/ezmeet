@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { filterSuppressed } from '@/lib/suppression';
 import { sendEmail } from '@/lib/email';
 import { notify } from '@/lib/notify';
 import { notifyChatMeetingReminder } from '@/lib/chat-notify';
@@ -28,7 +29,7 @@ async function getHandler(req: NextRequest) {
       scheduledAt: { gt: now, lte: in15 },
     },
     include: {
-      participants: { include: { user: { select: { id: true, email: true, preferences: true } } } },
+      participants: { include: { user: { select: { id: true, email: true, preferences: true, status: true } } } },
     },
   });
 
@@ -46,8 +47,10 @@ async function getHandler(req: NextRequest) {
       ? fmtTime(new Date(m.scheduledAt), tz) // workspace wall-clock, not server UTC
       : '';
 
-    // In-app notifications for participant users
-    const userIds = m.participants.map((p) => p.user?.id).filter((x): x is string => !!x);
+    // In-app notifications for participant users (a blocked account can't open the
+    // meeting, so it gets neither the notification nor the email below).
+    const active = m.participants.filter((p) => p.user?.status !== 'disabled');
+    const userIds = active.map((p) => p.user?.id).filter((x): x is string => !!x);
     if (userIds.length > 0) {
       await notify({
         userIds,
@@ -63,17 +66,19 @@ async function getHandler(req: NextRequest) {
 
     // Emails — respect each user's emailReminder preference; always send to guests
     const emails = new Set<string>();
-    for (const p of m.participants) {
+    for (const p of active) {
       if (p.user?.email) {
         const prefs = (p.user.preferences as any) || {};
         if (prefs.emailReminder !== false) emails.add(p.user.email);
       }
       if (p.guestEmail) emails.add(p.guestEmail);
     }
-    if (emails.size > 0) {
+    // Deleted people linger here as calendar-imported guests — see lib/suppression.
+    const recipients = await filterSuppressed(emails);
+    if (recipients.length > 0) {
       const joinUrl = `${appUrl}/lobby/${m.id}`;
       await sendEmail({
-        to: [...emails],
+        to: recipients,
         template: 'reminder',
         meetingId: m.id,
         subject: t('emails.reminder.subject', { title: m.title, time: startStr }),
@@ -85,7 +90,7 @@ async function getHandler(req: NextRequest) {
           ${appUrl ? `<a href="${joinUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:10px">${t('emails.reminder.joinButton')}</a>` : ''}
         </div>`,
       }).catch(() => {});
-      emailed += emails.size;
+      emailed += recipients.length;
     }
 
     // Team chat reminder (opt-in; fire-and-forget).

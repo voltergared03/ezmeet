@@ -381,6 +381,20 @@ model EmailLog {
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 }
 
+// Addresses that must never receive Garely mail again.
+//
+// Deleting a user does NOT stop their mail on its own: their MeetingParticipant rows
+// only lose `userId` (onDelete: SetNull), and the Google Calendar sync re-imports any
+// attendee it cannot match to a User as a plain GUEST — email and all. A deleted person
+// therefore came straight back as a guest on the next sync and kept receiving invites,
+// reminders and reports, with no user record left to remove them from. This is the
+// tombstone that breaks that loop; re-creating a user with the same address clears it.
+model SuppressedEmail {
+  email     String   @id // lowercased
+  reason    String   @default("user_deleted")
+  createdAt DateTime @default(now())
+}
+
 model Notification {
   id        String       @id @default(cuid())
   userId    String

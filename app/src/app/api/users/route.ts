@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { unsuppressEmail } from '@/lib/suppression';
 import { hashPassword, passwordPolicyError } from "@/lib/password";
 import { sendEmail } from "@/lib/email";
 import { readConfig, CONFIG_DEFAULTS, publicBaseUrl } from "@/lib/config";
@@ -88,6 +89,8 @@ export async function POST(req: NextRequest) {
     } as any,
     select: { id: true, email: true, name: true, role: true },
   });
+  // Someone re-added after being deleted must be reachable again.
+  await unsuppressEmail(email);
 
   // Multi-tenancy: enroll the new user into the current org.
   const orgId = await getCurrentOrgId(session);

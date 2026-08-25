@@ -18,6 +18,7 @@
  */
 import crypto from 'crypto';
 import { prisma } from './prisma';
+import { filterSuppressed } from './suppression';
 import { generateMeetingSlug } from './utils';
 import { readConfig, num, publicBaseUrl } from './config';
 import { getSingletonOrgId } from './org';
@@ -184,9 +185,15 @@ async function applyGoogleEvent(
 
 /** Add-only attendee → participant mapping (members by email, others guests). */
 async function upsertParticipants(meetingId: string, conn: GoogleCalendarConnection, ev: GEvent): Promise<void> {
-  const emails = (ev.attendees || [])
+  const raw = (ev.attendees || [])
     .filter((a) => a.email && !a.resource)
     .map((a) => a.email!.toLowerCase());
+  if (!raw.length) return;
+  // Anyone deleted from Garely must not walk back in through the calendar. A shared
+  // event keeps its attendee list long after somebody leaves the company, and the
+  // guest branch below stores the raw address — so without this, every sync re-created
+  // the person we had just deleted, and they carried on getting invites and reports.
+  const emails = await filterSuppressed(raw);
   if (!emails.length) return;
   const users = await prisma.user.findMany({ where: { email: { in: emails } }, select: { id: true, email: true } });
   const byEmail = new Map(users.map((u) => [u.email!.toLowerCase(), u.id]));

@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { filterSuppressed } from './suppression';
 import { sendEmail } from './email';
 import { getTranslator, workspaceLocale } from './i18n-server';
 import { publicBaseUrl } from './config';
@@ -17,7 +18,7 @@ export async function sendReportEmail(
     where: { id: meetingId },
     include: {
       createdBy: { select: { email: true } },
-      participants: { include: { user: { select: { email: true, preferences: true } } } },
+      participants: { include: { user: { select: { email: true, preferences: true, status: true } } } },
       reports: {
         orderBy: { generatedAt: 'desc' },
         take: 1,
@@ -34,6 +35,7 @@ export async function sendReportEmail(
   const emails = new Set<string>();
   if (meeting.createdBy?.email) emails.add(meeting.createdBy.email);
   for (const p of meeting.participants) {
+    if (p.user?.status === 'disabled') continue; // blocked account — no meeting content by mail
     if (p.user?.email) {
       if (opts?.respectPref) {
         const prefs = (p.user.preferences as any) || {};
@@ -43,8 +45,14 @@ export async function sendReportEmail(
     }
     if (p.guestEmail) emails.add(p.guestEmail);
   }
-  if (opts?.extraRecipient) emails.add(opts.extraRecipient);
-  const recipients = [...emails];
+  // A report carries the whole discussion, so a deleted person receiving one is the
+  // costliest form of this bug. They survive on the participant list as a
+  // calendar-imported guest — see lib/suppression.
+  const kept = await filterSuppressed(emails);
+  // An explicit "send it to this address" from an admin is a deliberate act, not a
+  // stale list, so it is added after the filter rather than being subject to it.
+  if (opts?.extraRecipient) kept.push(opts.extraRecipient);
+  const recipients = [...new Set(kept)];
   if (recipients.length === 0) return { ok: false, error: t('emails.report.errors.noRecipients') };
 
   const decisions = (Array.isArray(report.decisions) ? report.decisions : []) as any[];

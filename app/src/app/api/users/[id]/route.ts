@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { withRoute } from '@/lib/with-route';
+import { suppressEmail } from '@/lib/suppression';
 
 // PATCH /api/users/[id] — update user (role, etc.)
 async function patchHandler(
@@ -101,8 +102,17 @@ async function patchHandler(
 
 // DELETE /api/users/[id] — delete a user (admin only). Created meetings are
 // reassigned to the requesting admin so reports survive; optional relations
-// (participants, task assignees, transcript speakers) auto-null; accounts/
-// sessions/notifications cascade.
+// (task assignees, transcript speakers) auto-null; accounts/sessions/notifications
+// cascade.
+//
+// Their invitations are removed OUTRIGHT rather than left to `onDelete: SetNull`,
+// which used to leave an identity-less participant row on every meeting they were
+// ever invited to — invisible in the UI, counted in the participant list, and copied
+// forward into each new occurrence of a recurring series. And their address is
+// suppressed, because deleting the User is NOT enough to stop the mail: the Google
+// Calendar sync re-imports any event attendee it cannot match to a User as a plain
+// guest, so a deleted person reappeared with their email intact on the next sync and
+// carried on receiving invites, reminders and reports.
 async function deleteHandler(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -128,7 +138,7 @@ async function deleteHandler(
     return NextResponse.json({ error: t('cannotDeleteOwnAccount') }, { status: 400 });
   }
 
-  const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } });
+  const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, email: true } });
   if (!target) {
     return NextResponse.json({ error: t('userNotFound') }, { status: 404 });
   }
@@ -142,8 +152,11 @@ async function deleteHandler(
 
   await prisma.$transaction([
     prisma.meeting.updateMany({ where: { createdById: id }, data: { createdById: currentUser.id } }),
+    // Before the delete, while the rows are still findable by userId.
+    prisma.meetingParticipant.deleteMany({ where: { userId: id } }),
     prisma.user.delete({ where: { id } }),
   ]);
+  await suppressEmail(target.email, 'user_deleted');
 
   return NextResponse.json({ success: true });
 }

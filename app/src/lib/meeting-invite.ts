@@ -10,6 +10,7 @@ import { getTranslator, workspaceLocale, workspaceTimezone } from "./i18n-server
 import { publicBaseUrl } from "./config";
 import { esc } from "./email/html";
 import { buildCalendar, googleCalendarUrl, type IcsEvent } from "./ics";
+import { filterSuppressed } from "./suppression";
 
 export type InviteKind = "invite" | "update" | "cancel";
 
@@ -20,7 +21,7 @@ export async function sendMeetingInvite(meetingId: string, kind: InviteKind = "i
       select: {
         id: true, title: true, description: true, scheduledAt: true, durationMin: true, joinToken: true, recurrence: true,
         createdBy: { select: { name: true, email: true } },
-        participants: { select: { guestName: true, guestEmail: true, user: { select: { name: true, email: true } } } },
+        participants: { select: { guestName: true, guestEmail: true, user: { select: { name: true, email: true, status: true } } } },
       },
     });
     if (!meeting?.scheduledAt) return; // only scheduled meetings get calendar invites
@@ -29,11 +30,21 @@ export async function sendMeetingInvite(meetingId: string, kind: InviteKind = "i
     const recips = new Map<string, string | null>();
     if (meeting.createdBy?.email) recips.set(meeting.createdBy.email, meeting.createdBy.name);
     for (const p of meeting.participants) {
+      // A blocked account can't open the meeting, so inviting them to it is noise at
+      // best — and for someone who was blocked precisely to cut their access, it leaks
+      // the title, the time and a join link every time the meeting is touched.
+      if (p.user?.status === 'disabled') continue;
       if (p.user?.email) recips.set(p.user.email, p.user.name);
       else if (p.guestEmail) recips.set(p.guestEmail, p.guestName);
     }
     if (recips.size === 0) return;
-    const attendees = [...recips.entries()].map(([email, name]) => ({ email, name }));
+    // Deleted people can still be sitting on the participant list as calendar-imported
+    // guests; the suppression list is the only thing left that knows they are gone.
+    const allowed = new Set(await filterSuppressed(recips.keys()));
+    const attendees = [...recips.entries()]
+      .filter(([email]) => allowed.has(email.toLowerCase()))
+      .map(([email, name]) => ({ email, name }));
+    if (attendees.length === 0) return;
 
     const start = meeting.scheduledAt;
     const end = new Date(start.getTime() + (meeting.durationMin || 60) * 60_000);
