@@ -4,6 +4,36 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.7] — 2026-08-26
+
+Forms now explain themselves. Second half of the interface rework.
+
+### Fixed
+- **The invite form did nothing when the address was empty.** Clicking "Invite" with a
+  blank email produced no message and no reason — it read as a broken button rather than
+  a missing field. It now says what is needed, and checks that the address is actually an
+  address, which it never did before.
+- **Errors now point at the field that caused them.** Changing a password showed a single
+  line at the bottom of the form, so it could not say whether the current password was
+  rejected or the new one was too short — the one thing you need in order to fix it. The
+  same applied to registration and to setting a password from an invite link. Each error
+  now sits on its own field, and "the two passwords do not match" appears on the box you
+  retype, not on the one you already got right.
+- **Password rules no longer disappear as you type.** "At least 8 characters" lived in the
+  placeholder, which vanishes at the first keystroke — exactly when it still needs reading.
+  It is now a permanent hint under the field.
+- **Dropdowns you cannot see into.** Choosing where ClickUp and Linear file their tasks was
+  a dropdown over two options, hiding both behind a click; both choices are now visible.
+  The AI model list, which can run to hundreds of entries, can be typed into to filter
+  rather than only scrolled.
+- **Waiting screens now show what is coming.** Departments and database tables draw the
+  shape of the list while it loads instead of a spinning circle, so nothing jumps when the
+  content arrives.
+- **Failures no longer interrupt with a dialog box.** A rejected role change, a refused
+  delete or a dropped connection during a call used to raise a modal that blocked the page,
+  could not say which row it belonged to, and — over a live meeting — stole focus from the
+  video while everyone else kept talking. They now appear as a message beside the work.
+
 ## [1.25.0-beta.6] — 2026-08-26
 
 ### Added
