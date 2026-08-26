@@ -16,7 +16,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { POST } from '@/app/api/meetings/[id]/recording/route';
+import { POST, GET } from '@/app/api/meetings/[id]/recording/route';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { startRoomRecording, stopRecording } from '@/lib/egress';
@@ -85,5 +85,42 @@ describe('POST /api/meetings/[id]/recording (in-meeting start/stop)', () => {
     recFindFirst.mockResolvedValue(null);
     const r = await POST(jsonReq('POST', { action: 'frobnicate' }), ctx({ id: 'm1' }));
     expect(r.status).toBe(400);
+  });
+});
+
+
+describe('GET /api/meetings/[id]/recording', () => {
+  const rec = (over: Record<string, unknown> = {}) => ({
+    id: 'r1', fileName: 'f.mp4', fileSize: null, durationSec: null,
+    status: 'ready', permanent: false, expiresAt: null, createdAt: new Date('2026-08-26T12:00:00Z'),
+    ...over,
+  }) as any;
+
+  it('returns a FAILED recording instead of hiding it', async () => {
+    // It used to filter on status: 'ready', so a lost recording came back as null and
+    // the page rendered what it renders for a meeting nobody recorded. A failure the
+    // user cannot see is one they cannot act on.
+    mAuth.mockResolvedValue(mockSession({ id: 'u1' }) as any);
+    recFindFirst.mockResolvedValue(rec({ status: 'failed' }));
+    const r = await GET(jsonReq('GET'), ctx({ id: 'm1' }));
+    const body = await r.json();
+    expect(body.recording.status).toBe('failed');
+    // and the query must not be narrowed by status
+    expect(recFindFirst.mock.calls[0][0].where).toEqual({ meetingId: 'm1' });
+  });
+
+  it('still returns a ready recording', async () => {
+    mAuth.mockResolvedValue(mockSession({ id: 'u1' }) as any);
+    recFindFirst.mockResolvedValue(rec());
+    const body = await (await GET(jsonReq('GET'), ctx({ id: 'm1' }))).json();
+    expect(body.recording.status).toBe('ready');
+    expect(body.recording.url).toBe('/api/recordings/r1/file');
+  });
+
+  it('returns null when the meeting has no recording at all', async () => {
+    mAuth.mockResolvedValue(mockSession({ id: 'u1' }) as any);
+    recFindFirst.mockResolvedValue(null as any);
+    const body = await (await GET(jsonReq('GET'), ctx({ id: 'm1' }))).json();
+    expect(body.recording).toBeNull();
   });
 });

@@ -9,8 +9,7 @@ import {
   ChevronLeft, Sparkles, Copy, Send, FileText, Check, Clock,
   Users, Search, X, ChevronRight, Video, Play, ListChecks,
   CheckCircle, Download, ChevronDown, User, Loader2, Trash2, Bookmark, Languages, HelpCircle,
-  MessageCircle,
-} from 'lucide-react';
+  MessageCircle, AlertCircle} from 'lucide-react';
 import { Avatar, AvatarStack } from '@/components/ui/avatar';
 import { Select } from '@/components/ui/select';
 import { fmtTime, fmtRelative, fmtDateLong, getInitials, getAvatarColor } from '@/lib/utils';
@@ -1421,8 +1420,30 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                 </div>
               </ReportCard>
 
-              {/* Recording */}
-              {recording && (
+              {/* Recording — a failed or still-processing one now reaches this page
+                  instead of being filtered out by the API, because a lost recording
+                  the user cannot see is one they cannot act on. */}
+              {recording && recording.status !== 'ready' && (
+                <ReportCard icon={Video} title={tr('report.recording')} accentColor={recording.status === 'failed' ? 'var(--danger)' : 'var(--muted)'}>
+                  <div
+                    role={recording.status === 'failed' ? 'alert' : undefined}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 12,
+                      padding: '12px 16px', borderRadius: 10,
+                      background: recording.status === 'failed' ? 'var(--danger-bg)' : 'var(--bg-2)',
+                      border: `1px solid ${recording.status === 'failed' ? 'color-mix(in oklab, var(--danger) 30%, transparent)' : 'var(--border)'}`,
+                    }}
+                  >
+                    {recording.status === 'failed'
+                      ? <AlertCircle size={16} style={{ color: 'var(--danger-fg)', flexShrink: 0, marginTop: 1 }} />
+                      : <Clock size={16} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 1 }} />}
+                    <div style={{ fontSize: 13, lineHeight: 1.55, color: recording.status === 'failed' ? 'var(--danger-fg)' : 'var(--text-2)' }}>
+                      {recording.status === 'failed' ? tr('report.recordingFailed') : tr('report.recordingProcessing')}
+                    </div>
+                  </div>
+                </ReportCard>
+              )}
+              {recording && recording.status === 'ready' && (
                 <ReportCard icon={Video} title={tr('report.recording')} accentColor="var(--teal)">
                   <div
                     style={{

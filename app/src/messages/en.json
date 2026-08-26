@@ -737,7 +737,9 @@
     "chatSuggest1": "Summarize the meeting in a few sentences",
     "chatSuggest2": "What were the key decisions?",
     "chatSuggest3": "What action items came out of this?",
-    "chatSuggest4": "What was left unresolved?"
+    "chatSuggest4": "What was left unresolved?",
+    "recordingFailed": "This meeting’s recording was not saved — the recording process was interrupted. The transcript and report below are complete and unaffected.",
+    "recordingProcessing": "The recording is still being processed. Refresh in a few minutes."
   },
   "quiz": {
     "assignButton": "Assign quiz",

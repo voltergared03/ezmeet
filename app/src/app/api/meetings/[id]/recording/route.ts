@@ -42,7 +42,14 @@ async function requireMeetingOwner(
   return null;
 }
 
-// GET — latest ready recording for the meeting (or null)
+// GET — the meeting's latest recording in WHATEVER state it is in (or null).
+//
+// This used to filter to status: 'ready', which made a failed recording invisible:
+// the row said "failed", the endpoint returned null, and the page rendered exactly
+// what it renders for a meeting nobody recorded. On 2026-08-26 that is how a lost
+// 52-minute recording went unnoticed for hours. A failure the user cannot see is a
+// failure they cannot act on, so the state now travels to the client and the page
+// decides what to say about it.
 async function getHandler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,7 +58,7 @@ async function getHandler(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const rec = await prisma.recording.findFirst({
-    where: { meetingId: id, status: 'ready' },
+    where: { meetingId: id },
     orderBy: { createdAt: 'desc' },
   });
   return NextResponse.json({ recording: rec ? serialize(rec) : null });
