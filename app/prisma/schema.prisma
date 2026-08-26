@@ -199,6 +199,12 @@ model Meeting {
   @@index([status, scheduledAt])
   @@index([departmentId])
   @@index([orgId, status, scheduledAt])
+  // The calendar sync is check-then-act — findFirst, then create — and THREE things
+  // can run it at once: Google's push webhook, the ten-minute cron and the OAuth
+  // callback. Two of them landing on the same event both saw "not there" and both
+  // created it. The database is the only place that race can actually be settled.
+  // (Postgres treats NULLs as distinct, so meetings with no Google event are free.)
+  @@unique([externalId, externalCalendarId])
   @@index([externalId])
 }
 

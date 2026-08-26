@@ -36,6 +36,68 @@ beforeEach(() => {
   mockFetch.mockReset();
 });
 
+describe('syncConnection: the create race', () => {
+  it('a lost race is a SUCCESS, not an error', async () => {
+    // Three things can run this sync at once — Google's push webhook, the ten-minute
+    // cron and the OAuth callback — and it is check-then-act. The unique index on
+    // (externalId, externalCalendarId) settles it in the database; losing means the
+    // meeting already exists, built from the same event by this same code.
+    mockFetch.mockResolvedValueOnce(ok({
+      items: [{
+        id: 'ev1', etag: '"e1"', status: 'confirmed', summary: 'Planning',
+        start: { dateTime: '2026-06-15T10:00:00Z' },
+        end: { dateTime: '2026-06-15T11:00:00Z' },
+      }],
+      nextSyncToken: 'st',
+    }));
+    prismaMock.meeting.findFirst.mockResolvedValue(null as any);
+    prismaMock.meeting.create.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }) as any);
+
+    const res = await syncConnection(conn());
+
+    expect(res.created).toBe(0);
+    expect(res.skipped).toBe(1);   // counted as handled, not as a failure
+  });
+
+  it('and it does so QUIETLY — a race is expected, not an incident', async () => {
+    mockFetch.mockResolvedValueOnce(ok({
+      items: [{
+        id: 'ev1', etag: '"e1"', status: 'confirmed', summary: 'Planning',
+        start: { dateTime: '2026-06-15T10:00:00Z' },
+        end: { dateTime: '2026-06-15T11:00:00Z' },
+      }],
+      nextSyncToken: 'st',
+    }));
+    prismaMock.meeting.findFirst.mockResolvedValue(null as any);
+    prismaMock.meeting.create.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }) as any);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await syncConnection(conn());
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('a lost race is not LOGGED as an error, but a real failure is', async () => {
+    mockFetch.mockResolvedValueOnce(ok({
+      items: [{
+        id: 'ev1', etag: '"e1"', status: 'confirmed', summary: 'Planning',
+        start: { dateTime: '2026-06-15T10:00:00Z' },
+        end: { dateTime: '2026-06-15T11:00:00Z' },
+      }],
+      nextSyncToken: 'st',
+    }));
+    prismaMock.meeting.findFirst.mockResolvedValue(null as any);
+    prismaMock.meeting.create.mockRejectedValue(Object.assign(new Error('db down'), { code: 'P1001' }) as any);
+
+    // syncConnection counts every per-event failure as "skipped", so the count alone
+    // cannot tell a benign race from an outage — the log is what distinguishes them,
+    // and a race that cried wolf on every collision would bury the real failures.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await syncConnection(conn());
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
 describe('syncConnection: attendees → participants', () => {
   /** One new event carrying `attendees`, synced in. */
   async function syncWithAttendees(emails: string[]) {

@@ -151,28 +151,38 @@ async function applyGoogleEvent(
   // New event → new meeting, with workspace policy defaults (mirrors POST /api/meetings).
   const wsCfg = await readConfig(['WS_LIVE_TRANSCRIPTION', 'WS_AI_SUMMARY', 'WS_GUEST_ACCESS', 'WS_MAX_DURATION_MIN']);
   const maxDur = num(wsCfg, 'WS_MAX_DURATION_MIN') || 240;
-  const meeting = await prisma.meeting.create({
-    data: {
-      title,
-      description: ev.description?.trim() || null,
-      createdById: conn.userId,
-      scheduledAt: start,
-      durationMin: Math.min(durationMin, maxDur),
-      livekitRoom: `meet-${generateMeetingSlug()}`,
-      joinToken: generateMeetingSlug(),
-      transcriptionEnabled: wsCfg.WS_LIVE_TRANSCRIPTION !== 'false',
-      aiReportEnabled: wsCfg.WS_AI_SUMMARY !== 'false',
-      taskCreationEnabled: true,
-      allowGuests: wsCfg.WS_GUEST_ACCESS !== 'false',
-      status: 'scheduled',
-      orgId: conn.orgId,
-      externalId: ev.id,
-      externalCalendarId: conn.calendarId,
-      externalEtag: ev.etag || null,
-      externalSyncedAt: new Date(),
-      participants: { create: [{ userId: conn.userId, role: 'host', rsvpStatus: 'accepted' }] },
-    },
-  });
+  let meeting: { id: string };
+  try {
+    meeting = await prisma.meeting.create({
+      data: {
+        title,
+        description: ev.description?.trim() || null,
+        createdById: conn.userId,
+        scheduledAt: start,
+        durationMin: Math.min(durationMin, maxDur),
+        livekitRoom: `meet-${generateMeetingSlug()}`,
+        joinToken: generateMeetingSlug(),
+        transcriptionEnabled: wsCfg.WS_LIVE_TRANSCRIPTION !== 'false',
+        aiReportEnabled: wsCfg.WS_AI_SUMMARY !== 'false',
+        taskCreationEnabled: true,
+        allowGuests: wsCfg.WS_GUEST_ACCESS !== 'false',
+        status: 'scheduled',
+        orgId: conn.orgId,
+        externalId: ev.id,
+        externalCalendarId: conn.calendarId,
+        externalEtag: ev.etag || null,
+        externalSyncedAt: new Date(),
+        participants: { create: [{ userId: conn.userId, role: 'host', rsvpStatus: 'accepted' }] },
+      },
+    });
+  } catch (e) {
+    // P2002 on the (externalId, externalCalendarId) unique index means another
+    // runner — the push webhook, the cron, the OAuth callback — created this same
+    // event a moment ago. That is the race the index exists to settle, and losing it
+    // is a success: the meeting exists, built from the same event by the same code.
+    if ((e as { code?: string }).code === 'P2002') return 'skipped';
+    throw e;
+  }
   await upsertParticipants(meeting.id, conn, ev);
 
   // Write the join link back INTO the Google event (location + description +
