@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withRoute } from '@/lib/with-route';
+import { roomService } from '@/lib/livekit';
+import { endRecording } from '@/lib/recording-orchestrator';
 
 // GET /api/cron/cleanup?secret=XXX — periodic state hygiene (e.g. every 30 min).
 // Backstops three cases where a webhook was lost or a process died:
 //   1. Meetings stuck `live` long past their expected end (room_finished never
-//      arrived) → mark ended so they leave the dashboard and enter the archive.
+//      arrived) → mark ended so they leave the dashboard and enter the archive, AND
+//      close the LiveKit room behind them.
+//      Marking the row alone was cosmetic and actively misleading: LiveKit only
+//      reaps a room once it is EMPTY (empty_timeout), and a forgotten browser tab
+//      is a participant — so the room, the transcription agent and the Deepgram
+//      bill all carried on while the UI showed the meeting as finished. Closing
+//      the room disconnects the stragglers and the agent with them.
 //   2. Recordings stuck `processing` for hours (egress crashed mid-recording) →
 //      mark failed so the UI can show it instead of hanging.
 //   3. RDP audit sessions stuck `active` (the browser's disconnect beacon never
@@ -42,12 +50,38 @@ async function getHandler(req: NextRequest) {
     .map((m) => m.id);
 
   let endedMeetings = 0;
+  let closedRooms = 0;
   if (staleIds.length > 0) {
+    const stale = await prisma.meeting.findMany({
+      where: { id: { in: staleIds }, status: 'live' },
+      select: { id: true, livekitRoom: true, recordings: { where: { status: 'processing' }, select: { egressId: true, sourceType: true, meta: true } } },
+    });
     const res = await prisma.meeting.updateMany({
       where: { id: { in: staleIds }, status: 'live' },
       data: { status: 'ended', endedAt: new Date() },
     });
     endedMeetings = res.count;
+
+    for (const m of stale) {
+      // Stop the recording first: killing the room out from under a running egress
+      // leaves the Recording row stuck in "processing" until case 2 below reaps it
+      // six hours later.
+      for (const rec of m.recordings) {
+        await endRecording(rec).catch((e) => console.error('[cleanup] endRecording failed', m.id, e));
+      }
+      if (!m.livekitRoom) continue;
+      try {
+        await roomService.deleteRoom(m.livekitRoom);
+        closedRooms++;
+      } catch (e) {
+        // A room that LiveKit has already reaped throws here — that is the happy
+        // case, not an error worth shouting about.
+        const msg = (e as Error).message || '';
+        if (!/not found|does not exist/i.test(msg)) {
+          console.error('[cleanup] deleteRoom failed', m.livekitRoom, msg);
+        }
+      }
+    }
   }
 
   // 2. Recordings stuck in "processing".
@@ -71,7 +105,12 @@ async function getHandler(req: NextRequest) {
       AND COALESCE("lastSeenAt", "startedAt") < ${new Date(now - RDP_SESSION_STALE_MS)}
   `;
 
-  return NextResponse.json({ endedMeetings, failedRecordings: failedRecordings.count, endedSessions });
+  return NextResponse.json({
+    endedMeetings,
+    closedRooms,
+    failedRecordings: failedRecordings.count,
+    endedSessions,
+  });
 }
 
 export const GET = withRoute('cron.cleanup', getHandler);
