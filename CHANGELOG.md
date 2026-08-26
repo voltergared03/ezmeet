@@ -4,6 +4,34 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.6] — 2026-08-26
+
+### Added
+- **A light theme.** Garely now comes in light as well as dark, with the switch in
+  Settings → Profile: System, Light or Dark. "System" follows whatever your computer is
+  set to, so it turns dark by itself in the evening if your machine does. The choice is
+  remembered per device — the office monitor and the laptop on the sofa can disagree —
+  and the page opens straight into your theme with no white flash on the way. Dark stays
+  the default for everyone who does not choose otherwise.
+
+### Fixed
+- **Deleting someone did not stop their email.** A person removed from Garely kept
+  receiving meeting invitations, reminders and full meeting reports, with no account left
+  for an admin to remove a second time. Their address survived on the calendar events they
+  had been invited to, and the calendar sync kept reading it back in as an outside guest.
+  Deleting an account now stops its mail for good, and clears the person out of the
+  meetings they were invited to. Re-adding somebody with the same address works as before.
+  A blocked account no longer receives mail either — until now it was cut off from signing
+  in but still sent invitations with a join link.
+- **The app can be used from the keyboard.** There was no visible focus indicator
+  anywhere, so tabbing through a page left you guessing where you were, and the dropdowns
+  ignored the arrow keys entirely — which meant settings pages could not be filled in
+  without a mouse. Dropdowns now respond to arrows, Home/End, Enter and Escape, and every
+  control shows where the focus is.
+- **Faint text in the dark theme.** Secondary labels sat below the accepted contrast
+  minimum, one of them at roughly half of it, which made them hard to read on a laptop
+  screen in daylight. Both are now brighter.
+
 ## [1.25.0-beta.5] — 2026-08-13
 
 ### Fixed
