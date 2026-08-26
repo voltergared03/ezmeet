@@ -26,8 +26,9 @@ async function patchHandler(
   }
 
   const { id } = await params;
+  const t = await getTranslations();
   const body = await req.json();
-  const { role, spokenLanguage, spokenLanguageLocked, name, clickupListId } = body;
+  const { role, status, spokenLanguage, spokenLanguageLocked, name, clickupListId } = body;
 
   const data: any = {};
 
@@ -36,6 +37,38 @@ async function patchHandler(
     const n = String(name).trim().slice(0, 120);
     if (!n) return NextResponse.json({ error: 'Name required' }, { status: 400 });
     data.name = n;
+  }
+
+  // Block / unblock. Until now `status` was readable everywhere — the login check, the
+  // app layout, requireAuth's 403, the mail paths — but NOTHING could set it, so the
+  // whole disabled state was unreachable and the only way to cut somebody's access was
+  // to delete them. Deletion suppresses their address and strips them out of meetings,
+  // which is right for someone who left and wrong for someone on leave or on notice.
+  if (status !== undefined) {
+    if (status !== 'active' && status !== 'disabled') {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
+    if (status === 'disabled') {
+      if (currentUser.id === id) {
+        return NextResponse.json({ error: t('errors.cannotDisableSelf') }, { status: 400 });
+      }
+      // Losing the last ACTIVE admin locks everyone out of administration, and the
+      // way back would be direct SQL.
+      const activeAdmins = await prisma.user.count({ where: { role: 'admin', status: 'active', NOT: { id } } });
+      if (activeAdmins === 0) {
+        const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+        if (target?.role === 'admin') {
+          return NextResponse.json({ error: t('errors.cannotDisableLastAdmin') }, { status: 400 });
+        }
+      }
+      // THE important part. Rather than teaching 70 route handlers to re-check the
+      // status on every request, revoke the sessions: the JWT callback compares the
+      // token's frozen epoch against this column and returns null on a mismatch, so
+      // every existing cookie is cleared on its next request and the account is simply
+      // signed out everywhere. One write closes the whole surface.
+      data.sessionEpoch = { increment: 1 };
+    }
+    data.status = status;
   }
 
   if (role !== undefined) {
@@ -87,7 +120,7 @@ async function patchHandler(
   const updated = await prisma.user.update({
     where: { id },
     data,
-    select: { id: true, name: true, email: true, role: true, preferences: true },
+    select: { id: true, name: true, email: true, role: true, status: true, preferences: true },
   });
 
   return NextResponse.json({
@@ -95,6 +128,7 @@ async function patchHandler(
     name: updated.name,
     email: updated.email,
     role: updated.role,
+    status: updated.status,
     spokenLanguage: (updated.preferences as any)?.spokenLanguage ?? null,
     spokenLanguageLocked: !!(updated.preferences as any)?.spokenLanguageLocked,
   });

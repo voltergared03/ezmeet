@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Languages, Check, Search, Plus, Mail, Key, Loader2, Trash2, X, Copy, Pencil,
+  Languages, Check, Search, Plus, Mail, Key, Loader2, Trash2, X, Copy, Pencil, Lock, LockOpen,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { Select } from '@/components/ui/select';
@@ -16,7 +16,7 @@ import { getUserStatus } from '../lib/user-status';
 
 interface UserRecord {
   id: string; name: string; email: string; image?: string | null;
-  role: 'admin' | 'member' | 'viewer'; lastLogin?: string | null; createdAt?: string;
+  role: 'admin' | 'member' | 'viewer'; status?: string; lastLogin?: string | null; createdAt?: string;
   hasPassword?: boolean;
   spokenLanguage?: string | null;
   spokenLanguageLocked?: boolean;
@@ -61,6 +61,34 @@ export function UsersTab() {
     }
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [blockingId, setBlockingId] = useState<string | null>(null);
+
+  // Blocking is the gentler neighbour of deleting: access stops, everything the person
+  // is part of stays. Deleting suppresses their address and strips them out of the
+  // meetings they were invited to — right for somebody who left, wrong for somebody on
+  // leave or on notice, which until now was the only tool available.
+  const setBlocked = async (u: UserRecord, blocked: boolean) => {
+    const next = blocked ? 'disabled' : 'active';
+    setBlockingId(u.id);
+    const prev = u.status;
+    setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, status: next } : x)));
+    try {
+      const res = await fetch(`/api/users/${u.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, status: prev } : x)));
+        showSaveError(err.error || t('settings.error'));
+      }
+    } catch {
+      setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, status: prev } : x)));
+      showSaveError(t('settings.networkError'));
+    } finally {
+      setBlockingId(null);
+    }
+  };
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
@@ -260,7 +288,12 @@ export function UsersTab() {
           const isMe = session?.user?.email === u.email;
           const st = getUserStatus(u.lastLogin);
           return (
-            <div key={u.id} className={`admin-table-row user-row${clickupOn ? ' has-clickup' : ''}`} style={{ display: 'grid', padding: '14px 16px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: 13 }}>
+            <div key={u.id} className={`admin-table-row user-row${clickupOn ? ' has-clickup' : ''}`} style={{
+              display: 'grid', padding: '14px 16px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: 13,
+              // A blocked account has to read as blocked at a glance, not only through
+              // the icon on one button at the far right of the row.
+              ...(u.status === 'disabled' ? { opacity: 0.62, background: 'var(--surface-2)' } : {}),
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                 <span style={{ position: 'relative', flexShrink: 0, display: 'inline-flex' }}>
                   <Avatar name={u.name} image={u.image} size="md" />
@@ -290,6 +323,11 @@ export function UsersTab() {
                   ) : (
                     <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
+                {u.status === 'disabled' && (
+                  <span className="chip" style={{ background: 'var(--warn-bg)', color: 'var(--warn-fg)', marginInlineStart: 6, fontSize: 10.5 }}>
+                    {t('settings.blocked')}
+                  </span>
+                )}
                       {isMe && <span className="chip">{t('settings.itsYou')}</span>}
                       <button
                         className="btn btn-ghost btn-icon"
@@ -419,6 +457,24 @@ export function UsersTab() {
                     style={{ width: 30, height: 30 }}
                   >
                     <Key size={14} />
+                  </button>
+                )}
+                {!isMe && (
+                  <button
+                    className="btn btn-ghost btn-icon"
+                    title={u.status === 'disabled' ? t('settings.unblockUser') : t('settings.blockUser')}
+                    disabled={blockingId === u.id}
+                    onClick={() => {
+                      // Unblocking needs no warning; blocking signs them out everywhere
+                      // on their next request, which is worth saying out loud first.
+                      if (u.status !== 'disabled' && !window.confirm(t('settings.blockUserConfirm', { name: u.name }))) return;
+                      setBlocked(u, u.status !== 'disabled');
+                    }}
+                    style={{ width: 30, height: 30, color: u.status === 'disabled' ? 'var(--warn)' : 'var(--muted)' }}
+                  >
+                    {blockingId === u.id
+                      ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                      : u.status === 'disabled' ? <LockOpen size={14} /> : <Lock size={14} />}
                   </button>
                 )}
                 {!isMe && (

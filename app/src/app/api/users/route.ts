@@ -24,6 +24,9 @@ export async function GET(req: NextRequest) {
       email: true,
       image: true,
       role: true,
+      // Needed by the list to mark a blocked account and offer to unblock it — without
+      // it the UI cannot tell the two states apart.
+      status: true,
       lastLogin: true,
       createdAt: true,
       passwordHash: true,

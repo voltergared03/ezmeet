@@ -1245,7 +1245,11 @@
     "newPassword": "Новий пароль",
     "passwordMin8Hint": "Щонайменше {n} символів",
     "emailRequired": "Вкажіть адресу",
-    "emailInvalid": "Схоже на некоректну адресу"
+    "emailInvalid": "Схоже на некоректну адресу",
+    "blockUser": "Заблокувати доступ",
+    "unblockUser": "Розблокувати",
+    "blockUserConfirm": "Заблокувати {name}? Людина вийде з системи на всіх пристроях і не зможе увійти. Її мітинги, задачі та звіти лишаться на місці.",
+    "blocked": "заблоковано"
   },
   "setupChecklist": {
     "title": "Завершіть налаштування",
@@ -1464,7 +1468,9 @@
     "requestIdAndActionRequired": "Неповний запит",
     "invalidCurrentPassword": "Поточний пароль неправильний",
     "clickupDeleteForbidden": "Видалити таску, віддзеркалену в ClickUp, може лише адміністратор або її виконавець",
-    "clickupDeletePartial": "Видалено {done} з {total} копій у ClickUp — таску збережено, щоб нічого не загубилось. Спробуйте ще раз."
+    "clickupDeletePartial": "Видалено {done} з {total} копій у ClickUp — таску збережено, щоб нічого не загубилось. Спробуйте ще раз.",
+    "cannotDisableSelf": "Не можна заблокувати власний акаунт",
+    "cannotDisableLastAdmin": "Не можна заблокувати останнього активного адміна"
   },
   "chat": {
     "reportReady": "📋 {title} — звіт по мітингу готовий",

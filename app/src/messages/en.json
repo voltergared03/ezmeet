@@ -1245,7 +1245,11 @@
     "newPassword": "New password",
     "passwordMin8Hint": "At least {n} characters",
     "emailRequired": "Enter an address",
-    "emailInvalid": "That does not look like an address"
+    "emailInvalid": "That does not look like an address",
+    "blockUser": "Block access",
+    "unblockUser": "Unblock",
+    "blockUserConfirm": "Block {name}? They will be signed out on every device and unable to sign in. Their meetings, tasks and reports stay where they are.",
+    "blocked": "blocked"
   },
   "setupChecklist": {
     "title": "Finish setup",
@@ -1464,7 +1468,9 @@
     "requestIdAndActionRequired": "The request was incomplete",
     "invalidCurrentPassword": "Your current password is wrong",
     "clickupDeleteForbidden": "Only an admin or the task's assignee can delete a task that is mirrored in ClickUp",
-    "clickupDeletePartial": "Deleted {done} of {total} ClickUp copies — the task was kept so nothing is orphaned. Try again."
+    "clickupDeletePartial": "Deleted {done} of {total} ClickUp copies — the task was kept so nothing is orphaned. Try again.",
+    "cannotDisableSelf": "You cannot block your own account",
+    "cannotDisableLastAdmin": "You cannot block the last active admin"
   },
   "chat": {
     "reportReady": "📋 {title} — meeting report ready",
