@@ -10,6 +10,8 @@ import { Select } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
 import { FieldWrapper } from '../components/shared';
 import { useSaveErrorToast } from '@/components/save-toast';
+import { Field } from '@/components/ui/field';
+import { isValidEmail, passwordProblem } from '@/lib/form-rules';
 import { getUserStatus } from '../lib/user-status';
 
 interface UserRecord {
@@ -65,6 +67,8 @@ export function UsersTab() {
   const [invitePassword, setInvitePassword] = useState('');
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [inviteEmailErr, setInviteEmailErr] = useState<string | null>(null);
+  const [invitePwErr, setInvitePwErr] = useState<string | null>(null);
 
   // Admin password reset for an existing user.
   const [resetUser, setResetUser] = useState<UserRecord | null>(null);
@@ -93,10 +97,16 @@ export function UsersTab() {
   };
 
   const sendInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    setInviteEmailErr(null); setInvitePwErr(null);
+    // This used to `return` on an empty address — the button did nothing at all and
+    // said nothing about why, which reads as the form being broken.
+    if (!inviteEmail.trim()) { setInviteEmailErr(t('settings.emailRequired')); return; }
+    // Same check the API runs, from lib/form-rules, so the browser cannot promise an
+    // address the server will refuse (or refuse one it would have taken).
+    if (!isValidEmail(inviteEmail)) { setInviteEmailErr(t('settings.emailInvalid')); return; }
     const withPassword = invitePassword.trim().length > 0;
-    if (withPassword && invitePassword.length < 8) {
-      setInviteMsg({ ok: false, text: t('settings.passwordMin8') });
+    if (withPassword && passwordProblem(invitePassword)) {
+      setInvitePwErr(t('settings.passwordMin8'));
       return;
     }
     setInviting(true); setInviteMsg(null);
@@ -456,11 +466,13 @@ export function UsersTab() {
           <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: 420, maxWidth: '92vw', padding: '22px 24px' }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{t('settings.addUser')}</div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 18 }}>{t('settings.addUserDesc')}</div>
-            <FieldWrapper label={t('settings.colEmail')}>
-              <input className="field" type="email" value={inviteEmail} placeholder="user@example.com" autoFocus
-                onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') sendInvite(); }} />
-            </FieldWrapper>
+            <Field label={t('settings.colEmail')} error={inviteEmailErr} required>
+              {(f) => (
+                <input {...f} className="field" type="email" value={inviteEmail} placeholder="user@example.com" autoFocus
+                  onChange={(e) => { setInviteEmail(e.target.value); setInviteEmailErr(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendInvite(); }} />
+              )}
+            </Field>
             <div style={{ marginTop: 14 }}>
               <FieldWrapper label={t('settings.colRole')}>
                 <Select value={inviteRole} onChange={setInviteRole} options={[
@@ -471,19 +483,22 @@ export function UsersTab() {
               </FieldWrapper>
             </div>
             <div style={{ marginTop: 14 }}>
-              <FieldWrapper label={t('settings.tempPasswordOptional')}>
-                <input className="field" type="text" value={invitePassword} placeholder={t('settings.tempPasswordPlaceholder')}
-                  onChange={(e) => setInvitePassword(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') sendInvite(); }} />
-              </FieldWrapper>
-              <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6, lineHeight: 1.45 }}>
-                {t('settings.tempPasswordHint')}
-              </div>
+              <Field
+                label={t('settings.tempPasswordOptional')}
+                hint={t('settings.tempPasswordHint')}
+                error={invitePwErr}
+              >
+                {(f) => (
+                  <input {...f} className="field" type="text" value={invitePassword} placeholder={t('settings.tempPasswordPlaceholder')}
+                    onChange={(e) => { setInvitePassword(e.target.value); setInvitePwErr(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') sendInvite(); }} />
+                )}
+              </Field>
             </div>
-            {inviteMsg && <div style={{ marginTop: 12, fontSize: 12.5, color: inviteMsg.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{inviteMsg.text}</div>}
+            {inviteMsg && <div style={{ marginTop: 12, fontSize: 12.5, color: inviteMsg.ok ? 'var(--success-fg)' : 'var(--danger-fg)' }}>{inviteMsg.text}</div>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button className="btn btn-sm" onClick={() => setInviteOpen(false)}>{t('common.cancel')}</button>
-              <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}>
+              <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={inviting}>
                 {inviting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={13} />} {t('settings.send')}
               </button>
             </div>

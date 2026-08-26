@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
+import { isValidEmail } from '@/lib/form-rules';
 import { verifySetupToken, markSetupComplete, provisionFirstOrg } from '@/lib/setup';
 import { hashPassword, passwordPolicyError } from '@/lib/password';
 import { readConfig, CONFIG_DEFAULTS } from '@/lib/config';
@@ -18,7 +19,7 @@ async function postHandler(req: NextRequest) {
   }
 
   const e = String(email || '').trim().toLowerCase();
-  if (!e || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) {
+  if (!e || !isValidEmail(e)) {
     return NextResponse.json({ error: t('invalidEmail') }, { status: 400 });
   }
   const pwErr = passwordPolicyError(password);

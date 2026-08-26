@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
+import { isValidEmail } from '@/lib/form-rules';
 import { hashPassword, passwordPolicyError } from '@/lib/password';
 import { getAuthConfig, emailAllowedForSelfReg, publicBaseUrl } from '@/lib/config';
 import { sendEmail } from '@/lib/email';
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
   const name = String(body.name || '').trim().slice(0, 120) || null;
   const password = String(body.password || '');
 
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: t('invalidEmail') }, { status: 400 });
   }
   if (!emailAllowedForSelfReg(email, authCfg.selfRegDomains)) {

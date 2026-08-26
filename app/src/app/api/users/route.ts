@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { unsuppressEmail } from '@/lib/suppression';
+import { isValidEmail } from '@/lib/form-rules';
 import { hashPassword, passwordPolicyError } from "@/lib/password";
 import { sendEmail } from "@/lib/email";
 import { readConfig, CONFIG_DEFAULTS, publicBaseUrl } from "@/lib/config";
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   const role = body.role === "admin" ? "admin" : "member";
   const password = String(body.password || "");
 
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: errT("invalidEmail") }, { status: 400 });
   }
   const pwErr = passwordPolicyError(password);

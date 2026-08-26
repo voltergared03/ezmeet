@@ -1230,7 +1230,11 @@
     "themeSystem": "Системна",
     "themeLight": "Світла",
     "themeDark": "Темна",
-    "themeHint": "Зберігається на цьому пристрої"
+    "themeHint": "Зберігається на цьому пристрої",
+    "newPassword": "Новий пароль",
+    "passwordMin8Hint": "Щонайменше {n} символів",
+    "emailRequired": "Вкажіть адресу",
+    "emailInvalid": "Схоже на некоректну адресу"
   },
   "setupChecklist": {
     "title": "Завершіть налаштування",

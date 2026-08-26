@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { isValidEmail } from '@/lib/form-rules';
 import { prisma } from '@/lib/prisma';
 import { unsuppressEmail } from '@/lib/suppression';
 import { sendEmail } from '@/lib/email';
@@ -26,7 +27,7 @@ async function postHandler(req: NextRequest) {
   const email = String(body.email || '').trim().toLowerCase();
   const role = ['admin', 'member', 'viewer'].includes(body.role) ? body.role : 'member';
 
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: t('emails.invite.errors.invalidEmail') }, { status: 400 });
   }
 

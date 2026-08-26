@@ -1230,7 +1230,11 @@
     "themeSystem": "System",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeHint": "Saved on this device"
+    "themeHint": "Saved on this device",
+    "newPassword": "New password",
+    "passwordMin8Hint": "At least {n} characters",
+    "emailRequired": "Enter an address",
+    "emailInvalid": "That does not look like an address"
   },
   "setupChecklist": {
     "title": "Finish setup",
