@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { PRODUCT_NAME } from '@/lib/config';
 import { PwaRegister } from '@/components/pwa-register';
+import { THEME_INIT_SCRIPT } from '@/lib/theme';
 import './globals.css';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -32,7 +33,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0b0d11',
+  // Per-scheme, so the browser chrome and the iOS status bar match the page instead
+  // of staying dark behind a light UI. Values track --bg in globals.css.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f5f8' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0d11' },
+  ],
 };
 
 export default async function RootLayout({
@@ -44,7 +50,14 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
+    // suppressHydrationWarning: the inline script below stamps data-theme onto this
+    // element before React hydrates, so server and client markup differ here by design.
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        {/* Must run before first paint — see THEME_INIT_SCRIPT. Inlined rather than
+            imported so nothing is fetched between parse and paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <PwaRegister />
         <NextIntlClientProvider locale={locale} messages={messages}>

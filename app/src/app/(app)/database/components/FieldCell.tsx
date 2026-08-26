@@ -91,7 +91,7 @@ export function FieldCell({
               background: value ? 'var(--accent)' : 'transparent',
             }}
           >
-            {value ? <Check size={13} style={{ color: '#fff' }} /> : null}
+            {value ? <Check size={13} style={{ color: 'var(--on-accent)' }} /> : null}
           </span>
         </button>
       );
@@ -199,7 +199,7 @@ function RatingCell({ value, max, onCommit, readOnly = false }: { value: unknown
           aria-label={`${n}`}
           style={{
             border: 'none', background: 'transparent', cursor: readOnly ? 'default' : 'pointer', padding: 0, display: 'inline-flex',
-            color: n <= cur ? 'var(--amber, #f59e0b)' : 'var(--border-2, var(--border))',
+            color: n <= cur ? 'var(--amber, var(--warn))' : 'var(--border-2, var(--border))',
           }}
         >
           <Star size={15} fill={n <= cur ? 'currentColor' : 'none'} />
@@ -363,7 +363,7 @@ function ChoiceCell({
               position: 'fixed', left: pos.left, width: Math.max(pos.width, 180),
               ...(pos.openUp ? { bottom: window.innerHeight - pos.bottom + 4 } : { top: pos.top + 4 }),
               background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
-              boxShadow: '0 12px 40px rgba(0,0,0,.5)', zIndex: 2000, maxHeight: pos.maxH,
+              boxShadow: '0 12px 40px var(--overlay)', zIndex: 2000, maxHeight: pos.maxH,
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
             }}
           >

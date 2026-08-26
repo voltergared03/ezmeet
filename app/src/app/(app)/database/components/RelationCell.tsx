@@ -150,7 +150,7 @@ export function RelationCell({ value, field, onCommit, readOnly = false }: { val
               position: 'fixed', left: pos.left, width: Math.max(pos.width, 240),
               ...(pos.openUp ? { bottom: window.innerHeight - pos.bottom + 4 } : { top: pos.top + 4 }),
               background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
-              boxShadow: '0 12px 40px rgba(0,0,0,.5)', zIndex: 2000, maxHeight: pos.maxH, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              boxShadow: '0 12px 40px var(--overlay)', zIndex: 2000, maxHeight: pos.maxH, display: 'flex', flexDirection: 'column', overflow: 'hidden',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>

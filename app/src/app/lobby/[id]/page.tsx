@@ -169,7 +169,7 @@ export default function LobbyPage() {
                       position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)',
                       width: 320, maxWidth: 'calc(100vw - 24px)', padding: '14px 16px', zIndex: 100,
                       background: 'var(--surface)', border: '1px solid var(--border)',
-                      borderRadius: 14, boxShadow: '0 20px 50px rgba(0,0,0,.5)',
+                      borderRadius: 14, boxShadow: '0 20px 50px var(--overlay)',
                     }}>
                       <DeviceSelect label={t('lobby.microphone')} icon={<Mic size={14} />}
                         devices={devices.filter(d => d.kind === 'audioinput')}
@@ -222,7 +222,7 @@ export default function LobbyPage() {
                         <div key={idx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                           <span style={{
                             flexShrink: 0, width: 20, height: 20, borderRadius: 6,
-                            background: 'var(--accent-soft, rgba(59,130,246,.12))', color: 'var(--accent, #3b82f6)',
+                            background: 'var(--accent-soft, rgba(59,130,246,.12))', color: 'var(--accent, var(--accent))',
                             fontSize: 11, fontWeight: 700,
                             display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1,
                           }}>{idx + 1}</span>
@@ -468,7 +468,7 @@ function MediaPreview({ mic, cam, userName, userInitial, selectedMic, selectedCa
     <div style={{
       position: 'relative', aspectRatio: '16/9', borderRadius: 20, overflow: 'hidden',
       background: 'linear-gradient(135deg, #1d2735 0%, #0f1722 100%)',
-      border: '1px solid var(--border)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.6)',
+      border: '1px solid var(--border)', boxShadow: '0 30px 60px -20px var(--overlay)',
     }}>
       {/* Real camera video */}
       {cam && (
@@ -498,7 +498,7 @@ function MediaPreview({ mic, cam, userName, userInitial, selectedMic, selectedCa
             width: 80, height: 80, fontSize: 28,
             background: 'var(--accent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '50%', color: '#fff', fontWeight: 700,
+            borderRadius: '50%', color: 'var(--on-accent)', fontWeight: 700,
           }}>
             {userInitial}
           </div>
@@ -514,7 +514,7 @@ function MediaPreview({ mic, cam, userName, userInitial, selectedMic, selectedCa
         borderRadius: 10, backdropFilter: 'blur(10px)',
       }}>
         {mic ? (
-          <Mic size={14} style={{ color: '#fff', flexShrink: 0 }} />
+          <Mic size={14} style={{ color: 'var(--on-accent)', flexShrink: 0 }} />
         ) : (
           <MicOff size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
         )}
@@ -529,7 +529,7 @@ function MediaPreview({ mic, cam, userName, userInitial, selectedMic, selectedCa
             }}
           />
         </div>
-        <span style={{ fontSize: 11.5, color: '#fff', flexShrink: 0 }}>{userName}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--on-accent)', flexShrink: 0 }}>{userName}</span>
       </div>
     </div>
   );

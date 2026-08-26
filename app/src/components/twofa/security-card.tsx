@@ -74,7 +74,7 @@ export function TwoFactorSecurity({ enabled: initialEnabled }: { enabled: boolea
         <div
           onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) close(); }}
           style={{
-            position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.55)',
+            position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--overlay)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
             backdropFilter: 'blur(2px)',
           }}

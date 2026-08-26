@@ -36,7 +36,7 @@ export function RecordModal({ table, row, members, onCellChange, onClose, initia
           return (
             <div key={f.id}>
               <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {isPrimary ? <Star size={12} style={{ color: 'var(--amber, #f59e0b)' }} /> : <Icon size={12} style={{ opacity: 0.6 }} />}
+                {isPrimary ? <Star size={12} style={{ color: 'var(--amber, var(--warn))' }} /> : <Icon size={12} style={{ opacity: 0.6 }} />}
                 {f.name}
               </label>
               <div style={{ border: '1px solid var(--border)', borderRadius: 8, minHeight: 40, display: 'flex', alignItems: 'center', background: 'var(--bg)', overflow: 'hidden' }}>

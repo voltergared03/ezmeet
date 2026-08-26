@@ -20,7 +20,7 @@ export function RoomDeviceSelect({ label, icon, devices, value, onChange }: {
         value={value}
         onChange={onChange}
         placeholder={t('room.notFound')}
-        style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', color: '#fff', padding: '7px 9px', fontSize: 12.5 }}
+        style={{ background: 'var(--hover)', border: '1px solid rgba(255,255,255,.1)', color: 'var(--on-accent)', padding: '7px 9px', fontSize: 12.5 }}
         options={devices.map(d => ({ value: d.deviceId, label: d.label || t('room.deviceFallback', { id: d.deviceId.slice(0, 6) }) }))}
       />
     </div>

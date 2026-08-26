@@ -53,7 +53,7 @@ export function PopMenu({ trigger, width = 200, small, label, align = 'right', c
       </button>
       {open && pos && typeof document !== 'undefined' &&
         createPortal(
-          <div ref={panelRef} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'fixed', left: pos.left, ...(pos.openUp ? { bottom: window.innerHeight - pos.bottom + 4 } : { top: pos.top + 4 }), width, maxHeight: pos.maxH, overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 14px 44px rgba(0,0,0,.55)', padding: 6, zIndex: 2000 }}>
+          <div ref={panelRef} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'fixed', left: pos.left, ...(pos.openUp ? { bottom: window.innerHeight - pos.bottom + 4 } : { top: pos.top + 4 }), width, maxHeight: pos.maxH, overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 14px 44px var(--overlay)', padding: 6, zIndex: 2000 }}>
             {children(() => setOpen(false))}
           </div>,
           document.body,
@@ -67,7 +67,7 @@ export function MenuRow({ icon, label, onClick, danger, disabled }: { icon?: Rea
     <button
       onClick={onClick}
       disabled={disabled}
-      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: disabled ? 'var(--muted)' : danger ? 'var(--red, #ef4444)' : 'var(--text)', cursor: disabled ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', opacity: disabled ? 0.6 : 1 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: disabled ? 'var(--muted)' : danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: disabled ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', opacity: disabled ? 0.6 : 1 }}
       onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = 'var(--surface-2)'; }}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >

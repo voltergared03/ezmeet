@@ -182,7 +182,7 @@ export function SetPasswordClient({ token }: { token: string }) {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                 />
-                {err && <div style={{ fontSize: 12.5, color: 'var(--red, #ef4444)', marginTop: 10 }}>{err}</div>}
+                {err && <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>}
                 <button
                   type="submit"
                   className="btn btn-primary"

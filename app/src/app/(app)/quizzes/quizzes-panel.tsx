@@ -238,7 +238,7 @@ export function QuizzesPanel() {
                       let color = 'var(--text-2)';
                       let icon = null as React.ReactNode;
                       if (isCorrect) { color = 'var(--green)'; icon = <Check size={13} />; }
-                      else if (picked) { color = '#f87171'; icon = <X size={13} />; }
+                      else if (picked) { color = 'var(--danger-fg)'; icon = <X size={13} />; }
                       return (
                         <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color }}>
                           <span style={{ width: 16, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>{icon}</span>

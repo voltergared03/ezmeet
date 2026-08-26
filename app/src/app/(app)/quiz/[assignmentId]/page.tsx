@@ -169,7 +169,7 @@ export default function QuizTakerPage() {
                   let bg = 'transparent';
                   if (showFeedback) {
                     if (isCorrect) { border = 'var(--green)'; bg = 'color-mix(in oklab, var(--green) 12%, transparent)'; }
-                    else if (picked && !isCorrect) { border = '#f87171'; bg = 'color-mix(in oklab, #f87171 12%, transparent)'; }
+                    else if (picked && !isCorrect) { border = 'var(--danger-fg)'; bg = 'color-mix(in oklab, var(--danger-fg) 12%, transparent)'; }
                   } else if (picked) {
                     border = 'var(--accent)'; bg = 'color-mix(in oklab, var(--accent) 12%, transparent)';
                   }
@@ -188,7 +188,7 @@ export default function QuizTakerPage() {
                         width: 20, height: 20, flexShrink: 0, borderRadius: q.type === 'single' ? '50%' : 6,
                         border: `1.5px solid ${picked || (showFeedback && isCorrect) ? 'currentColor' : 'var(--border)'}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: showFeedback ? (isCorrect ? 'var(--green)' : picked ? '#f87171' : 'var(--muted)') : 'var(--accent)',
+                        color: showFeedback ? (isCorrect ? 'var(--green)' : picked ? 'var(--danger-fg)' : 'var(--muted)') : 'var(--accent)',
                       }}>
                         {showFeedback ? (isCorrect ? <Check size={13} /> : picked ? <X size={13} /> : null) : picked ? <Check size={13} /> : null}
                       </span>

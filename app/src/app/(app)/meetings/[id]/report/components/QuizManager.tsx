@@ -350,7 +350,7 @@ export function QuizManager({
                         style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }}
                       />
                       <button onClick={() => deleteQuestion(qi)} title={tr('common.delete')} aria-label={tr('common.delete')}
-                        style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: 6, flexShrink: 0 }}>
+                        style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', padding: 6, flexShrink: 0 }}>
                         <Trash2 size={15} />
                       </button>
                     </div>
@@ -385,7 +385,7 @@ export function QuizManager({
                                 background: correct ? 'var(--green)' : 'transparent',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                               }}>
-                              {correct && <Check size={12} style={{ color: '#fff' }} />}
+                              {correct && <Check size={12} style={{ color: 'var(--on-accent)' }} />}
                             </button>
                             <input value={o.text} onChange={(e) => setOptText(qi, oi, e.target.value)} placeholder={tr('quiz.optionPlaceholder')} style={inputStyle} />
                             {q.options.length > 2 && (
@@ -416,12 +416,12 @@ export function QuizManager({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
               {quiz || questions.length > 0 ? (
                 <button onClick={deleteQuiz} disabled={assigning}
-                  style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 5, padding: 0 }}>
+                  style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 5, padding: 0 }}>
                   <Trash2 size={13} /> {tr('quiz.delete')}
                 </button>
               ) : <span />}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 12.5, color: msg ? (msg.ok ? 'var(--green)' : '#f87171') : 'var(--muted)' }}>
+                <span style={{ fontSize: 12.5, color: msg ? (msg.ok ? 'var(--green)' : 'var(--danger-fg)') : 'var(--muted)' }}>
                   {msg ? msg.text : tr('quiz.selectedCount', { count: selected.size })}
                 </span>
                 <button className="btn btn-primary" onClick={saveAndAssign} disabled={assigning || questions.length === 0 || selected.size === 0}>

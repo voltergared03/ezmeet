@@ -404,7 +404,7 @@ function BulkBar({ count, label, onDuplicate, onDelete, onClear, duplicateLabel,
 }) {
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 2500, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px 8px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,.5)' }}>
+    <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 2500, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px 8px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 16px 48px var(--overlay)' }}>
       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginRight: 4 }}>{label}</span>
       {onDuplicate && (
         <button onClick={onDuplicate} className="btn btn-ghost" style={{ gap: 6, fontWeight: 600 }}>
@@ -412,7 +412,7 @@ function BulkBar({ count, label, onDuplicate, onDelete, onClear, duplicateLabel,
         </button>
       )}
       {onDelete && (
-        <button onClick={onDelete} className="btn btn-ghost" style={{ gap: 6, fontWeight: 600, color: 'var(--red, #ef4444)' }}>
+        <button onClick={onDelete} className="btn btn-ghost" style={{ gap: 6, fontWeight: 600, color: 'var(--red, var(--danger))' }}>
           <Trash2 size={15} /> {deleteLabel}
         </button>
       )}
@@ -514,7 +514,7 @@ function FieldHeaderCell({
         title={draggable ? t('dragColumn') : undefined}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden', flex: 1, minWidth: 0, cursor: draggable ? 'grab' : 'default', opacity: dragging ? 0.4 : 1 }}
       >
-        {isPrimary ? <Star size={13} style={{ color: 'var(--amber, #f59e0b)', flexShrink: 0 }} /> : <Icon size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
+        {isPrimary ? <Star size={13} style={{ color: 'var(--amber, var(--warn))', flexShrink: 0 }} /> : <Icon size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{field.name}</span>
       </span>
       {!readOnly && (
@@ -536,7 +536,7 @@ function FieldHeaderCell({
         createPortal(
           <div
             onMouseDown={(e) => e.stopPropagation()}
-            style={{ position: 'fixed', left: Math.max(pos.left, 8), top: pos.top + 4, width: 188, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 12px 40px rgba(0,0,0,.5)', padding: 4, zIndex: 2000 }}
+            style={{ position: 'fixed', left: Math.max(pos.left, 8), top: pos.top + 4, width: 188, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 12px 40px var(--overlay)', padding: 4, zIndex: 2000 }}
           >
             <MenuItem icon={<Pencil size={14} />} label={t('editField')} onClick={() => { onEdit(); setMenu(false); }} />
             {!isPrimary && <MenuItem icon={<Star size={14} />} label={t('setPrimary')} onClick={() => { onSetPrimary(); setMenu(false); }} />}
@@ -566,7 +566,7 @@ function MenuItem({ icon, label, onClick, danger }: { icon: ReactNode; label: st
   return (
     <button
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 7, background: 'transparent', color: danger ? 'var(--red, #ef4444)' : 'var(--text)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 7, background: 'transparent', color: danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >

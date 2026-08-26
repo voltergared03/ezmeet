@@ -375,7 +375,7 @@ export function SetupWizard({ initial }: { initial: Initial }) {
           )}
 
           {err && (
-            <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--red, #ef4444)', background: 'color-mix(in oklab, var(--red, #ef4444) 10%, transparent)', padding: '9px 12px', borderRadius: 8 }}>
+            <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--red, var(--danger))', background: 'color-mix(in oklab, var(--red, var(--danger)) 10%, transparent)', padding: '9px 12px', borderRadius: 8 }}>
               {err}
             </div>
           )}

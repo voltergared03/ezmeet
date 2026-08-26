@@ -1224,7 +1224,12 @@
     "colClickup": "ClickUp",
     "glossary": "Словник",
     "glossaryHint": "Назви, які розпізнавання постійно псує — продукти, інструменти, внутрішні терміни. По одному на рядок. Беріть характерні багатослівні терміни; короткі імена можуть натягнутися на схоже за звучанням. До 100.",
-    "glossaryPlaceholder": "Knowledge Center\nStrategic Business Roadmap"
+    "glossaryPlaceholder": "Knowledge Center\nStrategic Business Roadmap",
+    "theme": "Тема",
+    "themeSystem": "Системна",
+    "themeLight": "Світла",
+    "themeDark": "Темна",
+    "themeHint": "Зберігається на цьому пристрої"
   },
   "setupChecklist": {
     "title": "Завершіть налаштування",

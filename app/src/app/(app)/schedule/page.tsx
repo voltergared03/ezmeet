@@ -526,7 +526,7 @@ function Field({ label, icon: Icon, error, children, style }: { label: string; i
 
 function Err({ msg }: { msg: string }) {
   return (
-    <div style={{ marginTop: 6, fontSize: 11.5, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: 5 }}>
+    <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--danger-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>
       <AlertCircle size={12} /> {msg}
     </div>
   );

@@ -116,14 +116,14 @@ export default function ServerSessionPage() {
 
   const statusPill = (() => {
     if (stage === 'live') {
-      if (livePhase === 'connected') return { label: t('connected'), color: '#10b981' };
-      if (livePhase === 'error') return { label: t('connectFailed'), color: '#f87171' };
+      if (livePhase === 'connected') return { label: t('connected'), color: 'var(--success)' };
+      if (livePhase === 'error') return { label: t('connectFailed'), color: 'var(--danger-fg)' };
       if (livePhase === 'closed') return { label: t('sessionEnded'), color: 'var(--muted)' };
       return { label: t('connecting'), color: 'var(--accent)' };
     }
     if (stage === 'connecting') return { label: t('connecting'), color: 'var(--accent)' };
-    if (stage === 'denied') return { label: t('accessDeniedTitle'), color: '#f87171' };
-    if (stage === 'error') return { label: t('sessionError'), color: '#f87171' };
+    if (stage === 'denied') return { label: t('accessDeniedTitle'), color: 'var(--danger-fg)' };
+    if (stage === 'error') return { label: t('sessionError'), color: 'var(--danger-fg)' };
     return { label: 'RDP', color: 'var(--accent)' };
   })();
 
@@ -200,8 +200,8 @@ export default function ServerSessionPage() {
 
               {stage === 'denied' && (
                 <div style={{ color: 'var(--muted)', maxWidth: 380 }}>
-                  <ShieldAlert size={36} style={{ color: '#f87171', marginBottom: 12 }} />
-                  <div style={{ fontSize: 17, fontWeight: 640, color: '#e7e9ee' }}>{t('accessDeniedTitle')}</div>
+                  <ShieldAlert size={36} style={{ color: 'var(--danger-fg)', marginBottom: 12 }} />
+                  <div style={{ fontSize: 17, fontWeight: 640, color: 'var(--text)' }}>{t('accessDeniedTitle')}</div>
                   <div style={{ fontSize: 14, marginTop: 8 }}>{t('accessDeniedBody')}</div>
                   <Link href="/servers" className="btn" style={{ marginTop: 18, textDecoration: 'none' }}>{t('back')}</Link>
                 </div>
@@ -218,7 +218,7 @@ export default function ServerSessionPage() {
                       <MonitorPlay size={26} />
                     </span>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 650, color: '#e7e9ee', letterSpacing: '-0.01em' }}>{t('readyTitle')}</div>
+                  <div style={{ fontSize: 18, fontWeight: 650, color: 'var(--text)', letterSpacing: '-0.01em' }}>{t('readyTitle')}</div>
                   <div style={{ fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>{t('readyBody')}</div>
                   {(() => {
                     const others = (server.activeSessions ?? []).filter((s) => !s.isSelf);
@@ -230,12 +230,12 @@ export default function ServerSessionPage() {
                       <div
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '8px 14px',
-                          borderRadius: 999, fontSize: 13, fontWeight: 600, color: '#f59e0b',
-                          background: 'color-mix(in oklab, #f59e0b 13%, transparent)',
-                          border: '1px solid color-mix(in oklab, #f59e0b 34%, transparent)',
+                          borderRadius: 999, fontSize: 13, fontWeight: 600, color: 'var(--warn)',
+                          background: 'color-mix(in oklab, var(--warn) 13%, transparent)',
+                          border: '1px solid color-mix(in oklab, var(--warn) 34%, transparent)',
                         }}
                       >
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} className="sess-pulse" />
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)' }} className="sess-pulse" />
                         {label}
                       </div>
                     );
@@ -259,7 +259,7 @@ export default function ServerSessionPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, justifyContent: 'center', marginBottom: 14, color: 'var(--accent)' }}>
                     <Lock size={22} />
                   </div>
-                  <div style={{ fontSize: 17, fontWeight: 640, color: '#e7e9ee', textAlign: 'center' }}>{t('passwordPromptTitle')}</div>
+                  <div style={{ fontSize: 17, fontWeight: 640, color: 'var(--text)', textAlign: 'center' }}>{t('passwordPromptTitle')}</div>
                   <div style={{ fontSize: 13.5, marginTop: 8, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
                     {t('passwordPromptBody', {
                       user: server.username
@@ -296,9 +296,9 @@ export default function ServerSessionPage() {
                       <Cpu size={26} />
                     </span>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 650, color: '#e7e9ee', letterSpacing: '-0.01em' }}>{t('gatewayPendingTitle')}</div>
+                  <div style={{ fontSize: 18, fontWeight: 650, color: 'var(--text)', letterSpacing: '-0.01em' }}>{t('gatewayPendingTitle')}</div>
                   <div style={{ fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>{t('gatewayPendingBody')}</div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18, fontSize: 12, color: 'rgba(231,233,238,.85)', padding: '7px 13px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.03)', fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18, fontSize: 12, color: 'rgba(231,233,238,.85)', padding: '7px 13px', borderRadius: 999, border: '1px solid var(--hover-2)', background: 'rgba(255,255,255,.03)', fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)' }} className="sess-pulse" />
                     IronRDP · Devolutions Gateway
                   </div>

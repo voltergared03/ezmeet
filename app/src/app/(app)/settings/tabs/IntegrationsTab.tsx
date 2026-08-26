@@ -592,7 +592,7 @@ export function IntegrationsTab() {
       </span>
     );
     if (status === 'error') return (
-      <span className="chip" style={{ background: 'color-mix(in oklab, var(--red) 14%, transparent)', color: '#fca5a5', borderColor: 'color-mix(in oklab, var(--red) 30%, transparent)' }}>
+      <span className="chip" style={{ background: 'color-mix(in oklab, var(--red) 14%, transparent)', color: 'var(--danger-fg)', borderColor: 'color-mix(in oklab, var(--red) 30%, transparent)' }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} /> {t('settings.statusError')}
       </span>
     );
@@ -754,7 +754,7 @@ export function IntegrationsTab() {
           {s3Testing ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
         </button>
         {s3Saved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
-        {s3Test && <span style={{ fontSize: 12.5, color: s3Test.ok ? 'var(--green)' : '#f87171' }}>{s3Test.msg}</span>}
+        {s3Test && <span style={{ fontSize: 12.5, color: s3Test.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{s3Test.msg}</span>}
       </div>
     </div>
   );
@@ -804,7 +804,7 @@ export function IntegrationsTab() {
         </div>
       )}
       {clickup.migration?.state && (
-        <div style={{ fontSize: 12, color: clickup.migration.state === 'error' ? '#f87171' : 'var(--muted)' }}>
+        <div style={{ fontSize: 12, color: clickup.migration.state === 'error' ? 'var(--danger-fg)' : 'var(--muted)' }}>
           {clickup.migration.state === 'running'
             ? t('settings.clickupMigrating', { done: clickup.migration.migrated ?? 0, total: clickup.migration.total ?? 0 })
             : clickup.migration.state === 'done'
@@ -820,7 +820,7 @@ export function IntegrationsTab() {
           {clickupTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
         </button>
         {clickupSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
-        {clickupTest && <span style={{ fontSize: 12.5, color: clickupTest.ok ? 'var(--green)' : '#f87171' }}>{clickupTest.msg}</span>}
+        {clickupTest && <span style={{ fontSize: 12.5, color: clickupTest.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{clickupTest.msg}</span>}
       </div>
     </div>
   );
@@ -840,7 +840,7 @@ export function IntegrationsTab() {
       </FieldWrapper>
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.linearHint')}</div>
       {linear.migration?.state && (
-        <div style={{ fontSize: 12, color: linear.migration.state === 'error' ? '#f87171' : 'var(--muted)' }}>
+        <div style={{ fontSize: 12, color: linear.migration.state === 'error' ? 'var(--danger-fg)' : 'var(--muted)' }}>
           {linear.migration.state === 'running'
             ? t('settings.clickupMigrating', { done: linear.migration.migrated ?? 0, total: linear.migration.total ?? 0 })
             : linear.migration.state === 'done'
@@ -856,7 +856,7 @@ export function IntegrationsTab() {
           {linearTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
         </button>
         {linearSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
-        {linearTest && <span style={{ fontSize: 12.5, color: linearTest.ok ? 'var(--green)' : '#f87171' }}>{linearTest.msg}</span>}
+        {linearTest && <span style={{ fontSize: 12.5, color: linearTest.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{linearTest.msg}</span>}
       </div>
     </div>
   );
@@ -900,7 +900,7 @@ export function IntegrationsTab() {
             {chatTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <MessageSquare size={13} />} {t('settings.sendTest')}
           </button>
           {chatSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
-          {chatTestRes && <span style={{ fontSize: 12.5, color: chatTestRes.ok ? 'var(--green)' : '#f87171' }}>{chatTestRes.msg}</span>}
+          {chatTestRes && <span style={{ fontSize: 12.5, color: chatTestRes.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{chatTestRes.msg}</span>}
         </div>
       </div>
     );
@@ -952,7 +952,7 @@ export function IntegrationsTab() {
           </div>
           {aiModels.length > 0 && !aiCustom && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{t('settings.aiModelsLoaded', { count: aiModels.length })}</div>}
           {aiModels.length > 0 && aiCustom && <button className="btn btn-ghost" style={{ fontSize: 11, padding: '1px 0', marginTop: 4 }} onClick={() => setAiCustom(false)}>{t('settings.aiModelFromList')}</button>}
-          {aiModelsErr && <div style={{ fontSize: 11.5, color: '#f87171', marginTop: 4 }}>{aiModelsErr}</div>}
+          {aiModelsErr && <div style={{ fontSize: 11.5, color: 'var(--danger-fg)', marginTop: 4 }}>{aiModelsErr}</div>}
         </FieldWrapper>
         <FieldWrapper label={t('settings.aiMaxTokens')}>
           <input className="field" type="number" min={0} value={ai.maxTokens} placeholder={t('settings.aiMaxTokensAuto')}
@@ -973,7 +973,7 @@ export function IntegrationsTab() {
             {aiTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
           </button>
           {aiSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
-          {aiTestRes && <span style={{ fontSize: 12.5, color: aiTestRes.ok ? 'var(--green)' : '#f87171' }}>{aiTestRes.msg}</span>}
+          {aiTestRes && <span style={{ fontSize: 12.5, color: aiTestRes.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{aiTestRes.msg}</span>}
         </div>
       </div>
     );
@@ -1019,7 +1019,7 @@ export function IntegrationsTab() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <Toggle label={t('settings.webhookEnabled')} value={row.enabled} onChange={v => patchWebhook(row.key, { enabled: v })} />
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              {webhookTestRes && webhookTestRes.id === row.key && <span style={{ fontSize: 12, color: webhookTestRes.ok ? 'var(--green)' : '#f87171' }}>{webhookTestRes.msg}</span>}
+              {webhookTestRes && webhookTestRes.id === row.key && <span style={{ fontSize: 12, color: webhookTestRes.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{webhookTestRes.msg}</span>}
               <button className="btn btn-sm" onClick={() => testWebhook(row)} disabled={webhookTestingId === row.id || !row.url.trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {webhookTestingId === row.id ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Webhook size={13} />} {t('settings.sendTest')}
               </button>
@@ -1063,7 +1063,7 @@ export function IntegrationsTab() {
           {crmTesting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={13} />} {t('settings.testConnection')}
         </button>
         {crmSaved && <span style={{ fontSize: 12.5, color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> {t('common.saved')}</span>}
-        {crmTest && <span style={{ fontSize: 12.5, color: crmTest.ok ? 'var(--green)' : '#f87171' }}>{crmTest.msg}</span>}
+        {crmTest && <span style={{ fontSize: 12.5, color: crmTest.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{crmTest.msg}</span>}
       </div>
     </div>
   );

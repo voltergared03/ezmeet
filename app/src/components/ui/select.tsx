@@ -135,7 +135,7 @@ export function Select({
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 10,
-            boxShadow: '0 12px 40px rgba(0,0,0,.5)',
+            boxShadow: '0 12px 40px var(--overlay)',
             padding: 4,
             zIndex: 2000,
             maxHeight: 280,

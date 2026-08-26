@@ -29,11 +29,11 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  meeting_starting: '#3b82f6',
-  task_assigned: '#f59e0b',
-  report_ready: '#10b981',
-  action_item: '#a78bfa',
-  mention: '#ec4899',
+  meeting_starting: 'var(--accent)',
+  task_assigned: 'var(--warn)',
+  report_ready: 'var(--success)',
+  action_item: 'var(--purple)',
+  mention: 'var(--pink)',
 };
 
 function timeAgo(dateStr: string, t: ReturnType<typeof useTranslations>, locale: string): string {
@@ -167,7 +167,7 @@ export function NotificationBell({ placement = 'up' }: { placement?: 'up' | 'dow
           <span style={{
             position: 'absolute', top: 2, right: 2,
             minWidth: 16, height: 16, borderRadius: 99,
-            background: '#ef4444', color: '#fff',
+            background: 'var(--danger)', color: 'var(--on-accent)',
             fontSize: 9, fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '0 4px',
@@ -185,7 +185,7 @@ export function NotificationBell({ placement = 'up' }: { placement?: 'up' | 'dow
           ...(placement === 'down' ? { top: 'calc(100% + 8px)', right: 0 } : { bottom: 'calc(100% + 8px)', left: 0 }),
           width: 'min(360px, calc(100vw - 24px))', maxHeight: 480,
           background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.5)',
+          borderRadius: 16, boxShadow: '0 20px 60px var(--overlay)',
           display: 'flex', flexDirection: 'column',
           zIndex: 1000, overflow: 'hidden',
           animation: 'fadeIn .15s ease',
@@ -202,7 +202,7 @@ export function NotificationBell({ placement = 'up' }: { placement?: 'up' | 'dow
                 <span style={{
                   marginLeft: 8, fontSize: 11, fontWeight: 600,
                   padding: '2px 7px', borderRadius: 99,
-                  background: 'rgba(239,68,68,.15)', color: '#fca5a5',
+                  background: 'rgba(239,68,68,.15)', color: 'var(--danger-fg)',
                 }}>{unreadCount}</span>
               )}
             </span>
@@ -254,7 +254,7 @@ export function NotificationBell({ placement = 'up' }: { placement?: 'up' | 'dow
             )}
             {notifications.map(notif => {
               const Icon = TYPE_ICONS[notif.type] || Bell;
-              const color = TYPE_COLORS[notif.type] || '#3b82f6';
+              const color = TYPE_COLORS[notif.type] || 'var(--accent)';
 
               return (
                 <div
@@ -264,10 +264,10 @@ export function NotificationBell({ placement = 'up' }: { placement?: 'up' | 'dow
                     display: 'flex', gap: 12, padding: '12px 16px',
                     cursor: notif.link ? 'pointer' : 'default',
                     background: notif.read ? 'transparent' : 'rgba(59,130,246,.04)',
-                    borderBottom: '1px solid rgba(255,255,255,.04)',
+                    borderBottom: '1px solid var(--hover)',
                     transition: 'background .1s',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.04)')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = notif.read ? 'transparent' : 'rgba(59,130,246,.04)')}
                 >
                   {/* Icon */}
@@ -306,7 +306,7 @@ export function NotificationBell({ placement = 'up' }: { placement?: 'up' | 'dow
                   {!notif.read && (
                     <div style={{
                       width: 8, height: 8, borderRadius: '50%',
-                      background: '#3b82f6', flexShrink: 0, marginTop: 4,
+                      background: 'var(--accent)', flexShrink: 0, marginTop: 4,
                     }} />
                   )}
 

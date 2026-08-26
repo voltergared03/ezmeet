@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Globe, LogOut, Save, Check, Calendar as CalendarIcon, Link2, Unlink, AlertCircle } from 'lucide-react';
@@ -81,7 +82,7 @@ function GoogleCalendarCard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span className="chip" style={broken ? {
-              background: 'color-mix(in oklab, var(--red) 14%, transparent)', color: '#fca5a5',
+              background: 'color-mix(in oklab, var(--red) 14%, transparent)', color: 'var(--danger-fg)',
               borderColor: 'color-mix(in oklab, var(--red) 30%, transparent)',
             } : {
               background: 'color-mix(in oklab, var(--green) 14%, transparent)', color: '#a7f3d0',
@@ -251,6 +252,12 @@ export function ProfileTab({ session: sess, updateSession }: { session: any; upd
               { value: 'ru', label: 'Русский' },
             ]} />
           </FieldWrapper>
+        </div>
+        {/* Outside the grid: the switch is its own control, not a labelled field, and
+            it saves on click rather than waiting for the form's Save — theme is a
+            preview-as-you-pick setting, so making it wait would be the wrong model. */}
+        <div style={{ marginTop: 14 }}>
+          <ThemeToggle />
         </div>
       </div>
 

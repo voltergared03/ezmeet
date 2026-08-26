@@ -90,7 +90,7 @@ export function AgendaView({ meetings, tasks, today, onMeetingClick, onTaskClick
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <AvatarStack users={users} max={4} />
                         {m.status === 'live' && (
-                          <span className="chip" style={{ background: 'color-mix(in oklab, var(--red) 18%, transparent)', color: '#fca5a5', borderColor: 'color-mix(in oklab, var(--red) 35%, transparent)' }}>● {t('calendar.live')}</span>
+                          <span className="chip" style={{ background: 'color-mix(in oklab, var(--red) 18%, transparent)', color: 'var(--danger-fg)', borderColor: 'color-mix(in oklab, var(--red) 35%, transparent)' }}>● {t('calendar.live')}</span>
                         )}
                       </div>
                     </div>

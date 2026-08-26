@@ -100,7 +100,7 @@ export function TransferModal({
         )}
       </div>
       <p style={{ margin: '12px 2px 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{hint}</p>
-      {err && <div style={{ color: 'var(--red, #ef4444)', fontSize: 12.5, marginTop: 8 }}>{t('actionFailed')}</div>}
+      {err && <div style={{ color: 'var(--red, var(--danger))', fontSize: 12.5, marginTop: 8 }}>{t('actionFailed')}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
         <button className="btn btn-ghost" onClick={onClose}>{tc('cancel')}</button>
         <button className="btn btn-primary" onClick={confirm} disabled={!selected || busy} style={{ gap: 7 }}>

@@ -490,7 +490,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
             <span style={{ fontSize: 40 }}>{r.emoji}</span>
             <div style={{
               fontSize: 10, color: 'rgba(255,255,255,.7)',
-              background: 'rgba(0,0,0,.5)', padding: '2px 8px',
+              background: 'var(--overlay)', padding: '2px 8px',
               borderRadius: 6, marginTop: 2, whiteSpace: 'nowrap',
               backdropFilter: 'blur(4px)',
             }}>{r.sender}</div>
@@ -517,13 +517,13 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
               background: 'rgba(167,139,250,.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Zap size={16} style={{ color: '#a78bfa' }} />
+              <Zap size={16} style={{ color: 'var(--purple)' }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#a78bfa', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--purple)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 Action Item
               </div>
-              <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.4 }}>
+              <div style={{ fontSize: 13, color: 'var(--on-accent)', lineHeight: 1.4 }}>
                 {action.title}
               </div>
               {action.assignee && (
@@ -551,13 +551,13 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
           <div onClick={(e) => e.stopPropagation()} style={{
             width: '100%', maxWidth: 420, padding: '24px 22px',
             background: '#1e2028', border: '1px solid rgba(255,255,255,.1)',
-            borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.6)',
+            borderRadius: 16, boxShadow: '0 20px 60px var(--overlay)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{tr('room.inviteParticipants')}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-accent)' }}>{tr('room.inviteParticipants')}</div>
               <button onClick={() => setShowSharePopup(false)} style={{
                 width: 28, height: 28, borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.5)',
+                background: 'var(--hover)', color: 'rgba(255,255,255,.5)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}><X size={14} /></button>
             </div>
@@ -566,8 +566,8 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
             </div>
             <div style={{
               display: 'flex', gap: 8, alignItems: 'center',
-              padding: '10px 14px', background: 'rgba(255,255,255,.06)',
-              borderRadius: 12, border: '1px solid rgba(255,255,255,.08)', marginBottom: 12,
+              padding: '10px 14px', background: 'var(--hover)',
+              borderRadius: 12, border: '1px solid var(--hover)', marginBottom: 12,
             }}>
               <Link2 size={15} style={{ color: 'rgba(255,255,255,.4)', flexShrink: 0 }} />
               <div style={{
@@ -579,7 +579,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
             <button onClick={() => { copyShareLink(); }} style={{
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer',
-              background: linkCopied ? '#22c55e' : '#3b82f6', color: '#fff',
+              background: linkCopied ? '#22c55e' : 'var(--accent)', color: 'var(--on-accent)',
               fontSize: 14, fontWeight: 600, transition: 'background .15s',
             }}>
               {linkCopied ? <><Check size={15} /> {tr('room.linkCopied')}</> : <><Link2 size={15} /> {tr('room.copyLink')}</>}
@@ -592,18 +592,18 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
       <div className="room-top-bar" style={{
         flexShrink: 0, display: 'flex', alignItems: 'center',
         padding: '8px 16px', gap: 12,
-        background: '#1a1d23', borderBottom: '1px solid rgba(255,255,255,.06)',
+        background: '#1a1d23', borderBottom: '1px solid var(--hover)',
       }}>
         <Logo />
         {recording && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500,
-            background: 'rgba(239,68,68,.15)', color: '#fca5a5',
+            background: 'rgba(239,68,68,.15)', color: 'var(--danger-fg)',
             border: '1px solid rgba(239,68,68,.3)',
           }}>
             <span style={{
-              width: 7, height: 7, borderRadius: '50%', background: '#ef4444',
+              width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)',
               animation: 'pulseDot 1.6s ease-in-out infinite', display: 'inline-block',
             }} />
             REC
@@ -639,8 +639,8 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                   <div style={{
                     position: 'absolute', bottom: 10, left: 12,
                     padding: '4px 10px', borderRadius: 6,
-                    background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(8px)',
-                    fontSize: 12, color: '#fff',
+                    background: 'var(--overlay)', backdropFilter: 'blur(8px)',
+                    fontSize: 12, color: 'var(--on-accent)',
                   }}>
                     📺 {mainScreen?.participant?.name || tr('room.screenShare')}
                   </div>
@@ -674,7 +674,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
           <div className="room-controls" style={{
             flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
             gap: 8, padding: '10px 16px',
-            background: '#1a1d23', borderTop: '1px solid rgba(255,255,255,.06)',
+            background: '#1a1d23', borderTop: '1px solid var(--hover)',
           }}>
             <ControlBtn active={micOn} onClick={toggleMic} danger={!micOn}
               icon={micOn ? <Mic size={20} /> : <MicOff size={20} />} label={micOn ? tr('room.microphone') : tr('room.turnOn')} />
@@ -697,19 +697,19 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                   <div style={{
                     position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)',
                     padding: '8px 10px', zIndex: 100,
-                    background: '#1e2028', border: '1px solid rgba(255,255,255,.12)',
-                    borderRadius: 14, boxShadow: '0 20px 50px rgba(0,0,0,.6)',
+                    background: '#1e2028', border: '1px solid var(--hover-2)',
+                    borderRadius: 14, boxShadow: '0 20px 50px var(--overlay)',
                     display: 'flex', gap: 4,
                   }}>
                     {REACTIONS.map(emoji => (
                       <button key={emoji} onClick={() => sendReaction(emoji)} style={{
                         width: 40, height: 40, borderRadius: 10, border: 'none',
-                        background: 'rgba(255,255,255,.04)', cursor: 'pointer',
+                        background: 'var(--hover)', cursor: 'pointer',
                         fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'all .12s',
                       }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.12)'; e.currentTarget.style.transform = 'scale(1.2)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.04)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover-2)'; e.currentTarget.style.transform = 'scale(1.2)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.transform = 'scale(1)'; }}
                       >
                         {emoji}
                       </button>
@@ -730,8 +730,8 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                     position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)',
                     width: 264, maxWidth: 'calc(100vw - 24px)', maxHeight: '68vh', overflowY: 'auto',
                     padding: 8, zIndex: 100,
-                    background: '#1e2028', border: '1px solid rgba(255,255,255,.12)',
-                    borderRadius: 14, boxShadow: '0 20px 50px rgba(0,0,0,.6)',
+                    background: '#1e2028', border: '1px solid var(--hover-2)',
+                    borderRadius: 14, boxShadow: '0 20px 50px var(--overlay)',
                     display: 'flex', flexDirection: 'column', gap: 2,
                   }}>
                     {isMobile && (
@@ -744,7 +744,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                       <MoreItem icon={<UserPlus size={17} />}
                         label={tr('room.invite')} onClick={() => { setShowSharePopup(true); setShowMore(false); }} />
                     )}
-                    <div style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '6px 4px' }} />
+                    <div style={{ height: 1, background: 'var(--hover)', margin: '6px 4px' }} />
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.4)', padding: '2px 8px 6px' }}>{tr('room.devices')}</div>
                     <RoomDeviceSelect label={tr('room.microphone')} icon={<Mic size={13} />}
                       devices={devices.filter(d => d.kind === 'audioinput')}
@@ -773,7 +773,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
             <button className="room-leave-btn" onClick={leaveMeeting} title={tr('room.leave')} style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '10px 20px', borderRadius: 24, cursor: 'pointer',
-              background: '#ef4444', color: '#fff', border: 'none',
+              background: 'var(--danger)', color: 'var(--on-accent)', border: 'none',
               fontSize: 14, fontWeight: 600, transition: 'background .15s', flexShrink: 0,
             }}>
               <Phone size={18} style={{ transform: 'rotate(135deg)' }} />
@@ -786,11 +786,11 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
         {sidePanel && (
           <div className="room-side-panel" style={{
             width: 400, flexShrink: 0, display: 'flex', flexDirection: 'column',
-            background: '#1a1d23', borderLeft: '1px solid rgba(255,255,255,.08)',
+            background: '#1a1d23', borderLeft: '1px solid var(--hover)',
           }}>
             <div style={{
               display: 'flex', alignItems: 'stretch',
-              borderBottom: '1px solid rgba(255,255,255,.08)', flexShrink: 0,
+              borderBottom: '1px solid var(--hover)', flexShrink: 0,
             }}>
               <div style={{ display: 'flex', flex: 1, minWidth: 0, overflowX: 'hidden' }}>
                 {([
@@ -807,7 +807,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                       position: 'relative', flex: '1 1 0', minWidth: 0,
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
                       padding: '10px 6px', cursor: 'pointer', background: 'none', border: 'none',
-                      borderBottom: on ? '2px solid #3b82f6' : '2px solid transparent',
+                      borderBottom: on ? '2px solid var(--accent)' : '2px solid transparent',
                       color: on ? '#fff' : 'rgba(255,255,255,.5)', transition: 'color .15s',
                     }}>
                       {tab.icon}
@@ -816,7 +816,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                         <span style={{
                           position: 'absolute', top: 4, right: 6,
                           minWidth: 15, height: 15, padding: '0 3px', borderRadius: 8,
-                          background: '#3b82f6', color: '#fff', fontSize: 9, fontWeight: 700,
+                          background: 'var(--accent)', color: 'var(--on-accent)', fontSize: 9, fontWeight: 700,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>{tab.badge > 9 ? '9+' : tab.badge}</span>
                       )}
@@ -827,7 +827,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
               <button onClick={() => setSidePanel(null)} aria-label="Close" style={{
                 flexShrink: 0, background: 'none', border: 'none', color: 'rgba(255,255,255,.4)',
                 cursor: 'pointer', padding: '0 14px', display: 'flex', alignItems: 'center',
-                borderLeft: '1px solid rgba(255,255,255,.06)',
+                borderLeft: '1px solid var(--hover)',
               }}><X size={16} /></button>
             </div>
 
@@ -835,7 +835,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
             {sidePanel === 'agenda' && (
               <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 24px', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {meetingInfo?.title && (
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', lineHeight: 1.35, letterSpacing: '-0.01em' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-accent)', lineHeight: 1.35, letterSpacing: '-0.01em' }}>
                     {meetingInfo.title}
                   </div>
                 )}
@@ -888,15 +888,15 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                       padding: '10px 16px',
                       transition: 'background .1s',
                     }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.04)')}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       {/* Avatar */}
                       <div style={{
                         width: 36, height: 36, borderRadius: '50%',
-                        background: isGuestUser ? '#6366f1' : '#3b82f6',
+                        background: isGuestUser ? '#6366f1' : 'var(--accent)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0,
+                        fontSize: 15, fontWeight: 700, color: 'var(--on-accent)', flexShrink: 0,
                       }}>
                         {(p.name || identity || 'U')[0]?.toUpperCase()}
                       </div>
@@ -905,7 +905,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 6,
-                          fontSize: 13, fontWeight: 600, color: '#fff',
+                          fontSize: 13, fontWeight: 600, color: 'var(--on-accent)',
                         }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {p.name || identity}
@@ -928,12 +928,12 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                           {isMicEnabled ? (
                             <Mic size={11} style={{ color: 'rgba(255,255,255,.35)' }} />
                           ) : (
-                            <MicOff size={11} style={{ color: '#fca5a5' }} />
+                            <MicOff size={11} style={{ color: 'var(--danger-fg)' }} />
                           )}
                           {isCamEnabled ? (
                             <Video size={11} style={{ color: 'rgba(255,255,255,.35)' }} />
                           ) : (
-                            <VideoOff size={11} style={{ color: '#fca5a5' }} />
+                            <VideoOff size={11} style={{ color: 'var(--danger-fg)' }} />
                           )}
                         </div>
                       </div>
@@ -948,7 +948,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                             width: 32, height: 32, borderRadius: 8,
                             border: '1px solid rgba(239,68,68,.2)',
                             background: kickingId === identity ? 'rgba(239,68,68,.2)' : 'transparent',
-                            color: '#fca5a5', cursor: 'pointer',
+                            color: 'var(--danger-fg)', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             transition: 'all .15s', flexShrink: 0,
                             opacity: kickingId === identity ? 0.5 : 1,
@@ -974,7 +974,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                   <div style={{
                     margin: '16px 16px 0', padding: '10px 12px',
                     background: 'rgba(255,255,255,.03)',
-                    borderRadius: 10, border: '1px solid rgba(255,255,255,.06)',
+                    borderRadius: 10, border: '1px solid var(--hover)',
                     display: 'flex', alignItems: 'center', gap: 8,
                     fontSize: 11.5, color: 'rgba(255,255,255,.35)',
                   }}>
@@ -1001,7 +1001,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                   {chatMessages.map((m, i) => (
                     <div key={i}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#60a5fa' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-2)' }}>
                           {m.from?.name || m.from?.identity || tr('room.you')}
                         </span>
                         <span style={{ fontSize: 10, color: 'rgba(255,255,255,.25)' }}>
@@ -1014,7 +1014,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                 </div>
                 <div style={{
                   flexShrink: 0, padding: '10px 12px',
-                  borderTop: '1px solid rgba(255,255,255,.08)',
+                  borderTop: '1px solid var(--hover)',
                   display: 'flex', gap: 8,
                 }}>
                   <input value={chatInput} onChange={e => setChatInput(e.target.value)}
@@ -1022,13 +1022,13 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                     placeholder={tr('room.messagePlaceholder')}
                     style={{
                       flex: 1, padding: '8px 12px', borderRadius: 8,
-                      background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)',
-                      color: '#fff', fontSize: 13, outline: 'none',
+                      background: 'var(--hover)', border: '1px solid rgba(255,255,255,.1)',
+                      color: 'var(--on-accent)', fontSize: 13, outline: 'none',
                     }} />
                   <button onClick={handleSendChat} disabled={isSending || !chatInput.trim()} style={{
                     padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                    background: chatInput.trim() ? '#3b82f6' : 'rgba(255,255,255,.06)',
-                    color: '#fff', border: 'none', display: 'flex', alignItems: 'center',
+                    background: chatInput.trim() ? 'var(--accent)' : 'var(--hover)',
+                    color: 'var(--on-accent)', border: 'none', display: 'flex', alignItems: 'center',
                     opacity: chatInput.trim() ? 1 : 0.4,
                   }}><Send size={16} /></button>
                 </div>
@@ -1051,7 +1051,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                 {groupedTranscripts.map(e => (
                   <div key={e.id}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>{e.speaker}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{e.speaker}</span>
                       <span style={{ fontSize: 10, opacity: 0.5 }}>{langFlag[e.language] || '🌐'}</span>
                     </div>
                     <div style={{ fontSize: 13, color: 'rgba(255,255,255,.7)', lineHeight: 1.5 }}>{e.text}</div>
@@ -1059,7 +1059,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                 ))}
                 {Object.entries(interimRef.current).map(([speaker, text]) => (
                   <div key={`int-${speaker}`} style={{ opacity: 0.45 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 2 }}>{speaker} <span style={{ fontSize: 9, color: '#93c5fd' }}>...</span></div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{speaker} <span style={{ fontSize: 9, color: '#93c5fd' }}>...</span></div>
                     <div style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', fontStyle: 'italic', lineHeight: 1.5 }}>{text}</div>
                   </div>
                 ))}
@@ -1072,7 +1072,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                 <div style={{
                   flexShrink: 0, padding: '8px 14px',
                   display: 'flex', alignItems: 'center', gap: 6,
-                  borderBottom: '1px solid rgba(255,255,255,.06)',
+                  borderBottom: '1px solid var(--hover)',
                   fontSize: 11, color: 'rgba(255,255,255,.35)',
                 }}>
                   {notesSaving ? (
@@ -1115,7 +1115,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                     {liveAiNotes.summary && (
                       <div>
                         <div style={{
-                          fontSize: 10, fontWeight: 600, color: '#60a5fa',
+                          fontSize: 10, fontWeight: 600, color: 'var(--accent-2)',
                           textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
                           display: 'flex', alignItems: 'center', gap: 5,
                         }}>
@@ -1135,7 +1135,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                     {liveAiNotes.decisions.length > 0 && (
                       <div>
                         <div style={{
-                          fontSize: 10, fontWeight: 600, color: '#10b981',
+                          fontSize: 10, fontWeight: 600, color: 'var(--success)',
                           textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
                           display: 'flex', alignItems: 'center', gap: 5,
                         }}>
@@ -1158,7 +1158,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                     {liveAiNotes.actionItems.length > 0 && (
                       <div>
                         <div style={{
-                          fontSize: 10, fontWeight: 600, color: '#a78bfa',
+                          fontSize: 10, fontWeight: 600, color: 'var(--purple)',
                           textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
                           display: 'flex', alignItems: 'center', gap: 5,
                         }}>
@@ -1237,7 +1237,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            style={{ width: 'min(420px, 100%)', background: 'var(--card, #16181d)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, padding: '20px 22px', color: '#e8e8ea', boxShadow: '0 24px 70px -20px rgba(0,0,0,.75)' }}
+            style={{ width: 'min(420px, 100%)', background: 'var(--card, #16181d)', border: '1px solid var(--hover-2)', borderRadius: 14, padding: '20px 22px', color: '#e8e8ea', boxShadow: '0 24px 70px -20px rgba(0,0,0,.75)' }}
           >
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{tr('room.leaveTitle')}</div>
             <div style={{ fontSize: 13.5, lineHeight: 1.5, color: '#a9a9b4', marginBottom: 18 }}>{tr('room.leaveBody')}</div>
@@ -1352,12 +1352,12 @@ export default function MeetingRoomPage() {
 
   if (error) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#111317', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#111317', color: 'var(--on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', padding: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{t('room.error')}</div>
           <div style={{ color: '#999', marginBottom: 16, maxWidth: 360 }}>{error}</div>
           <button onClick={() => router.push('/')} style={{
-            padding: '10px 20px', borderRadius: 10, background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer',
+            padding: '10px 20px', borderRadius: 10, background: 'var(--accent)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer',
           }}>{t('room.goHome')}</button>
         </div>
       </div>
@@ -1366,11 +1366,11 @@ export default function MeetingRoomPage() {
 
   if (waiting && !token) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#111317', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#111317', color: 'var(--on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', padding: 24, maxWidth: 380 }}>
           <div style={{
             width: 40, height: 40, border: '3px solid rgba(255,255,255,.15)',
-            borderTop: '3px solid #3b82f6', borderRadius: '50%',
+            borderTop: '3px solid var(--accent)', borderRadius: '50%',
             animation: 'spin .8s linear infinite', margin: '0 auto 18px',
           }} />
           <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 8 }}>{t('room.waitingTitle')}</div>
@@ -1383,11 +1383,11 @@ export default function MeetingRoomPage() {
 
   if (!token || !wsUrl) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#111317', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#111317', color: 'var(--on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
             width: 32, height: 32, border: '3px solid rgba(255,255,255,.15)',
-            borderTop: '3px solid #3b82f6', borderRadius: '50%',
+            borderTop: '3px solid var(--accent)', borderRadius: '50%',
             animation: 'spin .8s linear infinite',
           }} />
           <span style={{ fontSize: 15, color: 'rgba(255,255,255,.6)' }}>{t('room.connecting')}</span>

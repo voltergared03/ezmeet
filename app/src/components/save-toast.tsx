@@ -32,7 +32,7 @@ export function useSaveErrorToast() {
       onClick={() => setMsg(null)}
       style={{
         position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 10000, background: 'var(--red)', color: '#fff', padding: '10px 16px',
+        zIndex: 10000, background: 'var(--red)', color: 'var(--on-accent)', padding: '10px 16px',
         borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,.28)', fontSize: 14,
         maxWidth: 'min(90vw, 440px)', cursor: 'pointer', textAlign: 'center',
       }}

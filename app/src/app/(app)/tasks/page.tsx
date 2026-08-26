@@ -1152,7 +1152,7 @@ function TaskCollab({ taskId, users, currentUserId, isAdmin, onChanged, onOpenTa
               <Plus size={13} /> {tr("tasks.addAssignee")}
             </button>
             {addAsgOpen && candidates.length > 0 && (
-              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "var(--card, #181a20)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 200, maxHeight: 240, overflowY: "auto", boxShadow: "0 12px 30px -8px rgba(0,0,0,.5)" }}>
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "var(--card, #181a20)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 200, maxHeight: 240, overflowY: "auto", boxShadow: "0 12px 30px -8px var(--overlay)" }}>
                 {candidates.map(u => (
                   <button key={u.id} onClick={() => addAssignee(u.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", width: "100%", background: "transparent", border: "none", cursor: "pointer", color: "inherit", borderRadius: 6, textAlign: "left" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--surface)")}
@@ -1183,7 +1183,7 @@ function TaskCollab({ taskId, users, currentUserId, isAdmin, onChanged, onOpenTa
               <Plus size={13} /> {tr("tasks.addCollaborator")}
             </button>
             {addOpen && candidates.length > 0 && (
-              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "var(--card, #181a20)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 200, maxHeight: 240, overflowY: "auto", boxShadow: "0 12px 30px -8px rgba(0,0,0,.5)" }}>
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "var(--card, #181a20)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 200, maxHeight: 240, overflowY: "auto", boxShadow: "0 12px 30px -8px var(--overlay)" }}>
                 {candidates.map(u => (
                   <button key={u.id} onClick={() => addCollaborator(u.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", width: "100%", background: "transparent", border: "none", cursor: "pointer", color: "inherit", borderRadius: 6, textAlign: "left" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--surface)")}
@@ -1506,7 +1506,7 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
       <div onClick={e => e.stopPropagation()} style={{
         background: "var(--card, #181a20)", borderLeft: "1px solid var(--border)", borderRadius: "16px 0 0 16px",
         width: "min(600px, 100vw)", maxWidth: "100vw", height: "100%", display: "flex", flexDirection: "column",
-        boxShadow: "-28px 0 70px -12px rgba(0,0,0,.65)", animation: "drawerIn .24s cubic-bezier(.32,.72,0,1)",
+        boxShadow: "-28px 0 70px -12px var(--overlay)", animation: "drawerIn .24s cubic-bezier(.32,.72,0,1)",
       }}>
         {/* Header */}
         <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
@@ -1643,7 +1643,7 @@ function TaskModal({ open, task, meetings, users, currentUserId, isAdmin, custom
                   <Plus size={13} /> {assigneeIds.length === 0 ? tr("tasks.assignee") : tr("tasks.addAssignee")}
                 </button>
                 {assigneeOpen && assigneeCandidates.length > 0 && (
-                  <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "var(--card, #181a20)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 220, maxHeight: 240, overflowY: "auto", boxShadow: "0 12px 30px -8px rgba(0,0,0,.5)" }}>
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "var(--card, #181a20)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 220, maxHeight: 240, overflowY: "auto", boxShadow: "0 12px 30px -8px var(--overlay)" }}>
                     {assigneeCandidates.map(u => (
                       <button key={u.id} onClick={() => { setAssigneeIds(ids => [...ids, u.id]); setAssigneeOpen(false); }}
                         style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", width: "100%", background: "transparent", border: "none", cursor: "pointer", color: "inherit", borderRadius: 6, textAlign: "left" }}

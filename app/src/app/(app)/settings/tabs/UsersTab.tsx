@@ -446,7 +446,7 @@ export function UsersTab() {
       </div>
 
       {inviteOpen && (
-        <div onClick={() => setInviteOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn .15s' }}>
+        <div onClick={() => setInviteOpen(false)} style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn .15s' }}>
           <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: 420, maxWidth: '92vw', padding: '22px 24px' }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{t('settings.addUser')}</div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 18 }}>{t('settings.addUserDesc')}</div>
@@ -474,7 +474,7 @@ export function UsersTab() {
                 {t('settings.tempPasswordHint')}
               </div>
             </div>
-            {inviteMsg && <div style={{ marginTop: 12, fontSize: 12.5, color: inviteMsg.ok ? 'var(--green)' : '#f87171' }}>{inviteMsg.text}</div>}
+            {inviteMsg && <div style={{ marginTop: 12, fontSize: 12.5, color: inviteMsg.ok ? 'var(--green)' : 'var(--danger-fg)' }}>{inviteMsg.text}</div>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button className="btn btn-sm" onClick={() => setInviteOpen(false)}>{t('common.cancel')}</button>
               <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}>
@@ -486,7 +486,7 @@ export function UsersTab() {
       )}
 
       {resetUser && (
-        <div onClick={() => setResetUser(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn .15s' }}>
+        <div onClick={() => setResetUser(null)} style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn .15s' }}>
           <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: 420, maxWidth: '92vw', padding: '22px 24px' }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{t('settings.resetPassword')}</div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 18 }}>{resetUser.name} · {resetUser.email}</div>
@@ -495,7 +495,7 @@ export function UsersTab() {
                 <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
                   {t('settings.resetPasswordDesc')}
                 </div>
-                {resetErr && <div style={{ marginTop: 12, fontSize: 12.5, color: '#f87171' }}>{resetErr}</div>}
+                {resetErr && <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--danger-fg)' }}>{resetErr}</div>}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
                   <button className="btn btn-sm" onClick={() => setResetUser(null)}>{t('common.cancel')}</button>
                   <button className="btn btn-primary btn-sm" onClick={doReset} disabled={resetting}>

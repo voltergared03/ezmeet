@@ -12,9 +12,9 @@ export function ControlBtn({ active, onClick, icon, label, danger, badge, classN
       position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
       padding: '8px 14px', borderRadius: 12, cursor: 'pointer',
-      background: danger ? 'rgba(239,68,68,.15)' : active ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.04)',
+      background: danger ? 'rgba(239,68,68,.15)' : active ? 'var(--hover)' : 'var(--hover)',
       color: danger ? '#fca5a5' : active ? '#fff' : 'rgba(255,255,255,.6)',
-      border: danger ? '1px solid rgba(239,68,68,.3)' : '1px solid rgba(255,255,255,.08)',
+      border: danger ? '1px solid rgba(239,68,68,.3)' : '1px solid var(--hover)',
       transition: 'all .15s', minWidth: 0, flexShrink: 0,
     }}>
       {icon}
@@ -23,7 +23,7 @@ export function ControlBtn({ active, onClick, icon, label, danger, badge, classN
         <span style={{
           position: 'absolute', top: 2, right: 6,
           width: 16, height: 16, borderRadius: '50%',
-          background: '#3b82f6', color: '#fff',
+          background: 'var(--accent)', color: 'var(--on-accent)',
           fontSize: 9, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{badge > 9 ? '9+' : badge}</span>
@@ -48,12 +48,12 @@ export function MoreItem({ icon, label, onClick, active, danger }: {
     <button onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 10, width: '100%',
       padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
-      background: danger ? 'rgba(239,68,68,.14)' : active ? 'rgba(255,255,255,.08)' : 'transparent',
+      background: danger ? 'rgba(239,68,68,.14)' : active ? 'var(--hover)' : 'transparent',
       color: danger ? '#fca5a5' : active ? '#fff' : 'rgba(255,255,255,.78)',
       border: '1px solid ' + (danger ? 'rgba(239,68,68,.3)' : 'transparent'),
       fontSize: 13, fontWeight: 500, transition: 'background .12s',
     }}
-      onMouseEnter={(e) => { if (!active && !danger) e.currentTarget.style.background = 'rgba(255,255,255,.06)'; }}
+      onMouseEnter={(e) => { if (!active && !danger) e.currentTarget.style.background = 'var(--hover)'; }}
       onMouseLeave={(e) => { if (!active && !danger) e.currentTarget.style.background = 'transparent'; }}
     >
       <span style={{ display: 'flex', flexShrink: 0 }}>{icon}</span>

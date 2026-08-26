@@ -324,7 +324,7 @@ export default function BaseDetailPage() {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner size={22} /></div>;
   if (!base) return <div style={{ padding: 40 }}><Link href="/database" className="btn btn-ghost"><ChevronLeft size={16} /> {t('title')}</Link></div>;
 
-  const accent = base.color || '#3b82f6';
+  const accent = base.color || 'var(--accent)';
   const restricted = base.visibility === 'restricted';
   // Whether the caller may edit this table's data. Prefer the table-scoped flag
   // (per-table owners exist); fall back to the base flag. Fail-closed: a missing
@@ -353,7 +353,7 @@ export default function BaseDetailPage() {
               <MenuRow icon={<Download size={14} />} label={exporting ? t('exporting') : t('exportCsv')} disabled={!table || exporting} onClick={() => { close(); exportCsv(); }} />
               <div style={{ display: 'flex', gap: 5, padding: '8px 10px 6px', flexWrap: 'wrap' }}>
                 {CHOICE_COLORS.slice(0, 8).map((c) => (
-                  <button key={c} onClick={() => recolorBase(c)} title={t('recolor')} style={{ width: 18, height: 18, borderRadius: 5, background: c, border: base.color === c ? '2px solid var(--text)' : '1px solid rgba(255,255,255,.12)', cursor: 'pointer' }} />
+                  <button key={c} onClick={() => recolorBase(c)} title={t('recolor')} style={{ width: 18, height: 18, borderRadius: 5, background: c, border: base.color === c ? '2px solid var(--text)' : '1px solid var(--hover-2)', cursor: 'pointer' }} />
                 ))}
               </div>
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
@@ -445,7 +445,7 @@ export default function BaseDetailPage() {
       <Modal open={newTableOpen} onClose={() => { setNewTableOpen(false); setTableErr(null); }} title={t('newTable')} width={420}>
         <label className="field-label">{t('tableName')}</label>
         <input className="field" autoFocus value={newTableName} onChange={(e) => setNewTableName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createTable()} placeholder={t('tableNamePlaceholder')} style={{ width: '100%', marginBottom: tableErr ? 8 : 18 }} />
-        {tableErr && <div style={{ color: 'var(--red, #ef4444)', fontSize: 12.5, marginBottom: 14 }}>{tableErr}</div>}
+        {tableErr && <div style={{ color: 'var(--red, var(--danger))', fontSize: 12.5, marginBottom: 14 }}>{tableErr}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => setNewTableOpen(false)}>{tc('cancel')}</button>
           <button className="btn btn-primary" onClick={createTable} disabled={!newTableName.trim() || busy}>{busy ? <Spinner size={15} /> : t('createTable')}</button>
@@ -464,7 +464,7 @@ export default function BaseDetailPage() {
         <p style={{ margin: '0 0 18px', color: 'var(--text-2)', fontSize: 14, lineHeight: 1.5 }}>{t('confirmDeleteBase')}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => setConfirmDelBase(false)}>{tc('cancel')}</button>
-          <button className="btn" onClick={deleteBase} style={{ background: 'var(--red, #ef4444)', color: '#fff', fontWeight: 600 }}>{t('deleteBase')}</button>
+          <button className="btn" onClick={deleteBase} style={{ background: 'var(--red, var(--danger))', color: 'var(--on-accent)', fontWeight: 600 }}>{t('deleteBase')}</button>
         </div>
       </Modal>
 
@@ -480,7 +480,7 @@ export default function BaseDetailPage() {
         <p style={{ margin: '0 0 18px', color: 'var(--text-2)', fontSize: 14, lineHeight: 1.5 }}>{t('confirmDeleteTable')}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => setDelTableT(null)}>{tc('cancel')}</button>
-          <button className="btn" onClick={deleteTable} style={{ background: 'var(--red, #ef4444)', color: '#fff', fontWeight: 600 }}>{t('deleteTable')}</button>
+          <button className="btn" onClick={deleteTable} style={{ background: 'var(--red, var(--danger))', color: 'var(--on-accent)', fontWeight: 600 }}>{t('deleteTable')}</button>
         </div>
       </Modal>
 
@@ -500,7 +500,7 @@ export default function BaseDetailPage() {
         <p style={{ margin: '0 0 18px', color: 'var(--text-2)', fontSize: 14, lineHeight: 1.5 }}>{t('confirmDeleteView')}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => setDelViewT(null)}>{tc('cancel')}</button>
-          <button className="btn" onClick={deleteView} style={{ background: 'var(--red, #ef4444)', color: '#fff', fontWeight: 600 }}>{t('deleteView')}</button>
+          <button className="btn" onClick={deleteView} style={{ background: 'var(--red, var(--danger))', color: 'var(--on-accent)', fontWeight: 600 }}>{t('deleteView')}</button>
         </div>
       </Modal>
 

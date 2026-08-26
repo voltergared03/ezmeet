@@ -1224,7 +1224,12 @@
     "colClickup": "ClickUp",
     "glossary": "Glossary",
     "glossaryHint": "Names the transcription keeps getting wrong — products, tools, internal terms. One per line. Use distinctive multi-word terms; short personal names can be misapplied to similar-sounding speech. Up to 100.",
-    "glossaryPlaceholder": "Knowledge Center\nStrategic Business Roadmap"
+    "glossaryPlaceholder": "Knowledge Center\nStrategic Business Roadmap",
+    "theme": "Theme",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeHint": "Saved on this device"
   },
   "setupChecklist": {
     "title": "Finish setup",

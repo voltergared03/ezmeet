@@ -528,7 +528,7 @@ export default function MeetingReportPage() {
       langMap[lang] = (langMap[lang] || 0) + (t.text || '').length;
     });
     const totalChars = Object.values(langMap).reduce((a: number, b: number) => a + b, 0) || 1;
-    const langColors: Record<string, string> = { ua: '#f59e0b', en: '#10b981', ru: '#a78bfa', pt: '#f472b6', hi: '#fb923c' };
+    const langColors: Record<string, string> = { ua: 'var(--warn)', en: 'var(--success)', ru: 'var(--purple)', pt: '#f472b6', hi: '#fb923c' };
     const langLabels: Record<string, string> = { ua: tr('report.langUk'), en: tr('report.langEn'), ru: tr('report.langRu'), pt: tr('report.langPt'), hi: tr('report.langHi') };
     const languages = Object.entries(langMap)
       .sort((a, b) => b[1] - a[1])
@@ -560,7 +560,7 @@ export default function MeetingReportPage() {
       wordsCount,
       repliesCount,
       languagesCount: languages.length || 1,
-      languages: languages.length > 0 ? languages : [{ label: tr('report.langUk'), code: 'UA', pct: 100, color: '#f59e0b' }],
+      languages: languages.length > 0 ? languages : [{ label: tr('report.langUk'), code: 'UA', pct: 100, color: 'var(--warn)' }],
       speakers,
     };
   }, [meeting]);
@@ -657,10 +657,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;font-size:9.5pt;color:#1e293b;li
 /* ─ Cover ─ */
 .cover{position:relative;padding:32px 0 24px;margin-bottom:6px}
 .cover::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
-background:linear-gradient(90deg,#3b82f6 0%,#3b82f6 30%,#e2e8f0 30%,#e2e8f0 100%)}
+background:linear-gradient(90deg,var(--accent) 0%,var(--accent) 30%,#e2e8f0 30%,#e2e8f0 100%)}
 .brand{font-family:'DM Mono',monospace;font-size:7pt;font-weight:500;color:#94a3b8;
 text-transform:uppercase;letter-spacing:0.18em;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.brand::before{content:'';display:inline-block;width:8px;height:8px;background:#3b82f6;border-radius:2px}
+.brand::before{content:'';display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:2px}
 .cover h1{font-size:22pt;font-weight:700;color:#0f172a;letter-spacing:-0.03em;line-height:1.15;margin-bottom:12px}
 .cover-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
 .cmeta{font-family:'DM Mono',monospace;font-size:7.5pt;color:#64748b;display:flex;align-items:center;gap:5px}
@@ -669,17 +669,17 @@ text-transform:uppercase;letter-spacing:0.18em;margin-bottom:14px;display:flex;a
 .pav{width:26px;height:26px;border-radius:50%;font-size:7pt;font-weight:600;
 color:#fff;display:inline-flex;align-items:center;justify-content:center;
 margin-left:-6px;border:2px solid #fff;position:relative}
-.pav:nth-child(6n+1){background:#3b82f6}
+.pav:nth-child(6n+1){background:var(--accent)}
 .pav:nth-child(6n+2){background:#8b5cf6}
 .pav:nth-child(6n+3){background:#06b6d4}
-.pav:nth-child(6n+4){background:#f59e0b}
-.pav:nth-child(6n+5){background:#10b981}
-.pav:nth-child(6n+6){background:#ef4444}
+.pav:nth-child(6n+4){background:var(--warn)}
+.pav:nth-child(6n+5){background:var(--success)}
+.pav:nth-child(6n+6){background:var(--danger)}
 .pav:first-child{margin-left:0}
 
 /* ─ Section ─ */
 .sec{margin-bottom:20px;break-inside:avoid}
-.sec-title{font-family:'DM Mono',monospace;font-size:7pt;font-weight:500;color:#3b82f6;
+.sec-title{font-family:'DM Mono',monospace;font-size:7pt;font-weight:500;color:var(--accent);
 text-transform:uppercase;letter-spacing:0.15em;margin-bottom:10px;
 display:flex;align-items:center;gap:8px}
 .sec-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
@@ -697,7 +697,7 @@ p{margin-bottom:6px;color:#334155;line-height:1.72;font-size:9.5pt}
 /* ─ Decisions ─ */
 .dec{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f1f5f9}
 .dec:last-child{border-bottom:none}
-.dec-n{width:22px;height:22px;border-radius:6px;background:#eff6ff;color:#3b82f6;
+.dec-n{width:22px;height:22px;border-radius:6px;background:#eff6ff;color:var(--accent);
 font-size:8pt;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #dbeafe}
 .dec-t{color:#334155;font-size:9.5pt;line-height:1.55;padding-top:1px}
 
@@ -724,13 +724,13 @@ display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 ul.flu{list-style:none;margin:0;padding:0}
 ul.flu li{padding:7px 0 7px 16px;position:relative;color:#334155;font-size:9pt;border-bottom:1px solid #f1f5f9}
 ul.flu li:last-child{border-bottom:none}
-ul.flu li::before{content:'';position:absolute;left:0;top:14px;width:5px;height:5px;border-radius:50%;background:#3b82f6}
+ul.flu li::before{content:'';position:absolute;left:0;top:14px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
 
 /* ─ Speakers ─ */
 .spk{display:flex;align-items:center;gap:8px;padding:4px 0}
 .spk-name{width:110px;font-size:8.5pt;color:#64748b;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spk-track{flex:1;height:5px;background:#f1f5f9;border-radius:3px;overflow:hidden}
-.spk-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:3px}
+.spk-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:3px}
 .spk-pct{width:32px;text-align:right;font-family:'DM Mono',monospace;font-size:7.5pt;color:#94a3b8;font-weight:500}
 
 /* ─ Languages ─ */
@@ -743,13 +743,13 @@ ul.flu li::before{content:'';position:absolute;left:0;top:14px;width:5px;height:
 .tr-head{display:flex;align-items:center;gap:8px;margin-bottom:1px}
 .tr-ts{font-family:'DM Mono',monospace;font-size:7pt;color:#94a3b8}
 .tr-who{font-size:8.5pt;font-weight:600;color:#1e293b}
-.tr-lang{font-family:'DM Mono',monospace;font-size:6pt;color:#3b82f6;background:#eff6ff;padding:1px 4px;border-radius:3px;font-weight:500}
+.tr-lang{font-family:'DM Mono',monospace;font-size:6pt;color:var(--accent);background:#eff6ff;padding:1px 4px;border-radius:3px;font-weight:500}
 .tr-txt{font-size:8.5pt;color:#64748b;line-height:1.55}
 
 /* ─ Footer ─ */
 .foot{margin-top:28px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}
 .foot-l{font-family:'DM Mono',monospace;font-size:7pt;color:#94a3b8;display:flex;align-items:center;gap:6px}
-.foot-l::before{content:'';display:inline-block;width:6px;height:6px;background:#3b82f6;border-radius:1.5px}
+.foot-l::before{content:'';display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:1.5px}
 .foot-r{font-family:'DM Mono',monospace;font-size:6.5pt;color:#cbd5e1;letter-spacing:0.03em}
 
 /* ─ Two-col layout for analytics ─ */
@@ -763,13 +763,13 @@ text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px}
 /* ─ Detailed report (topics) ─ */
 .topic{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:10px;break-inside:avoid}
 .tp-head{display:flex;align-items:center;gap:9px;margin-bottom:6px}
-.tp-n{width:20px;height:20px;border-radius:6px;background:#eff6ff;color:#3b82f6;font-size:7.5pt;font-weight:700;
+.tp-n{width:20px;height:20px;border-radius:6px;background:#eff6ff;color:var(--accent);font-size:7.5pt;font-weight:700;
 display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #dbeafe}
 .tp-title{font-size:11pt;font-weight:700;color:#0f172a}
 .tp-disc{font-size:9pt;color:#475569;line-height:1.6;margin:0 0 8px}
 .tp-sub{margin-top:8px}
 .tp-sub-h{font-family:'DM Mono',monospace;font-size:6.5pt;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px}
-.dh-green{color:#16a34a}.dh-blue{color:#3b82f6}.dh-amber{color:#d97706}
+.dh-green{color:#16a34a}.dh-blue{color:var(--accent)}.dh-amber{color:#d97706}
 ul.tp-list{list-style:none;margin:0;padding:0}
 ul.tp-list li{padding:3px 0 3px 14px;position:relative;font-size:8.7pt;color:#334155;line-height:1.5}
 ul.tp-list li::before{content:'';position:absolute;left:2px;top:9px;width:4px;height:4px;border-radius:50%;background:#cbd5e1}
@@ -1027,7 +1027,7 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                 style={{
                   background: 'color-mix(in oklab, var(--accent) 18%, transparent)',
                   borderColor: 'color-mix(in oklab, var(--accent) 40%, transparent)',
-                  color: '#bfdbfe',
+                  color: 'var(--info-fg)',
                 }}
               >
                 <Sparkles size={11} /> {tr('report.aiReportChip')}
@@ -1054,7 +1054,7 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                 canManage={canRetryReport}
               />
               {sendMsg && (
-                <span style={{ fontSize: 12, color: sendMsg.ok ? 'var(--green)' : '#f87171', display: 'inline-flex', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: sendMsg.ok ? 'var(--green)' : 'var(--danger-fg)', display: 'inline-flex', alignItems: 'center' }}>
                   {sendMsg.text}
                 </span>
               )}
@@ -1158,7 +1158,7 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                           width: 20,
                           height: 20,
                           borderRadius: 6,
-                          border: item.done ? 'none' : item.status === 'in_progress' ? '2px solid #f59e0b' : '2px solid var(--border-2)',
+                          border: item.done ? 'none' : item.status === 'in_progress' ? '2px solid var(--warn)' : '2px solid var(--border-2)',
                           background: item.done ? 'var(--green)' : 'transparent',
                           cursor: (item.clickupManaged || item.linearManaged) ? 'default' : 'pointer',
                           display: 'flex',
@@ -1170,9 +1170,9 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                         }}
                       >
                         {item.done
-                          ? <Check size={12} style={{ color: '#fff' }} />
+                          ? <Check size={12} style={{ color: 'var(--on-accent)' }} />
                           : item.status === 'in_progress'
-                            ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                            ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)' }} />
                             : null}
                       </button>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1630,7 +1630,7 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                     style={{
                       marginTop: 10,
                       fontSize: 12.5,
-                      color: fixMsg.ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)',
+                      color: fixMsg.ok ? 'var(--success, #22c55e)' : 'var(--danger, var(--danger))',
                     }}
                   >
                     {fixMsg.text}

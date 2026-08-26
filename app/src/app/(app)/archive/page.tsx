@@ -344,7 +344,7 @@ export default function ArchivePage() {
         {/* Delete confirm modal */}
         {confirmDelete && (
           <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 1000,
+            position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 1000,
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
           }} onClick={closeConfirm}>
             <div className="card" style={{ maxWidth: 420, width: '100%', padding: '28px 24px' }}
@@ -358,12 +358,12 @@ export default function ArchivePage() {
                   : t('archive.deleteConfirmBody', { title: confirmDelete.title })}
               </div>
               {deleteErr && (
-                <div style={{ color: '#fca5a5', fontSize: 13, marginBottom: 18, lineHeight: 1.5 }}>{deleteErr}</div>
+                <div style={{ color: 'var(--danger-fg)', fontSize: 13, marginBottom: 18, lineHeight: 1.5 }}>{deleteErr}</div>
               )}
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button className="btn" onClick={closeConfirm}>{t('common.cancel')}</button>
                 <button className="btn" onClick={recBlocked ? handleDeleteWithRecording : handleDelete} disabled={!!deletingId}
-                  style={{ background: 'color-mix(in oklab, var(--red) 22%, var(--surface))', color: '#fca5a5', borderColor: 'color-mix(in oklab, var(--red) 40%, var(--border))' }}>
+                  style={{ background: 'color-mix(in oklab, var(--red) 22%, var(--surface))', color: 'var(--danger-fg)', borderColor: 'color-mix(in oklab, var(--red) 40%, var(--border))' }}>
                   <Trash2 size={14} /> {deletingId ? t('archive.deleting') : (recBlocked ? t('archive.deleteWithRecording') : t('common.delete'))}
                 </button>
               </div>

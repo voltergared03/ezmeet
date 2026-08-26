@@ -95,7 +95,7 @@ export function AccessModal({
       style={{ position: 'fixed', inset: 0, background: 'rgba(4,6,10,.6)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
     >
       <style>{STYLES}</style>
-      <div className="acc-panel" style={{ width: '100%', maxWidth: 490, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: '0 30px 80px -24px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.04)', maxHeight: '92vh', overflow: 'auto' }}>
+      <div className="acc-panel" style={{ width: '100%', maxWidth: 490, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: '0 30px 80px -24px rgba(0,0,0,.7), inset 0 1px 0 var(--hover)', maxHeight: '92vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 18px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ display: 'inline-flex', width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', background: 'color-mix(in oklab, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>
             <ShieldCheck size={17} />
@@ -140,7 +140,7 @@ export function AccessModal({
                     </>
                   ) : (
                     <>
-                      <span style={{ width: 28, height: 28, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: g.department?.color || 'var(--accent)', color: '#fff', flexShrink: 0 }}>
+                      <span style={{ width: 28, height: 28, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: g.department?.color || 'var(--accent)', color: 'var(--on-accent)', flexShrink: 0 }}>
                         <Users size={14} />
                       </span>
                       <span style={{ flex: 1, fontSize: 13 }}>{g.department?.name}<span style={{ color: 'var(--muted)', fontSize: 11 }}> · {t('department')}</span></span>

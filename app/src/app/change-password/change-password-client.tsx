@@ -77,7 +77,7 @@ export function ChangePasswordClient({ forced }: { forced: boolean }) {
               placeholder={t('auth.repeatNewPassword')} value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
-            {err && <div style={{ fontSize: 12.5, color: 'var(--red, #ef4444)', marginTop: 10 }}>{err}</div>}
+            {err && <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>}
             <button
               type="submit" className="btn btn-primary" disabled={busy}
               style={{ width: '100%', justifyContent: 'center', padding: '13px 16px', fontWeight: 600, marginTop: 16, gap: 8 }}

@@ -71,7 +71,7 @@ export function PushOptInBanner() {
           flexShrink: 0,
         }}
       >
-        <BellRing size={15} style={{ color: '#60a5fa' }} />
+        <BellRing size={15} style={{ color: 'var(--accent-2)' }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>

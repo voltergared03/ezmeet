@@ -13,7 +13,7 @@ interface Dept { id: string; name: string; color: string | null; teableBaseId: s
 interface UserOpt { id: string; name: string; email: string; image?: string | null }
 interface ListOpt { listId: string; label: string }
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#64748b'];
+const COLORS = ['var(--accent)', '#8b5cf6', '#06b6d4', 'var(--success)', 'var(--warn)', 'var(--danger)', 'var(--pink)', '#64748b'];
 
 export function DepartmentsTab() {
   const t = useTranslations();

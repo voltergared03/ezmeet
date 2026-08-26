@@ -95,7 +95,7 @@ export function ServerFormModal({
         className="srvf-panel"
         style={{
           width: '100%', maxWidth: 470, background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 18, boxShadow: '0 30px 80px -24px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.04)',
+          borderRadius: 18, boxShadow: '0 30px 80px -24px rgba(0,0,0,.7), inset 0 1px 0 var(--hover)',
           maxHeight: '92vh', overflow: 'auto',
         }}
       >
@@ -150,7 +150,7 @@ export function ServerFormModal({
           </div>
 
           {error && (
-            <div style={{ fontSize: 13, color: '#f87171', background: 'color-mix(in oklab, #f87171 10%, transparent)', border: '1px solid color-mix(in oklab, #f87171 30%, transparent)', borderRadius: 9, padding: '8px 11px' }}>
+            <div style={{ fontSize: 13, color: 'var(--danger-fg)', background: 'color-mix(in oklab, var(--danger-fg) 10%, transparent)', border: '1px solid color-mix(in oklab, var(--danger-fg) 30%, transparent)', borderRadius: 9, padding: '8px 11px' }}>
               {error}
             </div>
           )}

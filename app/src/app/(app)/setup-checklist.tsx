@@ -95,13 +95,13 @@ export function SetupChecklist() {
           const res = result[i.name];
           return (
             <div key={i.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', background: 'var(--surface-2)', borderRadius: 10 }}>
-              <AlertCircle size={15} style={{ color: 'var(--amber, #f59e0b)', flexShrink: 0 }} />
+              <AlertCircle size={15} style={{ color: 'var(--amber, var(--warn))', flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{i.name}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.desc}</div>
               </div>
               {res && (
-                <span style={{ fontSize: 11.5, color: res.ok ? 'var(--green)' : 'var(--red, #ef4444)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 11.5, color: res.ok ? 'var(--green)' : 'var(--red, var(--danger))', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {res.ok ? '✓ OK' : res.msg}
                 </span>
               )}

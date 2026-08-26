@@ -55,7 +55,7 @@ export function MeetingDetailModal({
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
+        background: 'var(--overlay)', backdropFilter: 'blur(4px)',
       }}
       onClick={onClose}
     >
@@ -213,7 +213,7 @@ export function MeetingDetailModal({
                 className="btn"
                 onClick={() => onDelete(m)}
                 disabled={deleting}
-                style={{ color: '#fca5a5', flexShrink: 0 }}
+                style={{ color: 'var(--danger-fg)', flexShrink: 0 }}
               >
                 {deleting ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
               </button>

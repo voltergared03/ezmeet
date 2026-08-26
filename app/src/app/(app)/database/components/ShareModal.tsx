@@ -157,7 +157,7 @@ export function ShareModal({
                 placeholder={t('addPeople')}
                 style={{ width: '100%' }}
               />
-              {err && <div style={{ color: 'var(--red, #ef4444)', fontSize: 12, marginTop: 6 }}>{err}</div>}
+              {err && <div style={{ color: 'var(--red, var(--danger))', fontSize: 12, marginTop: 6 }}>{err}</div>}
               {query.trim() && candidates.length > 0 && (
                 <div style={{ marginTop: 6, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
                   {candidates.slice(0, 8).map((u) => (
@@ -243,7 +243,7 @@ export function ShareModal({
                               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                             >
                               <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${hidden ? 'var(--accent)' : 'var(--border-2, var(--border))'}`, background: hidden ? 'var(--accent)' : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                {hidden && <Check size={11} style={{ color: '#fff' }} />}
+                                {hidden && <Check size={11} style={{ color: 'var(--on-accent)' }} />}
                               </span>
                               <span style={{ fontSize: 12.5 }}>{f.name}</span>
                               <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{f.tableName}</span>

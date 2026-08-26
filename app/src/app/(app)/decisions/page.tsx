@@ -47,7 +47,7 @@ const STYLES = `
 @media (hover: none) { .dec-item .dec-actions { opacity: .9; } }
 .dec-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; transition: all .12s ease; }
 .dec-iconbtn:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
-.dec-iconbtn.danger:hover { color: #f87171; border-color: color-mix(in oklab, #f87171 40%, transparent); }
+.dec-iconbtn.danger:hover { color: var(--danger-fg); border-color: color-mix(in oklab, var(--danger-fg) 40%, transparent); }
 .dec-report-link { transition: color .15s ease; }
 .dec-report-link:hover { color: var(--accent) !important; }
 .dec-skel { background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 37%, var(--surface) 63%); background-size: 460px 100%; animation: dec-shimmer 1.5s ease-in-out infinite; }
@@ -413,10 +413,10 @@ function DecisionItem({
         </div>
 
         {mode === 'confirm' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, padding: '8px 12px', borderRadius: 9, background: 'color-mix(in oklab, #f87171 9%, transparent)', border: '1px solid color-mix(in oklab, #f87171 30%, transparent)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, padding: '8px 12px', borderRadius: 9, background: 'color-mix(in oklab, var(--danger-fg) 9%, transparent)', border: '1px solid color-mix(in oklab, var(--danger-fg) 30%, transparent)' }}>
             <span style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{t('confirmDelete')}</span>
             <button className="btn btn-ghost" onClick={() => setMode('view')} disabled={busy} style={{ height: 30, padding: '0 12px' }}>{t('cancel')}</button>
-            <button className="btn" onClick={doDelete} disabled={busy} style={{ height: 30, padding: '0 12px', background: '#dc2626', borderColor: '#dc2626', color: '#fff' }}>
+            <button className="btn" onClick={doDelete} disabled={busy} style={{ height: 30, padding: '0 12px', background: '#dc2626', borderColor: '#dc2626', color: 'var(--on-accent)' }}>
               {busy ? <Loader2 size={13} className="spin" /> : <Trash2 size={13} />} {t('delete')}
             </button>
           </div>

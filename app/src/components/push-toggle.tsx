@@ -131,7 +131,7 @@ export function PushToggle() {
                   marginTop: 8,
                   fontSize: 11.5,
                   lineHeight: 1.45,
-                  color: testMsg.ok ? 'var(--muted)' : 'var(--red, #ef4444)',
+                  color: testMsg.ok ? 'var(--muted)' : 'var(--red, var(--danger))',
                   maxWidth: 360,
                 }}
               >
@@ -165,7 +165,7 @@ export function PushToggle() {
           <Loader2
             size={12}
             className="spin"
-            style={{ position: 'absolute', top: 5, left: 13, color: '#fff' }}
+            style={{ position: 'absolute', top: 5, left: 13, color: 'var(--on-accent)' }}
           />
         ) : (
           <span

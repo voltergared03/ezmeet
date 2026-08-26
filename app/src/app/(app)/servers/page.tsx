@@ -31,7 +31,7 @@ const STYLES = `
 .srv-iconbtn { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:8px; border:1px solid transparent; background:transparent; color:var(--muted); cursor:pointer; transition: all .12s ease; }
 .srv-iconbtn:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
 .srv-iconbtn:active { transform: scale(.92); }
-.srv-iconbtn.danger:hover { color:#f87171; border-color: color-mix(in oklab, #f87171 40%, transparent); }
+.srv-iconbtn.danger:hover { color:var(--danger-fg); border-color: color-mix(in oklab, var(--danger-fg) 40%, transparent); }
 .srv-cta { transition: transform .14s cubic-bezier(.16,1,.3,1), box-shadow .18s ease; }
 .srv-cta:active { transform: translateY(1px) scale(.985); }
 .spin { animation: srv-spin 1s linear infinite; }
@@ -276,16 +276,16 @@ export default function ServersPage() {
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start',
                       maxWidth: '100%', padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                      background: occByOthers ? 'color-mix(in oklab, #f59e0b 14%, transparent)' : 'var(--surface-2)',
-                      color: occByOthers ? '#f59e0b' : 'var(--muted)',
-                      border: `1px solid ${occByOthers ? 'color-mix(in oklab, #f59e0b 35%, transparent)' : 'var(--border)'}`,
+                      background: occByOthers ? 'color-mix(in oklab, var(--warn) 14%, transparent)' : 'var(--surface-2)',
+                      color: occByOthers ? 'var(--warn)' : 'var(--muted)',
+                      border: `1px solid ${occByOthers ? 'color-mix(in oklab, var(--warn) 35%, transparent)' : 'var(--border)'}`,
                     }}
                     title={occ}
                   >
                     <span
                       className="srv-dot"
                       aria-hidden
-                      style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', background: occByOthers ? '#f59e0b' : '#10b981' }}
+                      style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', background: occByOthers ? 'var(--warn)' : 'var(--success)' }}
                     />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{occ}</span>
                   </div>

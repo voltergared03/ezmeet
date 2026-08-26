@@ -162,7 +162,7 @@ export function TotpCell({
         }}
       >
         {pretty}
-        {copied ? <Check size={13} style={{ color: 'var(--green, #10b981)' }} /> : <Copy size={12} style={{ color: 'var(--muted)' }} />}
+        {copied ? <Check size={13} style={{ color: 'var(--green, var(--success))' }} /> : <Copy size={12} style={{ color: 'var(--muted)' }} />}
       </button>
       <Ring remaining={remaining} period={view.period ?? 30} />
       <div style={{ flex: 1 }} />
@@ -189,7 +189,7 @@ function Ring({ remaining, period }: { remaining: number; period: number }) {
           cy="8"
           r={r}
           fill="none"
-          stroke={low ? 'var(--red, #ef4444)' : 'var(--accent)'}
+          stroke={low ? 'var(--red, var(--danger))' : 'var(--accent)'}
           strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray={circ}

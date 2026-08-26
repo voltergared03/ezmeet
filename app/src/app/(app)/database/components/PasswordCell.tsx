@@ -128,7 +128,7 @@ export function PasswordCell({
         {revealed != null ? <EyeOff size={14} /> : <Eye size={14} />}
       </button>
       <button type="button" aria-label={t('passwordCopy')} title={t('passwordCopy')} onClick={copy} style={iconBtn}>
-        {copied ? <Check size={13} style={{ color: 'var(--green, #10b981)' }} /> : <Copy size={13} />}
+        {copied ? <Check size={13} style={{ color: 'var(--green, var(--success))' }} /> : <Copy size={13} />}
       </button>
       {!readOnly && (
         <button type="button" aria-label={t('passwordReplace')} title={t('passwordReplace')} onClick={() => setEditing(true)} style={iconBtn}>

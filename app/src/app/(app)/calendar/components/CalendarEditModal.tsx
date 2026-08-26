@@ -127,7 +127,7 @@ export function CalendarEditModal({ meeting, onClose, onSave }: {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 110,
+      position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 110,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
       overflowY: 'auto',
     }} onClick={onClose}>

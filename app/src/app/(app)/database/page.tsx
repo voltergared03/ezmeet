@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { ShareModal } from './components/ShareModal';
 import { CHOICE_COLORS, type BaseSummary } from './lib/types';
 
-const ACCENTS = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#ec4899', '#14b8a6', '#6366f1', '#f97316'];
+const ACCENTS = ['var(--accent)', 'var(--success)', '#a855f7', 'var(--warn)', 'var(--pink)', 'var(--teal)', '#6366f1', '#f97316'];
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const accentOf = (b: BaseSummary, i: number) => b.color || ACCENTS[i % ACCENTS.length];
 
@@ -114,7 +114,7 @@ export default function DatabaseHome() {
       <Modal open={createOpen} onClose={() => { setCreateOpen(false); setCreateErr(null); }} title={t('createBase')} width={420}>
         <label className="field-label">{t('baseName')}</label>
         <input className="field" autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && create()} placeholder={t('baseNamePlaceholder')} style={{ width: '100%', marginBottom: createErr ? 8 : 18 }} />
-        {createErr && <div style={{ color: 'var(--red, #ef4444)', fontSize: 12.5, marginBottom: 14 }}>{createErr}</div>}
+        {createErr && <div style={{ color: 'var(--red, var(--danger))', fontSize: 12.5, marginBottom: 14 }}>{createErr}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => setCreateOpen(false)}>{tc('cancel')}</button>
           <button className="btn btn-primary" onClick={create} disabled={!name.trim() || busy}>{busy ? <Spinner size={15} /> : t('createBase')}</button>
@@ -133,7 +133,7 @@ export default function DatabaseHome() {
         <p style={{ margin: '0 0 18px', color: 'var(--text-2)', fontSize: 14, lineHeight: 1.5 }}>{t('confirmDeleteBase')}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>{tc('cancel')}</button>
-          <button className="btn" onClick={doDelete} style={{ background: 'var(--red, #ef4444)', color: '#fff', fontWeight: 600 }}>{t('deleteBase')}</button>
+          <button className="btn" onClick={doDelete} style={{ background: 'var(--red, var(--danger))', color: 'var(--on-accent)', fontWeight: 600 }}>{t('deleteBase')}</button>
         </div>
       </Modal>
 
@@ -181,7 +181,7 @@ function BaseCard({
         position: 'relative', cursor: 'pointer', borderRadius: 14, background: 'var(--surface)', overflow: 'hidden',
         border: `1px solid ${hover ? 'var(--border-2, var(--border))' : 'var(--border)'}`,
         minHeight: 162, display: 'flex',
-        transform: hover ? 'translateY(-2px)' : 'none', boxShadow: hover ? '0 14px 36px -16px rgba(0,0,0,.6)' : 'none',
+        transform: hover ? 'translateY(-2px)' : 'none', boxShadow: hover ? '0 14px 36px -16px var(--overlay)' : 'none',
         transition: 'transform .14s, border-color .14s, box-shadow .14s', animation: 'fadeIn .35s ease both', animationDelay: `${index * 45}ms`,
       }}
     >
@@ -228,13 +228,13 @@ function BaseCard({
           <div
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            style={{ position: 'fixed', left: Math.max(pos.left, 8), top: pos.top + 4, width: 196, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 14px 44px rgba(0,0,0,.55)', padding: 6, zIndex: 2000 }}
+            style={{ position: 'fixed', left: Math.max(pos.left, 8), top: pos.top + 4, width: 196, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 14px 44px var(--overlay)', padding: 6, zIndex: 2000 }}
           >
             <MenuRow icon={<Pencil size={14} />} label={t('rename')} onClick={() => { setMenu(false); onRename(); }} />
             <MenuRow icon={<Share2 size={14} />} label={t('share')} onClick={() => { setMenu(false); onShare(); }} />
             <div style={{ display: 'flex', gap: 5, padding: '8px 10px 6px', flexWrap: 'wrap' }}>
               {CHOICE_COLORS.slice(0, 8).map((c) => (
-                <button key={c} onClick={() => onRecolor(c)} title={t('recolor')} style={{ width: 18, height: 18, borderRadius: 5, background: c, border: base.color === c ? '2px solid var(--text)' : '1px solid rgba(255,255,255,.12)', cursor: 'pointer' }} />
+                <button key={c} onClick={() => onRecolor(c)} title={t('recolor')} style={{ width: 18, height: 18, borderRadius: 5, background: c, border: base.color === c ? '2px solid var(--text)' : '1px solid var(--hover-2)', cursor: 'pointer' }} />
               ))}
             </div>
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
@@ -272,7 +272,7 @@ function MenuRow({ icon, label, onClick, danger }: { icon: React.ReactNode; labe
   return (
     <button
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: danger ? 'var(--red, #ef4444)' : 'var(--text)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >

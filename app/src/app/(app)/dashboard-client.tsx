@@ -190,7 +190,7 @@ export function DashboardClient({
             }}>
               <div aria-hidden style={{ position: 'absolute', top: -50, right: -40, width: 150, height: 150, borderRadius: '50%', background: 'color-mix(in oklab, var(--accent) 26%, transparent)', filter: 'blur(55px)', pointerEvents: 'none' }} />
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <span className="chip" style={{ background: 'color-mix(in oklab, var(--accent) 22%, transparent)', borderColor: 'color-mix(in oklab, var(--accent) 45%, transparent)', color: '#bfdbfe' }}>
+                <span className="chip" style={{ background: 'color-mix(in oklab, var(--accent) 22%, transparent)', borderColor: 'color-mix(in oklab, var(--accent) 45%, transparent)', color: 'var(--info-fg)' }}>
                   <Sparkles size={11} /> {tr('dashboard.next')}
                 </span>
                 {untilLabel(nextMeeting.scheduledAt, tr, nowMs) && (
@@ -263,7 +263,7 @@ export function DashboardClient({
                   style={{
                     background: 'color-mix(in oklab, var(--accent) 18%, transparent)',
                     borderColor: 'color-mix(in oklab, var(--accent) 40%, transparent)',
-                    color: '#bfdbfe',
+                    color: 'var(--info-fg)',
                   }}
                 >
                   <Sparkles size={11} /> {tr('dashboard.nextMeeting')}
@@ -308,7 +308,7 @@ export function DashboardClient({
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {overdueCount > 0 && (
               <span style={{ fontSize: 10.5, padding: '2px 6px', borderRadius: 5,
-                background: 'color-mix(in oklab, var(--red) 18%, transparent)', color: '#fca5a5', fontWeight: 600 }}>
+                background: 'color-mix(in oklab, var(--red) 18%, transparent)', color: 'var(--danger-fg)', fontWeight: 600 }}>
                 {tr('dashboard.overdue', { count: overdueCount })}
               </span>
             )}
@@ -468,7 +468,7 @@ export function DashboardClient({
       {/* Delete Confirm */}
       {deleteMeeting && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 1000,
+          position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 1000,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }} onClick={() => setDeleteMeeting(null)}>
           <div className="card" style={{ maxWidth: 420, width: '100%', padding: '28px 24px' }}
@@ -480,7 +480,7 @@ export function DashboardClient({
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => setDeleteMeeting(null)}>{tr('common.cancel')}</button>
               <button className="btn" onClick={handleDelete}
-                style={{ background: 'color-mix(in oklab, var(--red) 22%, var(--surface))', color: '#fca5a5', borderColor: 'color-mix(in oklab, var(--red) 40%, var(--border))' }}>
+                style={{ background: 'color-mix(in oklab, var(--red) 22%, var(--surface))', color: 'var(--danger-fg)', borderColor: 'color-mix(in oklab, var(--red) 40%, var(--border))' }}>
                 <Trash2 size={14} /> {tr('common.delete')}
               </button>
             </div>
@@ -604,7 +604,7 @@ function EditMeetingModal({ meeting, tz, onClose, onSave }: {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 1000,
+      position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 1000,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
       overflowY: 'auto',
     }} onClick={onClose}>
@@ -821,7 +821,7 @@ function MeetingMenu({ meetingId, menuOpen, setMenuOpen, onEdit, onDelete }: {
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 14px', background: 'transparent', border: 'none',
-              cursor: 'pointer', color: '#fca5a5', fontSize: 13, textAlign: 'left',
+              cursor: 'pointer', color: 'var(--danger-fg)', fontSize: 13, textAlign: 'left',
             }}
             onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in oklab, var(--red) 10%, transparent)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}

@@ -1012,7 +1012,7 @@ export default function RdpClient(props: RdpClientProps) {
       disabled={opts?.disabled}
       className="rdp-tool"
       style={{
-        color: opts?.danger ? '#f87171' : opts?.active ? 'var(--accent)' : 'var(--muted)',
+        color: opts?.danger ? 'var(--danger-fg)' : opts?.active ? 'var(--accent)' : 'var(--muted)',
         opacity: opts?.disabled ? 0.4 : 1,
         cursor: opts?.disabled ? 'default' : 'pointer',
       }}
@@ -1029,7 +1029,7 @@ export default function RdpClient(props: RdpClientProps) {
     <div ref={frameRef} style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000' }}>
       <style>{`
         .rdp-tool { display:inline-flex; align-items:center; justify-content:center; width:32px; height:28px; border-radius:8px; background:transparent; border:1px solid transparent; transition:background .15s ease, color .15s ease; }
-        .rdp-tool:hover:not(:disabled) { background:rgba(255,255,255,.08); }
+        .rdp-tool:hover:not(:disabled) { background:var(--hover); }
         @keyframes rdp-spin { to { transform: rotate(360deg); } }
         .rdp-spin { animation: rdp-spin 1s linear infinite; }
         .rdp-bar { opacity:.4; transition:opacity .2s ease; }
@@ -1062,7 +1062,7 @@ export default function RdpClient(props: RdpClientProps) {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 10,
-              color: '#e7e9ee',
+              color: 'var(--text)',
               pointerEvents: 'none',
             }}
           >
@@ -1085,7 +1085,7 @@ export default function RdpClient(props: RdpClientProps) {
               borderRadius: 10,
               background: 'rgba(5,7,10,.92)',
               border: '1px solid rgba(255,255,255,.14)',
-              color: '#e7e9ee',
+              color: 'var(--text)',
               fontSize: 13,
               textAlign: 'center',
               boxShadow: '0 8px 30px -10px rgba(0,0,0,.7)',
@@ -1109,8 +1109,8 @@ export default function RdpClient(props: RdpClientProps) {
               padding: '8px 13px',
               borderRadius: 10,
               background: 'rgba(5,7,10,.88)',
-              border: '1px solid rgba(255,255,255,.12)',
-              color: '#e7e9ee',
+              border: '1px solid var(--hover-2)',
+              color: 'var(--text)',
               fontSize: 12.5,
               maxWidth: '60%',
             }}
@@ -1118,7 +1118,7 @@ export default function RdpClient(props: RdpClientProps) {
             {transfer.dir === 'up' ? (
               <Upload size={14} style={{ color: 'var(--accent)' }} />
             ) : (
-              <Download size={14} style={{ color: '#10b981' }} />
+              <Download size={14} style={{ color: 'var(--success)' }} />
             )}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
               {transfer.label}
@@ -1138,8 +1138,8 @@ export default function RdpClient(props: RdpClientProps) {
         )}
         {phase === 'error' && (
           <div style={overlayStyle}>
-            <AlertTriangle size={30} style={{ color: '#f87171' }} />
-            <div style={{ marginTop: 12, fontSize: 16, fontWeight: 640, color: '#e7e9ee' }}>{t('connectFailed')}</div>
+            <AlertTriangle size={30} style={{ color: 'var(--danger-fg)' }} />
+            <div style={{ marginTop: 12, fontSize: 16, fontWeight: 640, color: 'var(--text)' }}>{t('connectFailed')}</div>
             {errMsg && (
               <div style={{ marginTop: 6, fontSize: 12.5, maxWidth: 460, color: 'var(--muted)', wordBreak: 'break-word' }}>
                 {errMsg}
@@ -1153,7 +1153,7 @@ export default function RdpClient(props: RdpClientProps) {
         {phase === 'closed' && (
           <div style={overlayStyle}>
             <Power size={28} style={{ color: 'var(--muted)' }} />
-            <div style={{ marginTop: 12, fontSize: 16, fontWeight: 640, color: '#e7e9ee' }}>{t('sessionEnded')}</div>
+            <div style={{ marginTop: 12, fontSize: 16, fontWeight: 640, color: 'var(--text)' }}>{t('sessionEnded')}</div>
             {errMsg && <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--muted)' }}>{errMsg}</div>}
             <button className="btn" style={{ marginTop: 18 }} onClick={exit}>
               <RefreshCw size={15} style={{ marginRight: 6 }} /> {t('reconnect')}
@@ -1205,8 +1205,8 @@ export default function RdpClient(props: RdpClientProps) {
             t('uploadFiles'),
             <Upload size={15} />,
           )}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: '#e7e9ee', maxWidth: 240, paddingLeft: liveControls ? 0 : 7 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: liveControls ? '#10b981' : phase === 'error' ? '#f87171' : 'var(--accent)' }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', maxWidth: 240, paddingLeft: liveControls ? 0 : 7 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: liveControls ? 'var(--success)' : phase === 'error' ? 'var(--danger-fg)' : 'var(--accent)' }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{props.serverName}</span>
         </span>
         {liveControls && canUpload &&

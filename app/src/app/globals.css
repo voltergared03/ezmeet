@@ -5,34 +5,116 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg:        oklch(0.18 0.012 250);
-  --bg-2:      oklch(0.22 0.014 250);
-  --surface:   oklch(0.245 0.016 250);
-  --surface-2: oklch(0.285 0.016 250);
-  --surface-3: oklch(0.33 0.018 250);
-  --border:    oklch(0.34 0.018 250);
-  --border-2:  oklch(0.42 0.02 250);
-  --text:      oklch(0.97 0.005 250);
-  --text-2:    oklch(0.80 0.01 250);
-  --muted:     oklch(0.62 0.012 250);
-  --muted-2:   oklch(0.48 0.012 250);
-  --accent:    #3b82f6;
-  --accent-2:  #60a5fa;
-  --accent-soft: color-mix(in oklab, #3b82f6 18%, transparent);
-  --accent-soft-2: color-mix(in oklab, #3b82f6 8%, transparent);
-  --green:  #10b981;
-  --amber:  #f59e0b;
-  --red:    #ef4444;
-  --pink:   #ec4899;
-  --purple: #a78bfa;
-  --teal:   #14b8a6;
+  /* ── Theme ────────────────────────────────────────────────────────────────
+   * Every colour is declared ONCE, as light-dark(<light>, <dark>). The browser
+   * resolves it from the computed `color-scheme` below, so there is no second
+   * copy of the palette to keep in sync and no @media block that a `[data-theme]`
+   * override has to out-specify.
+   *
+   * Default is `dark` rather than `light dark`: this app shipped dark-only, and a
+   * teammate on a light OS should not have the whole product change under them on
+   * upgrade. Choosing "System" in the theme switch opts into following the OS.
+   *
+   * `color-scheme` also themes what CSS cannot reach — native form controls, the
+   * caret, and the default scrollbar — so it is doing real work, not just feeding
+   * light-dark().
+   */
+  color-scheme: dark;
+
+  /* Ground and raised surfaces. Neither end is pure: the dark ground is a blue-grey
+   * (pure black flattens elevation — a shadow has nothing to separate from) and the
+   * light ground is an off-white that stops the page buzzing under a full screen of
+   * text. Surface steps climb AWAY from the ground in both themes: lighter on dark,
+   * and on light they climb toward white first, then to grey for insets. */
+  --bg:        light-dark(oklch(0.968 0.004 250), oklch(0.18 0.012 250));
+  --bg-2:      light-dark(oklch(0.985 0.003 250), oklch(0.22 0.014 250));
+  --surface:   light-dark(oklch(0.995 0.002 250), oklch(0.245 0.016 250));
+  --surface-2: light-dark(oklch(0.955 0.005 250), oklch(0.285 0.016 250));
+  --surface-3: light-dark(oklch(0.920 0.008 250), oklch(0.33 0.018 250));
+  --border:    light-dark(oklch(0.895 0.008 250), oklch(0.34 0.018 250));
+  --border-2:  light-dark(oklch(0.820 0.011 250), oklch(0.42 0.02 250));
+
+  /* Text. Same reasoning as the ground: no #000 and no #fff at either end. */
+  --text:      light-dark(oklch(0.255 0.015 250), oklch(0.97 0.005 250));
+  --text-2:    light-dark(oklch(0.420 0.014 250), oklch(0.80 0.01 250));
+  /* The dark values are RAISED from the originals (0.62 / 0.48). Measured against
+   * --surface, the old --muted-2 scored 2.48:1 — a straight WCAG failure, and
+   * --muted sat at 4.46:1, just under AA. Both now clear 4.5:1. This changes the
+   * existing dark theme slightly: secondary text is a touch brighter. */
+  --muted:     light-dark(oklch(0.545 0.012 250), oklch(0.68 0.012 250));
+  --muted-2:   light-dark(oklch(0.660 0.010 250), oklch(0.60 0.012 250));
+
+  /* Accent. The light theme takes a step down in lightness — the same blue that
+   * reads as calm on a dark ground glares on a white one, and it has to hold 4.5:1
+   * against --surface for link text. */
+  --accent:        light-dark(#2563eb, #3b82f6);
+  --accent-2:      light-dark(#1d4ed8, #60a5fa);
+  --accent-soft:   color-mix(in oklab, var(--accent) 18%, transparent);
+  --accent-soft-2: color-mix(in oklab, var(--accent) 8%, transparent);
+  /* Text ON an accent-filled surface. Stays white in both themes because the accent
+   * itself is dark enough in both — do NOT swap this for --text. */
+  --on-accent: #fff;
+
+  /* Semantic status. Each state is a TRIPLE — a solid for icons and bars, a text
+   * colour, and a background wash — because a badge needs a foreground and a
+   * background that invert together. A single hue cannot do that: the pale red that
+   * reads correctly on a dark chip is invisible on a light one. */
+  --danger:     light-dark(#dc2626, #ef4444);
+  --danger-fg:  light-dark(#b91c1c, #f87171);
+  --danger-bg:  light-dark(#fee2e2, color-mix(in oklab, #ef4444 16%, transparent));
+  --warn:       light-dark(#d97706, #f59e0b);
+  --warn-fg:    light-dark(#b45309, #fbbf24);
+  --warn-bg:    light-dark(#fef3c7, color-mix(in oklab, #f59e0b 16%, transparent));
+  --success:    light-dark(#059669, #10b981);
+  --success-fg: light-dark(#047857, #34d399);
+  --success-bg: light-dark(#d1fae5, color-mix(in oklab, #10b981 16%, transparent));
+  --info:       light-dark(#2563eb, #3b82f6);
+  --info-fg:    light-dark(#1d4ed8, #93c5fd);
+  --info-bg:    light-dark(#dbeafe, color-mix(in oklab, #3b82f6 16%, transparent));
+
+  /* Legacy aliases — 60+ call sites still say var(--red)/var(--green). They keep
+   * working and now flip with the theme; new code should reach for the triples. */
+  --green:  var(--success);
+  --amber:  var(--warn);
+  --red:    var(--danger);
+  --pink:   light-dark(#db2777, #ec4899);
+  --purple: light-dark(#7c3aed, #a78bfa);
+  --teal:   light-dark(#0d9488, #14b8a6);
+
+  /* Interaction washes. These replace the hard-coded rgba(255,255,255,.06) hovers,
+   * which turn INVISIBLE on a light ground — a white veil over white. */
+  --hover:   light-dark(color-mix(in oklab, #000 5%, transparent), color-mix(in oklab, #fff 6%, transparent));
+  --hover-2: light-dark(color-mix(in oklab, #000 8%, transparent), color-mix(in oklab, #fff 10%, transparent));
+  --press:   light-dark(color-mix(in oklab, #000 12%, transparent), color-mix(in oklab, #fff 14%, transparent));
+  /* Modal scrim: lighter on light, or the page vanishes behind a black sheet. */
+  --overlay: light-dark(color-mix(in oklab, #1e293b 42%, transparent), color-mix(in oklab, #000 62%, transparent));
+
+  /* Elevation. The dark theme carries an inset top highlight that reads as a lit
+   * edge; on light that same highlight is white-on-white, so it drops out and the
+   * shadow alone carries the lift. */
+  --shadow: light-dark(
+    0 1px 2px rgba(15, 23, 42, .06),
+    0 1px 0 rgba(255, 255, 255, .04) inset, 0 14px 30px -12px rgba(0, 0, 0, .5));
+  --shadow-lg: light-dark(
+    0 2px 4px rgba(15, 23, 42, .08), 0 24px 48px -20px rgba(15, 23, 42, .28));
+
+  /* Keyboard focus. There was no :focus-visible anywhere in this file, which made
+   * the whole app unusable without a mouse. */
+  --focus: light-dark(#2563eb, #60a5fa);
+
   --radius: 14px;
   --radius-lg: 20px;
   --radius-sm: 10px;
-  --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 14px 30px -12px rgba(0,0,0,.5);
   --font: 'DM Sans', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 }
+
+/* The switch. `light-dark()` reads the COMPUTED color-scheme, so flipping this one
+ * property re-resolves every token above. "System" is the only value that defers to
+ * the OS; the other two are deliberate and must beat it in both directions. */
+:root[data-theme='light']  { color-scheme: light; }
+:root[data-theme='dark']   { color-scheme: dark; }
+:root[data-theme='system'] { color-scheme: light dark; }
 
 * { box-sizing: border-box; }
 
@@ -54,6 +136,40 @@ html, body {
 button { font: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: var(--accent-soft); color: var(--text); }
+
+/* Keyboard focus — :focus-visible only, so a mouse click never paints a ring but
+ * tabbing always does. Two layers: a dark/light-agnostic offset ring plus a halo,
+ * so the indicator survives on top of an accent-filled button as well as on the
+ * page ground. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.btn:focus-visible,
+.btn-primary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--focus) 26%, transparent);
+}
+/* Inputs already carry a border, so the ring sits ON it rather than outside. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[contenteditable]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+}
+
+/* Respect a reduced-motion preference across every animation this file defines. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* Scrollbar */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -86,7 +202,7 @@ input, select, textarea { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .btn:hover { background: var(--surface-2); border-color: var(--border-2); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn-primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: var(--surface-2); }

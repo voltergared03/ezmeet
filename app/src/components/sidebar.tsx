@@ -91,7 +91,7 @@ export function Sidebar({ workspaceName }: { workspaceName?: string }) {
             {it.id === '/tasks' && pendingQuiz > 0 && (
               <span style={{
                 minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
-                background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700,
+                background: 'var(--accent)', color: 'var(--on-accent)', fontSize: 11, fontWeight: 700,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               }}>{pendingQuiz}</span>
             )}

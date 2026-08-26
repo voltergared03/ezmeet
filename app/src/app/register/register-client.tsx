@@ -77,7 +77,7 @@ export function RegisterClient({ wsName }: { wsName: string }) {
                   onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
                 <input className="field" type="password" autoComplete="new-password" placeholder={t('auth.passwordMinPlaceholder')} value={password}
                   onChange={(e) => setPassword(e.target.value)} />
-                {err && <div style={{ fontSize: 12.5, color: 'var(--red, #ef4444)', marginTop: 10 }}>{err}</div>}
+                {err && <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>}
                 <button type="submit" className="btn btn-primary" disabled={busy || !email.trim() || !password}
                   style={{ width: '100%', justifyContent: 'center', padding: '13px 16px', fontWeight: 600, marginTop: 16, gap: 8 }}>
                   {busy ? <Loader2 size={16} className="spin" /> : <UserPlus size={15} />} {t('auth.submitRequest')}

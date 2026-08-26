@@ -62,7 +62,7 @@ export function RowContextMenu({
     <div
       ref={ref}
       onContextMenu={(e) => e.preventDefault()}
-      style={{ position: 'fixed', left: pos.left, top: pos.top, width: MENU_W, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,.55)', padding: 5, zIndex: 3000 }}
+      style={{ position: 'fixed', left: pos.left, top: pos.top, width: MENU_W, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 16px 48px var(--overlay)', padding: 5, zIndex: 3000 }}
     >
       <InsertRow icon={<ArrowUp size={16} />} labelBefore={t('insertRecord')} labelAfter={t('directionAbove')} count={aboveN} setCount={setAboveN} onRun={() => { onInsert('above', aboveN); onClose(); }} />
       <InsertRow icon={<ArrowDown size={16} />} labelBefore={t('insertRecord')} labelAfter={t('directionBelow')} count={belowN} setCount={setBelowN} onRun={() => { onInsert('below', belowN); onClose(); }} />
@@ -111,8 +111,8 @@ function Item({ icon, label, onClick, danger }: { icon: ReactNode; label: string
   return (
     <button
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: danger ? 'var(--red, #ef4444)' : 'var(--text)', cursor: 'pointer', fontSize: 13.5, textAlign: 'left' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? 'color-mix(in oklab, var(--red, #ef4444) 12%, transparent)' : 'var(--surface-2)')}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: 'pointer', fontSize: 13.5, textAlign: 'left' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? 'color-mix(in oklab, var(--red, var(--danger)) 12%, transparent)' : 'var(--surface-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <span style={{ display: 'flex', color: danger ? 'inherit' : 'var(--muted)', flexShrink: 0 }}>{icon}</span>

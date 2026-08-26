@@ -40,7 +40,7 @@ const fabItem: CSSProperties = {
   fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
 };
 const fabItemIcon = (bg: string): CSSProperties => ({
-  width: 36, height: 36, borderRadius: '50%', background: bg, color: '#fff',
+  width: 36, height: 36, borderRadius: '50%', background: bg, color: 'var(--on-accent)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
 });
 
@@ -153,7 +153,7 @@ export function MobileNav() {
           </Link>
           <Link href="/schedule" onClick={() => setCompose(false)} style={fabItem}>
             <span>{tr('dashboard.scheduleMeeting')}</span>
-            <span style={fabItemIcon('var(--green, #10b981)')}><Plus size={18} /></span>
+            <span style={fabItemIcon('var(--green, var(--success))')}><Plus size={18} /></span>
           </Link>
         </div>
       )}

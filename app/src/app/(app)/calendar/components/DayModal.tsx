@@ -39,7 +39,7 @@ export function DayModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0,0,0,.55)',
+        background: 'var(--overlay)',
         backdropFilter: 'blur(4px)',
       }}
       onClick={onClose}

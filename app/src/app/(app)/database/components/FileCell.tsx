@@ -103,7 +103,7 @@ export function FileCell({
           {busy ? <Spinner size={13} /> : <Paperclip size={13} />}
         </button>
       )}
-      {err && <span style={{ fontSize: 11, color: 'var(--red, #ef4444)', flexShrink: 0 }} title={t('fileTooLarge')}>!</span>}
+      {err && <span style={{ fontSize: 11, color: 'var(--red, var(--danger))', flexShrink: 0 }} title={t('fileTooLarge')}>!</span>}
 
       <input
         ref={inputRef}
@@ -132,14 +132,14 @@ function Lightbox({ file, url, downloadLabel, onClose }: { file: FileRef; url: s
     >
       <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: '92vw' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={file.name} style={{ maxWidth: '92vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 24px 70px rgba(0,0,0,.6)' }} />
+        <img src={url} alt={file.name} style={{ maxWidth: '92vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 24px 70px var(--overlay)' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ color: '#fff', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+          <span style={{ color: 'var(--on-accent)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
           <a
             href={url}
             download={file.name}
             onClick={(e) => e.stopPropagation()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#fff', fontSize: 13, textDecoration: 'none', background: 'rgba(255,255,255,.16)', padding: '6px 12px', borderRadius: 8, flexShrink: 0 }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--on-accent)', fontSize: 13, textDecoration: 'none', background: 'rgba(255,255,255,.16)', padding: '6px 12px', borderRadius: 8, flexShrink: 0 }}
           >
             <Download size={14} /> {downloadLabel}
           </a>
@@ -148,7 +148,7 @@ function Lightbox({ file, url, downloadLabel, onClose }: { file: FileRef; url: s
       <button
         onClick={onClose}
         aria-label="Close"
-        style={{ position: 'fixed', top: 20, right: 20, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.16)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{ position: 'fixed', top: 20, right: 20, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.16)', color: 'var(--on-accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
         <X size={18} />
       </button>

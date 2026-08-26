@@ -111,7 +111,7 @@ export function GridToolbar({
 
   const pill: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 17, height: 17,
-    padding: '0 5px', borderRadius: 9, background: 'var(--accent)', color: '#fff', fontSize: 10.5, fontWeight: 700,
+    padding: '0 5px', borderRadius: 9, background: 'var(--accent)', color: 'var(--on-accent)', fontSize: 10.5, fontWeight: 700,
   };
   const activeBtn = (on: boolean): CSSProperties =>
     on ? { background: 'color-mix(in oklab, var(--accent) 14%, transparent)', borderColor: 'var(--accent)', color: 'var(--text)' } : {};

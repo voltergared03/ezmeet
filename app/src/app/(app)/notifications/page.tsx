@@ -27,11 +27,11 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  meeting_starting: '#3b82f6',
-  task_assigned: '#f59e0b',
-  report_ready: '#10b981',
-  action_item: '#a78bfa',
-  mention: '#ec4899',
+  meeting_starting: 'var(--accent)',
+  task_assigned: 'var(--warn)',
+  report_ready: 'var(--success)',
+  action_item: 'var(--purple)',
+  mention: 'var(--pink)',
 };
 
 function timeAgo(dateStr: string, t: ReturnType<typeof useTranslations>, locale: string): string {
@@ -123,7 +123,7 @@ export default function NotificationsPage() {
             <span style={{
               marginLeft: 10, fontSize: 13, fontWeight: 600,
               padding: '3px 9px', borderRadius: 99,
-              background: 'rgba(239,68,68,.15)', color: '#fca5a5',
+              background: 'rgba(239,68,68,.15)', color: 'var(--danger-fg)',
               verticalAlign: 'middle',
             }}>{unreadCount}</span>
           )}
@@ -159,7 +159,7 @@ export default function NotificationsPage() {
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {notifications.map((notif, idx) => {
             const Icon = TYPE_ICONS[notif.type] || Bell;
-            const color = TYPE_COLORS[notif.type] || '#3b82f6';
+            const color = TYPE_COLORS[notif.type] || 'var(--accent)';
 
             return (
               <div
@@ -199,7 +199,7 @@ export default function NotificationsPage() {
                 {!notif.read && (
                   <div style={{
                     width: 8, height: 8, borderRadius: '50%',
-                    background: '#3b82f6', flexShrink: 0, marginTop: 6,
+                    background: 'var(--accent)', flexShrink: 0, marginTop: 6,
                   }} />
                 )}
                 <button
