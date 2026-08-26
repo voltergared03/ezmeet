@@ -103,6 +103,16 @@ export default function ArchivePage() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
+  const myId = session?.user?.id;
+  // GET /api/meetings already restricts a non-admin to meetings they created or took
+  // part in, so for them "Mine" and "All" are the same list by construction. Offering
+  // a filter that provably cannot change anything is its own small lie, so only the
+  // admins — who really do see everyone's meetings — get the tab.
+  const tabs = useMemo(() => FILTER_TABS.filter((t) => t.key !== 'my' || isAdmin), [isAdmin]);
+  // The JWT refreshes the role from the database on every request, so an admin can be
+  // demoted mid-session. Without this they would keep a filter whose tab has just
+  // vanished, with no control left to turn it off.
+  const activeFilter: FilterTab = tabs.some((t) => t.key === filter) ? filter : 'all';
   const isMobile = useIsMobile();
   const t = useTranslations();
   const locale = useLocale();
@@ -191,12 +201,20 @@ export default function ArchivePage() {
       list = list.filter((m) => m.title.toLowerCase().includes(q));
     }
 
-    if (filter === 'recurring') {
+    if (activeFilter === 'recurring') {
       list = list.filter((m) => m.recurrence);
     }
 
+    // "My meetings" was declared in FILTER_TABS and handled nowhere, so the tab
+    // highlighted and the list did not change. Mine = I called it, or I was on it.
+    if (activeFilter === 'my' && myId) {
+      list = list.filter(
+        (m) => m.createdBy?.id === myId || m.participants.some((p) => p.user?.id === myId),
+      );
+    }
+
     return list;
-  }, [meetings, search, filter]);
+  }, [meetings, search, activeFilter, myId]);
 
   const groups = useMemo(() => groupByDay(filtered, locale, tz), [filtered, locale, tz]);
 
@@ -281,21 +299,21 @@ export default function ArchivePage() {
               gap: 2,
             }}
           >
-            {FILTER_TABS.map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setFilter(tab.key)}
                 style={{
                   padding: '6px 14px',
                   fontSize: 13,
-                  fontWeight: filter === tab.key ? 600 : 400,
+                  fontWeight: activeFilter === tab.key ? 600 : 400,
                   borderRadius: 8,
                   border: 'none',
                   cursor: 'pointer',
                   transition: 'all .15s',
-                  background: filter === tab.key ? 'var(--surface-2)' : 'transparent',
-                  color: filter === tab.key ? 'var(--text)' : 'var(--muted)',
-                  boxShadow: filter === tab.key ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
+                  background: activeFilter === tab.key ? 'var(--surface-2)' : 'transparent',
+                  color: activeFilter === tab.key ? 'var(--text)' : 'var(--muted)',
+                  boxShadow: activeFilter === tab.key ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
                 }}
               >
                 {t(tab.labelKey)}
