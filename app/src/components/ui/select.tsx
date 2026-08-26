@@ -4,16 +4,23 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { ChevronDown, Check } from 'lucide-react';
+import { nextIndex, isNavKey, type ListOption } from '@/lib/listbox';
 
-export interface SelectOption {
-  value: string;
-  label: string;
-}
+/** One option type across every option-list primitive — Select, Combobox,
+ *  RadioGroup, CheckboxGroup — so a list can be handed to any of them unchanged.
+ *  Kept as an alias because ~20 call sites already import SelectOption by name. */
+export type SelectOption = ListOption;
 
 /**
  * Themed custom <select> replacement. Native selects can't be styled when open
  * on macOS — this renders a styled dropdown via portal (escapes overflow/clipping),
  * with click-outside + scroll close and flip-up when low on space.
+ *
+ * Keyboard support is NOT optional here. Replacing a native <select> with buttons
+ * silently throws away everything the browser gave us — arrows, Home/End, Enter,
+ * Escape — and this component is used on every settings tab, so without it those
+ * pages simply cannot be completed without a mouse. Navigation logic lives in
+ * lib/listbox, where it is tested; this file only wires keys to it.
  */
 export function Select({
   value,
@@ -37,6 +44,7 @@ export function Select({
   const t = useTranslations('common');
   const ph = placeholder ?? t('select');
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1); // keyboard cursor; -1 = none yet
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; width: number; openUp: boolean } | null>(null);
@@ -78,9 +86,40 @@ export function Select({
       const estH = Math.min(options.length * 38 + 8, 280);
       const openUp = window.innerHeight - r.bottom < estH + 8 && r.top > estH;
       setPos({ left: r.left, top: openUp ? r.top : r.bottom, width: r.width, openUp });
+      // Open with the cursor already on the current value, so the first arrow press
+      // steps away from where you are rather than jumping to the top of the list.
+      setActive(options.findIndex((o) => o.value === value));
     }
     setOpen((o) => !o);
   };
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (disabled) return;
+    if (!open) {
+      // Space/Enter/arrows all open, matching a native select.
+      if (isNavKey(e.key) || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      return;
+    }
+    if (isNavKey(e.key)) {
+      e.preventDefault();
+      setActive((i) => nextIndex(options, i, e.key as 'ArrowDown'));
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const pick = options[active];
+      if (pick && !pick.disabled) { onChange(pick.value); setOpen(false); }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false); // revert: the previous value stands
+    } else if (e.key === 'Tab') {
+      setOpen(false);
+    }
+  }
+
+  // Keep the keyboard cursor visible in a list taller than the panel.
+  useEffect(() => {
+    if (!open || active < 0) return;
+    panelRef.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [active, open]);
 
   return (
     <>
@@ -88,7 +127,11 @@ export function Select({
         type="button"
         ref={btnRef}
         onClick={toggle}
+        onKeyDown={onKeyDown}
         disabled={disabled}
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={`field ${className || ''}`}
         style={{
           display: 'flex',
@@ -135,21 +178,27 @@ export function Select({
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 10,
-            boxShadow: '0 12px 40px var(--overlay)',
+            boxShadow: 'var(--shadow-lg)',
             padding: 4,
             zIndex: 2000,
             maxHeight: 280,
             overflowY: 'auto',
             animation: 'fadeIn .12s ease',
           }}
+          role="listbox"
         >
-          {options.map((o) => {
+          {options.map((o, i) => {
             const sel = o.value === value;
+            const act = i === active;
             return (
               <button
                 key={o.value}
                 type="button"
+                role="option"
+                aria-selected={sel}
+                data-i={i}
                 onClick={() => { onChange(o.value); setOpen(false); }}
+                onMouseEnter={() => setActive(i)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -159,14 +208,12 @@ export function Select({
                   padding: '8px 10px',
                   border: 'none',
                   borderRadius: 7,
-                  background: sel ? 'color-mix(in oklab, var(--accent) 16%, transparent)' : 'transparent',
+                  background: act ? 'var(--hover-2)' : sel ? 'var(--accent-soft)' : 'transparent',
                   color: sel ? 'var(--text)' : 'var(--text-2)',
                   cursor: 'pointer',
                   fontSize: 13,
                   textAlign: 'left',
                 }}
-                onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = 'var(--surface-2)'; }}
-                onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.label}</span>
                 {sel && <Check size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />}

@@ -1,5 +1,7 @@
 'use client';
 
+import { Field } from '@/components/ui/field';
+
 /* ── Shared UI ────────────────────────────────── */
 
 export function Toggle({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -17,22 +19,30 @@ export function Toggle({ label, value, onChange, disabled }: { label: string; va
       }}>
         <span style={{
           position: 'absolute', top: 3, left: value ? 19 : 3,
-          width: 16, height: 16, borderRadius: '50%', background: '#fff',
-          transition: 'left 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,.3)',
+          width: 16, height: 16, borderRadius: '50%', background: 'var(--on-accent)',
+          transition: 'left 0.15s', boxShadow: 'var(--shadow)',
         }} />
       </button>
     </label>
   );
 }
 
-export function FieldWrapper({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="field-label">{label}</label>
-      {children}
-      {hint ? <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 5, lineHeight: 1.45 }}>{hint}</div> : null}
-    </div>
-  );
+/**
+ * Kept as a name so the ~12 files importing it here do not all have to change at
+ * once, but it is now the shared <Field> underneath — which means every one of those
+ * call sites can pass `error` and get an inline, screen-reader-announced message
+ * without any further migration. New code should import Field directly.
+ */
+export function FieldWrapper({
+  label, hint, error, required, children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string | null;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return <Field label={label} hint={hint} error={error} required={required}>{children}</Field>;
 }
 
 export function StatBox({ label, value }: { label: string; value: string }) {

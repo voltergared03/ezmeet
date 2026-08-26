@@ -275,6 +275,22 @@ textarea:focus-visible,
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
 }
 
+/* Invalid state. Applied by <Field> to the WRAPPER rather than the control, so it
+ * reaches whatever is inside — a bare input, the custom Select's button, a combobox —
+ * without every one of them needing to know about validation. Colour is not the only
+ * signal: <Field> also renders an icon and text, because a red border alone is
+ * invisible to the ~8% of men with a red-green deficiency. */
+.field-invalid-wrap > .field,
+.field-invalid-wrap > * > .field,
+.field-invalid-wrap input.field {
+  border-color: var(--danger);
+}
+.field-invalid-wrap > .field:focus,
+.field-invalid-wrap input.field:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
+}
+
 /* Native date/time inputs: iOS renders these with an oversized value font and a
    stubborn intrinsic min-width, so they look huge and overflow their box. Force
    them to behave like normal fields (match font size, allow shrinking, stay
@@ -375,6 +391,25 @@ select.field option:checked {
   animation: bgPathFlow var(--bp-dur, 24s) linear var(--bp-delay, 0s) infinite;
 }
 @media (prefers-reduced-motion: reduce) { .login-bg-path { animation: none; } }
+
+/* Skeleton shimmer. A moving highlight over a flat base, so the block reads as
+ * "loading" rather than as an empty grey box someone forgot to fill. The keyframes
+ * are neutralised by the prefers-reduced-motion block above. */
+.skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-3) 40%,
+    var(--surface-2) 80%
+  );
+  background-size: 240% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeletonShimmer {
+  0%   { background-position: 140% 0; }
+  100% { background-position: -40% 0; }
+}
 
 .fade-in { animation: fadeIn 0.3s ease; }
 .spin { animation: spin 0.8s linear infinite; }

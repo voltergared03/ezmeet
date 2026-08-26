@@ -29,7 +29,8 @@
     "done": "Done",
     "retry": "Retry",
     "loadError": "Couldn't load.",
-    "saveFailed": "Couldn't save — try again."
+    "saveFailed": "Couldn't save — try again.",
+    "noResults": "No results"
   },
   "nav": {
     "home": "Home",
