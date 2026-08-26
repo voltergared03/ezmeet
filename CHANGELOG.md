@@ -4,6 +4,34 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.8] — 2026-08-26
+
+### Fixed
+- **A meeting recording was lost mid-call, and nothing said so.** A 52-minute meeting kept
+  only its first four minutes: the recorder was shut down by its own CPU guard because the
+  configuration under-declared what recording actually costs, and a job that outgrows the
+  budget it declared gets killed. The budget now matches reality, with room to spare.
+  This does not recover the lost file, but it stops the same thing happening again.
+- **A failed recording is now visible.** The meeting page showed nothing at all — exactly
+  what it shows for a meeting nobody recorded — so the loss above went unnoticed for hours
+  by the person who went looking for it. A failure now says so on the meeting page, and
+  says plainly that the transcript and the report are complete and unaffected, because
+  that is the first thing anyone wants to know. The meeting's organiser and the admins are
+  notified as well, rather than finding out by accident. A recording still being assembled
+  now says so too, instead of looking like a failure.
+- **Buttons that did nothing.** Creating a meeting could fail with no message whatsoever —
+  the button stopped spinning and the page simply stayed put, which is indistinguishable
+  from a broken button. Saving a meeting edited in the calendar did the same when the
+  title was empty. Both now say what happened, and a rejected save shows the reason
+  instead of discarding it.
+- **Meeting form errors are now attached to their field.** The date and time messages were
+  printed next to the input rather than connected to it, so screen readers announced them
+  as loose text belonging to nothing.
+- **Unreadable badges on the light theme.** Status badges — "Google SSO", the pending-request
+  count, the department lead crown, the language tags — were pale text on a pale tint, close
+  to invisible on a white card. They were built for the dark theme only; each now has a
+  light and a dark form that flip together.
+
 ## [1.25.0-beta.7] — 2026-08-26
 
 Forms now explain themselves. Second half of the interface rework.
