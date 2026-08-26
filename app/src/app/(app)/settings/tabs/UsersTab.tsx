@@ -228,7 +228,7 @@ export function UsersTab() {
         <div className="card" style={{ padding: '16px 18px', marginBottom: 16, borderColor: 'color-mix(in oklab, var(--amber) 30%, var(--border))' }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
             {t('settings.registrationRequests')}
-            <span className="chip" style={{ background: 'color-mix(in oklab, var(--amber) 18%, transparent)', color: '#fde68a' }}>{requests.length}</span>
+            <span className="chip" style={{ background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}>{requests.length}</span>
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
             {requests.map((r) => {

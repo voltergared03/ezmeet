@@ -243,19 +243,25 @@ textarea:focus-visible,
   text-transform: uppercase;
   line-height: 1.2;
 }
+/* Text colours come from the semantic pairs, not from fixed pale values. An 18%
+ * wash over a dark ground is dark and takes pale text; the SAME wash over a white
+ * card is almost white, and pale text on it is unreadable — which is exactly how
+ * these badges looked when the light theme landed. --warn-fg and friends flip with
+ * the theme, so one rule now serves both. --purple has no pair, so it is mixed
+ * against the text colour, which is dark on light and light on dark. */
 .lang-ua {
-  background: color-mix(in oklab, var(--amber) 18%, transparent);
-  color: #fde68a;
-  border: 1px solid color-mix(in oklab, var(--amber) 35%, transparent);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border: 1px solid color-mix(in oklab, var(--warn) 35%, transparent);
 }
 .lang-en {
-  background: color-mix(in oklab, var(--green) 18%, transparent);
-  color: #a7f3d0;
-  border: 1px solid color-mix(in oklab, var(--green) 35%, transparent);
+  background: var(--success-bg);
+  color: var(--success-fg);
+  border: 1px solid color-mix(in oklab, var(--success) 35%, transparent);
 }
 .lang-ru {
   background: color-mix(in oklab, var(--purple) 18%, transparent);
-  color: #ddd6fe;
+  color: color-mix(in oklab, var(--purple) 55%, var(--text));
   border: 1px solid color-mix(in oklab, var(--purple) 35%, transparent);
 }
 
@@ -332,7 +338,7 @@ select.field option {
 }
 select.field option:checked {
   background: color-mix(in oklab, var(--accent) 30%, var(--surface));
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .field-label {
@@ -353,7 +359,7 @@ select.field option:checked {
   background: var(--surface-2);
   font-weight: 600;
   flex-shrink: 0;
-  color: #fff;
+  color: var(--on-accent);
   letter-spacing: 0.01em;
 }
 .avatar-sm { width: 24px; height: 24px; font-size: 10.5px; }
@@ -558,7 +564,7 @@ select.field option:checked {
   border-radius: 11px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: 1px solid var(--accent);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
@@ -749,7 +755,7 @@ select.field option:checked {
   padding: 0 4px;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 9.5px;
   font-weight: 700;
   display: flex;
@@ -774,7 +780,7 @@ select.field option:checked {
   height: 52px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;

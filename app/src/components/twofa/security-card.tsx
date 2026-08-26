@@ -48,7 +48,7 @@ export function TwoFactorSecurity({ enabled: initialEnabled }: { enabled: boolea
           <div style={{ fontSize: 13.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
             {t('twofa.twoFactorAuth')}
             {enabled ? (
-              <span className="chip" style={{ background: 'color-mix(in oklab, var(--green) 14%, transparent)', color: '#a7f3d0', borderColor: 'color-mix(in oklab, var(--green) 30%, transparent)' }}>
+              <span className="chip" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)', borderColor: 'color-mix(in oklab, var(--green) 30%, transparent)' }}>
                 <ShieldCheck size={11} /> {t('twofa.statusEnabled')}
               </span>
             ) : (

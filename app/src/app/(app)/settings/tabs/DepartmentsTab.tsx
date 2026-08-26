@@ -226,7 +226,7 @@ export function DepartmentsTab() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
                     {clickupOn && !d.clickupListId && (
                       <span className="chip" title={t('departments.clickupUnmappedHint')}
-                        style={{ background: 'color-mix(in oklab, var(--amber) 18%, transparent)', color: '#fde68a' }}>
+                        style={{ background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}>
                         <AlertTriangle size={10} /> {t('departments.clickupUnmapped')}
                       </span>
                     )}
@@ -289,7 +289,7 @@ export function DepartmentsTab() {
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.email}</span>
-                                {m.isLead && <span className="chip" style={{ background: 'color-mix(in oklab, var(--amber) 18%, transparent)', color: '#fde68a' }}><Crown size={10} /> {t('departments.lead')}</span>}
+                                {m.isLead && <span className="chip" style={{ background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}><Crown size={10} /> {t('departments.lead')}</span>}
                               </div>
                             </div>
                             <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28, color: m.isLead ? 'var(--amber)' : 'var(--muted)' }}

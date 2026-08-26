@@ -85,7 +85,7 @@ function GoogleCalendarCard() {
               background: 'color-mix(in oklab, var(--red) 14%, transparent)', color: 'var(--danger-fg)',
               borderColor: 'color-mix(in oklab, var(--red) 30%, transparent)',
             } : {
-              background: 'color-mix(in oklab, var(--green) 14%, transparent)', color: '#a7f3d0',
+              background: 'var(--success-bg)', color: 'var(--success-fg)',
               borderColor: 'color-mix(in oklab, var(--green) 30%, transparent)',
             }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: broken ? 'var(--red)' : 'var(--green)' }} />
@@ -222,7 +222,7 @@ export function ProfileTab({ session: sess, updateSession }: { session: any; upd
             <div style={{ fontWeight: 600, fontSize: 16 }}>{user?.name ?? 'User'}</div>
             <div className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.email}</div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
-              <span className="chip" style={{ background: 'color-mix(in oklab, var(--green) 14%, transparent)', color: '#a7f3d0', borderColor: 'color-mix(in oklab, var(--green) 30%, transparent)' }}>
+              <span className="chip" style={{ background: 'var(--success-bg)', color: 'var(--success-fg)', borderColor: 'color-mix(in oklab, var(--green) 30%, transparent)' }}>
                 <Globe size={11} /> Google SSO
               </span>
             </div>
