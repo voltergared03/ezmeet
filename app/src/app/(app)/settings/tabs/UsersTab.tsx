@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Select } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
 import { FieldWrapper } from '../components/shared';
+import { useSaveErrorToast } from '@/components/save-toast';
 import { getUserStatus } from '../lib/user-status';
 
 interface UserRecord {
@@ -24,6 +25,11 @@ interface ListOpt { listId: string; label: string }
 
 export function UsersTab() {
   const t = useTranslations();
+  // Optimistic updates all over this tab: the row changes first and the PATCH follows.
+  // A rejected save used to be announced with a modal dialog, which cannot say which
+  // row it belongs to, blocks the page, and is missed entirely by anyone who has
+  // already scrolled on. The toast names the failure next to the work.
+  const { showSaveError, saveToast } = useSaveErrorToast();
   const { data: session } = useSession();
   const [search, setSearch] = useState('');
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -45,11 +51,11 @@ export function UsersTab() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, name: prev } : x)));
-        alert(err.error || t('settings.changeRoleFailed'));
+        showSaveError(err.error || t('settings.changeRoleFailed'));
       }
     } catch {
       setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, name: prev } : x)));
-      alert(t('settings.networkError'));
+      showSaveError(t('settings.networkError'));
     }
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -307,11 +313,11 @@ export function UsersTab() {
                       });
                       if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
-                        alert(err.error || t('settings.changeRoleFailed'));
+                        showSaveError(err.error || t('settings.changeRoleFailed'));
                         setUsers((us) => us.map((x) => x.id === u.id ? { ...x, role: prev } : x));
                       }
                     } catch {
-                      alert(t('settings.networkError'));
+                      showSaveError(t('settings.networkError'));
                       setUsers((us) => us.map((x) => x.id === u.id ? { ...x, role: prev } : x));
                     }
                   }}
@@ -419,10 +425,10 @@ export function UsersTab() {
                           setUsers((us) => us.filter((x) => x.id !== u.id));
                         } else {
                           const err = await res.json().catch(() => ({}));
-                          alert(err.error || t('settings.deleteUserFailed'));
+                          showSaveError(err.error || t('settings.deleteUserFailed'));
                         }
                       } catch {
-                        alert(t('settings.networkError'));
+                        showSaveError(t('settings.networkError'));
                       } finally {
                         setDeletingId(null);
                       }
@@ -523,6 +529,7 @@ export function UsersTab() {
           </div>
         </div>
       )}
+      {saveToast}
     </div>
   );
 }

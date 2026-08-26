@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { Toggle, FieldWrapper } from '../components/shared';
 import { Select } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
+import { RadioGroup } from '@/components/ui/choice';
 import { LinearIcon, ClickUpIcon, DeepgramIcon, LiveKitIcon, PostgresIcon, S3Icon, GoogleIcon, HubSpotIcon } from '../components/BrandIcons';
 
 // Which connectors open a config modal (the rest are read-only status cards).
@@ -767,10 +769,17 @@ export function IntegrationsTab() {
           onChange={e => setClickupToken(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
       </FieldWrapper>
       <FieldWrapper label={t('settings.clickupRouting')}>
-        <select className="field" value={clickup.routingMode} onChange={e => setClickup(c => ({ ...c, routingMode: e.target.value === 'inbox' ? 'inbox' : 'department' }))}>
-          <option value="department">{t('settings.clickupRoutingDepartment')}</option>
-          <option value="inbox">{t('settings.clickupRoutingInbox')}</option>
-        </select>
+        {/* Two answers, so both are shown. A dropdown here hid the entire choice
+            behind a click and gave no hint that only one could be picked. */}
+        <RadioGroup
+          value={clickup.routingMode}
+          onChange={(v) => setClickup(c => ({ ...c, routingMode: v === 'inbox' ? 'inbox' : 'department' }))}
+          options={[
+            { value: 'department', label: t('settings.clickupRoutingDepartment') },
+            { value: 'inbox', label: t('settings.clickupRoutingInbox') },
+          ]}
+          label={t('settings.clickupRouting')}
+        />
       </FieldWrapper>
       <FieldWrapper label={t('settings.clickupFallbackList')}>
         <Select
@@ -833,10 +842,17 @@ export function IntegrationsTab() {
           onChange={e => setLinearToken(e.target.value)} style={{ fontFamily: 'var(--font-mono)' }} />
       </FieldWrapper>
       <FieldWrapper label={t('settings.linearRouting')}>
-        <select className="field" value={linear.routingMode} onChange={e => setLinear(c => ({ ...c, routingMode: e.target.value === 'inbox' ? 'inbox' : 'department' }))}>
-          <option value="department">{t('settings.linearRoutingDepartment')}</option>
-          <option value="inbox">{t('settings.linearRoutingInbox')}</option>
-        </select>
+        {/* Two answers, so both are shown. A dropdown here hid the entire choice
+            behind a click and gave no hint that only one could be picked. */}
+        <RadioGroup
+          value={linear.routingMode}
+          onChange={(v) => setLinear(c => ({ ...c, routingMode: v === 'inbox' ? 'inbox' : 'department' }))}
+          options={[
+            { value: 'department', label: t('settings.linearRoutingDepartment') },
+            { value: 'inbox', label: t('settings.linearRoutingInbox') },
+          ]}
+          label={t('settings.linearRouting')}
+        />
       </FieldWrapper>
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{t('settings.linearHint')}</div>
       {linear.migration?.state && (
@@ -867,12 +883,16 @@ export function IntegrationsTab() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Toggle label={t('settings.chatEnabled')} value={chat.enabled} onChange={v => setChat(c => ({ ...c, enabled: v }))} />
         <FieldWrapper label={t('settings.chatProvider')}>
-          <select className="field" value={chat.provider} onChange={e => setChat(c => ({ ...c, provider: e.target.value }))}>
-            <option value="telegram">Telegram</option>
-            <option value="slack">Slack</option>
-            <option value="mattermost">Mattermost</option>
-            <option value="discord">Discord</option>
-          </select>
+          <Select
+            value={chat.provider}
+            onChange={(v) => setChat(c => ({ ...c, provider: v }))}
+            options={[
+              { value: 'telegram', label: 'Telegram' },
+              { value: 'slack', label: 'Slack' },
+              { value: 'mattermost', label: 'Mattermost' },
+              { value: 'discord', label: 'Discord' },
+            ]}
+          />
         </FieldWrapper>
         {isTelegram ? (
           <>
@@ -917,10 +937,11 @@ export function IntegrationsTab() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <FieldWrapper label={t('settings.aiProvider')}>
-          <select className="field" value={ai.provider}
-            onChange={e => { const p = e.target.value; const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); setAiModels([]); setAiModelsErr(''); setAiCustom(false); }}>
-            {Object.entries(aiPresets).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
+          <Select
+            value={ai.provider}
+            onChange={(p) => { const pr = aiPresets[p]; setAi(a => ({ ...a, provider: p, baseUrl: pr?.baseUrl || '', model: pr?.model || '' })); setAiTestRes(null); setAiModels([]); setAiModelsErr(''); setAiCustom(false); }}
+            options={Object.entries(aiPresets).map(([k, v]) => ({ value: k, label: v.label }))}
+          />
         </FieldWrapper>
         {!keyless && (
           <FieldWrapper label={ai.apiKeySet ? t('settings.aiKeySet') : t('settings.aiKey')}>
@@ -935,13 +956,24 @@ export function IntegrationsTab() {
         <FieldWrapper label={t('settings.aiModel')}>
           <div style={{ display: 'flex', gap: 8 }}>
             {showSelect ? (
-              <select className="field" value={ai.model} style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
-                onChange={e => { const v = e.target.value; if (v === '__custom') { setAiCustom(true); } else { setAi(a => ({ ...a, model: v })); } }}>
-                {!ai.model && <option value="" disabled>{t('settings.aiModelPick')}</option>}
-                {extraModel && <option value={extraModel}>{extraModel}</option>}
-                {aiModels.map(m => <option key={m.id} value={m.id}>{m.id}{m.maxOutput ? ` — ${fmtTok(m.maxOutput)} max` : m.contextLength ? ` — ${fmtTok(m.contextLength)} ctx` : ''}</option>)}
-                <option value="__custom">{t('settings.aiModelCustom')}</option>
-              </select>
+              /* OpenRouter alone returns hundreds of models, which a plain dropdown
+                 makes searchable only by scrolling. Typing filters the list. */
+              <div style={{ flex: 1 }}>
+                <Combobox
+                  value={ai.model}
+                  onChange={(v) => { if (v === '__custom') { setAiCustom(true); } else { setAi(a => ({ ...a, model: v })); } }}
+                  placeholder={t('settings.aiModelPick')}
+                  className="mono"
+                  options={[
+                    ...(extraModel ? [{ value: extraModel, label: extraModel }] : []),
+                    ...aiModels.map(m => ({
+                      value: m.id,
+                      label: `${m.id}${m.maxOutput ? ` — ${fmtTok(m.maxOutput)} max` : m.contextLength ? ` — ${fmtTok(m.contextLength)} ctx` : ''}`,
+                    })),
+                    { value: '__custom', label: t('settings.aiModelCustom') },
+                  ]}
+                />
+              </div>
             ) : (
               <input className="field" value={ai.model} placeholder="deepseek-chat"
                 onChange={e => setAi(a => ({ ...a, model: e.target.value }))} style={{ flex: 1, fontFamily: 'var(--font-mono)' }} />
@@ -1045,9 +1077,11 @@ export function IntegrationsTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Toggle label={t('settings.crmEnabled')} value={crm.enabled} onChange={v => setCrm(c => ({ ...c, enabled: v }))} />
       <FieldWrapper label={t('settings.crmProvider')}>
-        <select className="field" value={crm.provider} onChange={e => setCrm(c => ({ ...c, provider: e.target.value }))}>
-          <option value="hubspot">HubSpot</option>
-        </select>
+        <Select
+          value={crm.provider}
+          onChange={(v) => setCrm(c => ({ ...c, provider: v }))}
+          options={[{ value: 'hubspot', label: 'HubSpot' }]}
+        />
       </FieldWrapper>
       <FieldWrapper label={crm.tokenSet ? t('settings.crmTokenSet') : t('settings.crmToken')}>
         <input className="field" type="password" value={crmToken} placeholder={crm.tokenSet ? '••••••••••••' : 'pat-…'}

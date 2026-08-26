@@ -12,6 +12,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { Avatar, AvatarStack } from '@/components/ui/avatar';
+import { Select } from '@/components/ui/select';
 import { fmtTime, fmtRelative, fmtDateLong, getInitials, getAvatarColor } from '@/lib/utils';
 import { useWorkspaceTz } from '@/hooks/use-workspace-tz';
 import type {
@@ -1601,18 +1602,18 @@ ${followUps ? `<div class="sec"><div class="sec-title">${tr('report.followUpsTit
                         <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500, flex: 1, minWidth: 120 }}>
                           {t.speakerName || t.participantIdentity}
                         </span>
-                        <select
-                          className="field"
+                        <Select
                           value={sel}
                           disabled={busy}
-                          onChange={(e) => setTrackLangSel((p) => ({ ...p, [t.id]: e.target.value }))}
+                          onChange={(v) => setTrackLangSel((p) => ({ ...p, [t.id]: v }))}
                           style={{ width: 'auto', minWidth: 130, padding: '6px 10px' }}
-                        >
-                          <option value="">—</option>
-                          <option value="uk">{tr('report.langUk')}</option>
-                          <option value="en">{tr('report.langEn')}</option>
-                          <option value="ru">{tr('report.langRu')}</option>
-                        </select>
+                          options={[
+                            { value: '', label: '—' },
+                            { value: 'uk', label: tr('report.langUk') },
+                            { value: 'en', label: tr('report.langEn') },
+                            { value: 'ru', label: tr('report.langRu') },
+                          ]}
+                        />
                         <button
                           className="btn btn-sm"
                           disabled={busy || !sel}

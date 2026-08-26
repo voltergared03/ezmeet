@@ -6,6 +6,7 @@ import {
   Plus, Pencil, Check, X, Trash2, Loader2, Crown, Building2, ChevronDown, ChevronRight, Users as UsersIcon, ListChecks, AlertTriangle,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select } from '@/components/ui/select';
 
 interface DeptMember { userId: string; isLead: boolean; name: string | null; email: string | null; image?: string | null }
@@ -171,8 +172,19 @@ export function DepartmentsTab() {
       )}
 
       {loading ? (
-        <div style={{ padding: '44px', textAlign: 'center', color: 'var(--muted)' }}>
-          <Loader2 size={22} style={{ animation: 'spin 1s linear infinite', opacity: 0.6 }} />
+        // Departments arrive as a list of cards, so the wait shows that shape rather
+        // than a spinner: nothing jumps when the data lands, and the page already
+        // reads as "a list, loading" instead of "something, somewhere".
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} role="status" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Skeleton w={30} h={30} radius={9} style={{ flexShrink: 0 }} />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 7, flex: 1 }}>
+                <Skeleton w="34%" h={13} />
+                <Skeleton w="18%" h={10} />
+              </span>
+            </div>
+          ))}
         </div>
       ) : depts.length === 0 ? (
         <div className="card" style={{ padding: '40px 24px', textAlign: 'center' }}>

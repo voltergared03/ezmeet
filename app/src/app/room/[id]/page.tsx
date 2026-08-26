@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { Select } from '@/components/ui/select';
+import { useSaveErrorToast } from '@/components/save-toast';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -68,6 +69,9 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
   const [showSharePopup, setShowSharePopup] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [kickingId, setKickingId] = useState<string | null>(null);
+  // A failed kick used to raise a modal dialog over a live call — it steals focus from
+  // the video, and everyone else in the room keeps talking while you dismiss it.
+  const { showSaveError, saveToast } = useSaveErrorToast();
 
   const shareLink = joinToken
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${joinToken}`
@@ -91,10 +95,10 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || tr('room.kickFailed'));
+        showSaveError(data.error || tr('room.kickFailed'));
       }
     } catch {
-      alert(tr('room.connectionError'));
+      showSaveError(tr('room.connectionError'));
     } finally {
       setKickingId(null);
     }
@@ -1255,6 +1259,7 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
           </div>
         </div>
       )}
+      {saveToast}
     </div>
   );
 }

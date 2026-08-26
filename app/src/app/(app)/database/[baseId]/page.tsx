@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { ChevronLeft, Plus, Table2, MoreHorizontal, Pencil, Trash2, Share2, Lock, Download, ArrowRightLeft } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton, SkeletonCard } from '@/components/ui/skeleton';
 import { useSaveErrorToast } from '@/components/save-toast';
 import { GridView } from '../components/GridView';
 import { GridToolbar } from '../components/GridToolbar';
@@ -321,7 +322,16 @@ export default function BaseDetailPage() {
     await fetch(`/api/views/${id}`, { method: 'DELETE' });
   }
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner size={22} /></div>;
+  // The base page opens onto a list of tables; showing that shape beats a spinner
+  // that says only "wait". The in-button Spinners below stay — a skeleton inside a
+  // button would be nonsense.
+  if (loading) return (
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }} role="status" aria-busy="true">
+      <Skeleton w="30%" h={20} />
+      <SkeletonCard lines={2} />
+      <SkeletonCard lines={2} />
+    </div>
+  );
   if (!base) return <div style={{ padding: 40 }}><Link href="/database" className="btn btn-ghost"><ChevronLeft size={16} /> {t('title')}</Link></div>;
 
   const accent = base.color || 'var(--accent)';
