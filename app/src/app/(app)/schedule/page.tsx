@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Field } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
 import {
@@ -43,6 +44,10 @@ export default function SchedulePage() {
     departmentId: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Form-level: a rejected POST belongs to no single field, but it still has to be
+  // said. It used to go to console.error alone — the spinner stopped and nothing
+  // else changed, so a failed submit was indistinguishable from a dead button.
+  const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [agenda, setAgenda] = useState<string[]>([]);
   const [newItem, setNewItem] = useState('');
   const [aiAgendaLoading, setAiAgendaLoading] = useState(false);
@@ -146,6 +151,7 @@ export default function SchedulePage() {
   };
 
   const submit = async () => {
+    setSubmitErr(null);
     if (!validate()) return;
     setLoading(true);
     try {
@@ -168,12 +174,17 @@ export default function SchedulePage() {
           agenda: agenda.length > 0 ? agenda : null,
         }),
       });
-      if (!res.ok) throw new Error('Failed to create meeting');
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setSubmitErr(d.error || t('schedule.createFailed'));
+        return;
+      }
       const meeting = await res.json();
       setCreatedId(meeting.id);
       setCreated(true);
     } catch (e) {
       console.error(e);
+      setSubmitErr(t('schedule.createFailed'));
     } finally {
       setLoading(false);
     }
@@ -223,14 +234,22 @@ export default function SchedulePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Title */}
           <div className="card" style={{ padding: '18px 22px' }}>
-            <input
-              className="field"
-              placeholder={t('schedule.titlePlaceholder')}
-              value={form.title}
-              onChange={(e) => set('title', e.target.value)}
-              style={{ fontSize: 18, fontWeight: 600, background: 'transparent', border: 'none', padding: '4px 0', borderRadius: 0 }}
-            />
-            {errors.title && <Err msg={errors.title} />}
+            {/* No visible label by design — the title IS the page heading here. Field
+                still supplies the id/aria wiring so the error below is announced as
+                belonging to this input rather than floating loose in the card. */}
+            <Field error={errors.title}>
+              {(f) => (
+                <input
+                  {...f}
+                  className="field"
+                  aria-label={t('meetingForm.title')}
+                  placeholder={t('schedule.titlePlaceholder')}
+                  value={form.title}
+                  onChange={(e) => set('title', e.target.value)}
+                  style={{ fontSize: 18, fontWeight: 600, background: 'transparent', border: 'none', padding: '4px 0', borderRadius: 0 }}
+                />
+              )}
+            </Field>
             <textarea
               className="field"
               rows={2}
@@ -333,10 +352,10 @@ export default function SchedulePage() {
           {/* Date / time / duration — each field on its own row on mobile (3 cols on desktop) */}
           <div className='card schedule-grid-3' style={{ padding: '18px 22px', display: 'grid', gap: 14 }}>
             <Field label={t('meetingForm.date')} icon={Calendar} error={errors.date}>
-              <input className="field" type="date" value={form.date} onChange={(e) => set('date', e.target.value)} style={{ textAlign: 'left' }} />
+              {(f) => <input {...f} className="field" type="date" value={form.date} onChange={(e) => set('date', e.target.value)} style={{ textAlign: 'left' }} />}
             </Field>
             <Field label={t('schedule.start')} icon={Clock} error={errors.time}>
-              <input className="field" type="time" value={form.time} onChange={(e) => set('time', e.target.value)} style={{ textAlign: 'left' }} />
+              {(f) => <input {...f} className="field" type="time" value={form.time} onChange={(e) => set('time', e.target.value)} style={{ textAlign: 'left' }} />}
             </Field>
             <Field label={t('meetingForm.duration')} error={errors.duration}>
               <Select value={String(form.duration)} onChange={(v) => set('duration', parseInt(v))}
@@ -477,6 +496,11 @@ export default function SchedulePage() {
             <Toggle label={t('schedule.toggleAllowGuests')} value={form.allowGuests} onChange={(v) => set('allowGuests', v)} />
           </div>
 
+          {submitErr && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Err msg={submitErr} />
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'flex-end', gap: 10 }}>
             <button className="btn" onClick={() => router.push('/')}
               style={isMobile ? { width: '100%', justifyContent: 'center', padding: '13px' } : undefined}>{t('common.cancel')}</button>
@@ -510,18 +534,6 @@ function zonedWallTimeToUtcISO(dateStr: string, timeStr: string, tz: string): st
   } catch {
     return new Date(`${dateStr}T${timeStr}:00`).toISOString();
   }
-}
-
-function Field({ label, icon: Icon, error, children, style }: { label: string; icon?: any; error?: string; children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <div style={style}>
-      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {Icon && <Icon size={12} />}{label}
-      </label>
-      {children}
-      {error && <Err msg={error} />}
-    </div>
-  );
 }
 
 function Err({ msg }: { msg: string }) {

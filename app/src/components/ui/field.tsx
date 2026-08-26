@@ -27,15 +27,21 @@ export interface FieldControlProps {
  */
 export function Field({
   label,
+  icon: Icon,
   hint,
   error,
   required,
+  style,
   children,
 }: {
   label?: string;
+  /** Optional glyph before the label — used where a form is dense enough that the
+   *  icon is the faster read (date, time, timezone on the schedule page). */
+  icon?: React.ComponentType<{ size?: number }>;
   hint?: string;
   error?: string | null;
   required?: boolean;
+  style?: React.CSSProperties;
   children: React.ReactNode | ((props: FieldControlProps) => React.ReactNode);
 }) {
   const uid = useId();
@@ -55,9 +61,10 @@ export function Field({
   };
 
   return (
-    <div>
+    <div style={style}>
       {label && (
-        <label className="field-label" htmlFor={id}>
+        <label className="field-label" htmlFor={id} style={Icon ? { display: 'flex', alignItems: 'center', gap: 6 } : undefined}>
+          {Icon && <Icon size={12} />}
           {label}
           {required && (
             <span aria-hidden style={{ color: 'var(--danger-fg)', marginInlineStart: 3 }}>*</span>

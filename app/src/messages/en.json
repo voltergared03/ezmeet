@@ -330,7 +330,9 @@
     "time": "Time",
     "duration": "Duration",
     "participants": "Participants",
-    "addParticipant": "Add participant..."
+    "addParticipant": "Add participant...",
+    "titleRequired": "Give the meeting a title",
+    "saveFailed": "Could not save. Try again."
   },
   "tasks": {
     "pageTitle": "Tasks",
@@ -505,7 +507,8 @@
     "errorTitleTooShort": "Too short — minimum 3 characters",
     "errorDateRequired": "Select a date",
     "errorTimeRequired": "Select a time",
-    "toggleTaskCreation": "Create tasks"
+    "toggleTaskCreation": "Create tasks",
+    "createFailed": "Could not create the meeting. Try again."
   },
   "auth": {
     "welcome": "Welcome to {name}",

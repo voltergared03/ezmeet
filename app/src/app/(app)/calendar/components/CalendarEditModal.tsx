@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
+import { Field } from '@/components/ui/field';
 import {
   X,
   Plus,
@@ -34,6 +35,7 @@ export function CalendarEditModal({ meeting, onClose, onSave }: {
   const [time, setTime] = useState(schedAt ? schedAt.toTimeString().slice(0, 5) : '14:00');
   const [duration, setDuration] = useState(meeting.durationMin);
   const [saving, setSaving] = useState(false);
+  const [titleErr, setTitleErr] = useState<string | null>(null);
   const [agenda, setAgenda] = useState<string[]>(Array.isArray(meeting.agenda) ? meeting.agenda : []);
   const [newAgendaItem, setNewAgendaItem] = useState('');
   const [aiAgendaLoading, setAiAgendaLoading] = useState(false);
@@ -101,7 +103,10 @@ export function CalendarEditModal({ meeting, onClose, onSave }: {
   };
 
   const save = async () => {
-    if (!title.trim()) return;
+    // This used to `return` on an empty title: Save did nothing and said nothing,
+    // which reads as a broken button rather than a missing field.
+    setTitleErr(null);
+    if (!title.trim()) { setTitleErr(t('meetingForm.titleRequired')); return; }
     setSaving(true);
     try {
       const scheduledAt = date && time ? new Date(`${date}T${time}:00`).toISOString() : null;
@@ -120,8 +125,13 @@ export function CalendarEditModal({ meeting, onClose, onSave }: {
       if (res.ok) {
         const updated = await res.json();
         onSave(updated);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setTitleErr(d.error || t('meetingForm.saveFailed'));
       }
-    } catch (e) { console.error(e); }
+    } catch {
+      setTitleErr(t('meetingForm.saveFailed'));
+    }
     finally { setSaving(false); }
   };
 
@@ -139,10 +149,12 @@ export function CalendarEditModal({ meeting, onClose, onSave }: {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label className="field-label">{t('meetingForm.title')}</label>
-            <input className="field" value={title} onChange={e => setTitle(e.target.value)} />
-          </div>
+          <Field label={t('meetingForm.title')} error={titleErr} required>
+            {(f) => (
+              <input {...f} className="field" value={title}
+                onChange={e => { setTitle(e.target.value); setTitleErr(null); }} />
+            )}
+          </Field>
           <div>
             <label className="field-label">{t('meetingForm.description')}</label>
             <textarea className="field" rows={2} value={description}

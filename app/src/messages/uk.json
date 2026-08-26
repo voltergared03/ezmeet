@@ -330,7 +330,9 @@
     "time": "Час",
     "duration": "Тривалість",
     "participants": "Учасники",
-    "addParticipant": "Додати учасника..."
+    "addParticipant": "Додати учасника...",
+    "titleRequired": "Вкажіть назву міту",
+    "saveFailed": "Не вдалося зберегти. Спробуйте ще раз."
   },
   "tasks": {
     "pageTitle": "Таски",
@@ -505,7 +507,8 @@
     "errorTitleTooShort": "Закоротко — мінімум 3 символи",
     "errorDateRequired": "Виберіть дату",
     "errorTimeRequired": "Виберіть час",
-    "toggleTaskCreation": "Створювати таски"
+    "toggleTaskCreation": "Створювати таски",
+    "createFailed": "Не вдалося створити міт. Спробуйте ще раз."
   },
   "auth": {
     "welcome": "Вітаємо в {name}",
