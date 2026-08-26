@@ -8,11 +8,19 @@ api_secret: your-livekit-api-secret-hex   # must match livekit.yaml + .env
 ws_url: ws://livekit:7880
 log_level: info
 
-# room_composite (grid video) needs ~4 CPU by default; lower the cost so it is
-# admitted within egress's modest CPU allotment (2 CPU on small hosts) —
-# otherwise recording fails with "no response from servers".
+# These are DECLARATIONS, and LiveKit holds a job to them: a handler that outgrows
+# the cost it declared is killed mid-recording with "CPU exhausted". Under-declaring
+# to fit a job into a small cap therefore does not make it cheaper — it makes it die.
+#
+# room-composite runs a headless Chrome even with audioOnly (the flag skips the video
+# ENCODE, not the browser), and that measures ~1.9 cores in practice. Declaring 1.0
+# is what killed a 52-minute recording four minutes in on 2026-08-26.
+#
+# Keep `cpus:` for the egress service in docker-compose.yml ABOVE this number, or the
+# job is never admitted at all ("no response from servers"). 2.5 here needs 3 there.
 cpu_cost:
-  room_composite_cpu_cost: 1.0
-  web_cpu_cost: 1.0
+  room_composite_cpu_cost: 2.5
+  web_cpu_cost: 2.5
   track_composite_cpu_cost: 0.7
+  # Track egress is a passthrough copy — no transcode, no browser.
   track_cpu_cost: 0.3

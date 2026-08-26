@@ -636,7 +636,9 @@
     "quizAssignedTitle": "Нове тестування",
     "quizAssignedBody": "Перевірка розуміння по мітингу «{title}»",
     "quizCompletedTitle": "Тест пройдено",
-    "quizCompletedBody": "{name}: {score}/{max} за «{title}»"
+    "quizCompletedBody": "{name}: {score}/{max} за «{title}»",
+    "recordingFailedTitle": "Запис міту не зберігся",
+    "recordingFailedBody": "Не вдалося зберегти запис «{title}». Транскрипт і звіт на місці."
   },
   "report": {
     "aiReportChip": "AI-звіт",

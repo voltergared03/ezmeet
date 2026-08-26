@@ -636,7 +636,9 @@
     "quizAssignedTitle": "New quiz",
     "quizAssignedBody": "Comprehension check for \"{title}\"",
     "quizCompletedTitle": "Quiz completed",
-    "quizCompletedBody": "{name} scored {score}/{max} on \"{title}\""
+    "quizCompletedBody": "{name} scored {score}/{max} on \"{title}\"",
+    "recordingFailedTitle": "Meeting recording was lost",
+    "recordingFailedBody": "The recording of \"{title}\" could not be saved. The transcript and report are intact."
   },
   "report": {
     "summary": "Summary",

@@ -48,10 +48,15 @@ services:
     # (or a 2nd concurrent recording) can't OOM the rest of the host — the
     # recording fails instead of taking down the box.
     mem_limit: 3g
-    # Capped at 2 so a recording can't monopolize the (4-core) host and starve
-    # the SFU. NOTE: room_composite needs ~4 CPU by default — egress.yaml lowers
-    # room_composite_cpu_cost so recording is admitted within this 2-CPU cap.
-    cpus: 2.0
+    # The cap MUST sit above room_composite_cpu_cost in egress.yaml, with headroom.
+    # LiveKit kills a handler that outgrows the cost it declared, so under-declaring
+    # to squeeze a job into a small cap does not make it cheaper — it makes it die
+    # mid-recording. That is exactly what happened on 2026-08-26: cost was declared
+    # 1.0, the headless Chrome behind room-composite drew 1.91, and the guard killed
+    # the audio egress four minutes into a 52-minute meeting ("CPU exhausted").
+    # Host is 5 cores (the old comment said 4), so 3 here still leaves 2 for the SFU,
+    # the app and Postgres — and idle load sits near 0.7.
+    cpus: 3.0
     logging: *default-logging
     networks:
       - eam-meet

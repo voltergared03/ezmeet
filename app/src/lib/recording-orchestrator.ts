@@ -10,6 +10,7 @@ import {
   stopRecording,
 } from './egress';
 import { composeScreenAudio, probeDurationSec } from './recording-compose';
+import { notify } from './notify';
 
 /** Recording strategy. Gated by the WS_RECORD_MODE workspace config. */
 export type RecordMode = 'composite' | 'screen-audio';
@@ -166,6 +167,57 @@ export async function stopScreenSegment(meetingId: string, trackId: string): Pro
 }
 
 /**
+ * Mark a recording failed AND tell somebody.
+ *
+ * A failed recording used to be completely silent: the row flipped to "failed", no
+ * screen renders that state, and the meeting simply looked like one that was never
+ * recorded. On 2026-08-26 a 52-minute call lost its audio four minutes in — the egress
+ * CPU guard killed the handler — and nobody found out until someone went looking for
+ * the file hours later, by which point the meeting could not be re-run.
+ *
+ * The transcript and the AI report survive independently (the agent subscribes to the
+ * tracks directly, no browser involved), so only the media file is lost — but whoever
+ * called the meeting is the person who needs to know that.
+ */
+async function failRecording(recordingId: string, reason: string): Promise<void> {
+  console.error(`[recording] ${recordingId} failed: ${reason}`);
+  let meetingId: string | null = null;
+  let title = '';
+  let createdById: string | null = null;
+  try {
+    const rec = await prisma.recording.update({
+      where: { id: recordingId },
+      data: { status: 'failed' },
+      select: { meetingId: true, meeting: { select: { title: true, createdById: true } } },
+    });
+    meetingId = rec.meetingId;
+    title = rec.meeting?.title || '';
+    createdById = rec.meeting?.createdById ?? null;
+  } catch (e) {
+    console.error('[recording] could not mark failed:', (e as Error).message);
+    return;
+  }
+  // Notifying is best-effort and must never undo the status write above.
+  try {
+    const admins = await prisma.user.findMany({ where: { role: 'admin', status: 'active' }, select: { id: true } });
+    const userIds = [...new Set([createdById, ...admins.map((a) => a.id)].filter(Boolean) as string[])];
+    if (userIds.length && meetingId) {
+      await notify({
+        userIds,
+        type: 'recording_failed',
+        titleKey: 'recordingFailedTitle',
+        bodyKey: 'recordingFailedBody',
+        values: { title },
+        link: `/meetings/${meetingId}/report`,
+        meetingId,
+      });
+    }
+  } catch (e) {
+    console.error('[recording] failure notify skipped:', (e as Error).message);
+  }
+}
+
+/**
  * Called when the AUDIO egress of a screen-audio recording ends (= recording over).
  * After a short grace (screen TrackEgress files finish writing), compose the final MP4.
  * Runs fire-and-forget in the long-lived Node server; updates the Recording when done.
@@ -178,7 +230,7 @@ export function finalizeScreenAudio(recordingId: string): void {
       const meta = (rec.meta as { audioEgressId?: string; audioFile?: string; screenSegments?: { egressId?: string; fileName: string; startSec: number }[] }) || {};
       const audio = await egressInfo(meta.audioEgressId, meta.audioFile || '');
       if (!audio.file) {
-        await prisma.recording.update({ where: { id: rec.id }, data: { status: 'failed' } });
+        await failRecording(rec.id, 'audio egress produced no file (killed, or never started)');
         return;
       }
       // Place each screen segment by the real MEDIA-start delta vs the audio (ended_at −
@@ -211,12 +263,10 @@ export function finalizeScreenAudio(recordingId: string): void {
           },
         });
       } else {
-        console.error('composeScreenAudio failed:', res.error);
-        await prisma.recording.update({ where: { id: rec.id }, data: { status: 'failed' } });
+        await failRecording(rec.id, `compose failed: ${res.error}`);
       }
     } catch (e) {
-      console.error('finalizeScreenAudio error:', e);
-      await prisma.recording.update({ where: { id: recordingId }, data: { status: 'failed' } }).catch(() => {});
+      await failRecording(recordingId, `finalize threw: ${(e as Error).message}`);
     }
   }, 6000);
 }
