@@ -27,8 +27,7 @@ import {
   Phone, MessageSquare, FileText, X, Languages,
   Send, MoreVertical, Users, UserPlus, Link2, Check,
   LogOut, Shield, Crown, Volume2, ChevronDown,
-  Smile, StickyNote, Sparkles, Zap, Save, Sidebar, ListChecks,
-} from 'lucide-react';
+  Smile, StickyNote, Sparkles, Zap, Save, Sidebar, ListChecks, AlertCircle} from 'lucide-react';
 import {
   TranscriptEntry, FloatingReaction, LiveAiNote, DetectedActionItem, MeetingBriefing, REACTIONS,
 } from './lib/types';
@@ -261,6 +260,11 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
   const [notesContent, setNotesContent] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
   const [notesLastSaved, setNotesLastSaved] = useState<string | null>(null);
+  // The save used to claim success unconditionally: the fetch result was never read and
+  // a network error was swallowed by an empty catch, so a rejected save still printed
+  // "Saved at 14:32". People take notes during a call believing they are shared and
+  // kept; telling them that when it is not true is worse than saying nothing.
+  const [notesFailed, setNotesFailed] = useState(false);
   const notesTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load notes on mount
@@ -296,14 +300,30 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
     notesTimerRef.current = setTimeout(async () => {
       setNotesSaving(true);
-      try {
-        await fetch(`/api/meetings/${meetingId}/notes`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: value }),
-        });
+      // One retry before admitting failure: this runs during a live call, where a
+      // one-second network blip is ordinary and losing the note is not.
+      let ok = false;
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+        if (attempt) await new Promise((r) => setTimeout(r, 1200));
+        try {
+          const res = await fetch(`/api/meetings/${meetingId}/notes`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: value }),
+          });
+          ok = res.ok;
+        } catch {
+          ok = false; // offline / aborted — worth one more try
+        }
+      }
+      if (ok) {
+        setNotesFailed(false);
         setNotesLastSaved(new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }));
-      } catch { /* skip */ }
+      } else {
+        // Deliberately leave notesLastSaved alone: the last time it really saved is
+        // still true and still useful — it says how much is at risk.
+        setNotesFailed(true);
+      }
       setNotesSaving(false);
     }, 1500);
   }, [meetingId, room, localParticipant]);
@@ -1081,6 +1101,13 @@ function RoomContent({ meetingId, joinToken, isGuest, canKick, openTranscript, r
                 }}>
                   {notesSaving ? (
                     <><Save size={11} style={{ animation: 'spin .8s linear infinite' }} /> {tr('common.saving')}</>
+                  ) : notesFailed ? (
+                    <span role="alert" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--danger-fg)' }}>
+                      <AlertCircle size={11} />
+                      {notesLastSaved
+                        ? tr('room.notesSaveFailedSince', { time: notesLastSaved })
+                        : tr('room.notesSaveFailed')}
+                    </span>
                   ) : notesLastSaved ? (
                     <><Check size={11} /> {tr('room.savedAt', { time: notesLastSaved })}</>
                   ) : (

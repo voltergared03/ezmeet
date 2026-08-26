@@ -870,7 +870,9 @@
     "leaveTitle": "Leave or end the meeting?",
     "leaveBody": "You're the only one here. Leaving keeps the meeting open, so anyone who arrives later can still join. Ending it closes the meeting and produces the report.",
     "leaveOnly": "Just leave",
-    "endForAll": "End the meeting"
+    "endForAll": "End the meeting",
+    "notesSaveFailed": "Notes are not saving",
+    "notesSaveFailedSince": "Not saved since {time} — keep this tab open"
   },
   "setup": {
     "stepToken": "Token",
