@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Logo } from '@/components/ui/logo';
 import { Lock, Loader2 } from 'lucide-react';
+import { Field } from '@/components/ui/field';
+import { passwordProblem, PASSWORD_MIN } from '@/lib/form-rules';
 
 export function ChangePasswordClient({ forced }: { forced: boolean }) {
   const router = useRouter();
@@ -13,13 +15,18 @@ export function ChangePasswordClient({ forced }: { forced: boolean }) {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);          // form-level only
+  const [curErr, setCurErr] = useState<string | null>(null);
+  const [nextErr, setNextErr] = useState<string | null>(null);
+  const [confirmErr, setConfirmErr] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr(null);
-    if (next.length < 8) { setErr(t('auth.errPasswordMin')); return; }
-    if (next !== confirm) { setErr(t('auth.errPasswordMismatch')); return; }
+    setErr(null); setCurErr(null); setNextErr(null); setConfirmErr(null);
+    // Same rule the API applies — see lib/form-rules.
+    if (passwordProblem(next)) { setNextErr(t('auth.errPasswordMin')); return; }
+    // The mismatch belongs on CONFIRM: that is the box the user retypes to fix it.
+    if (next !== confirm) { setConfirmErr(t('auth.errPasswordMismatch')); return; }
     setBusy(true);
     try {
       const res = await fetch('/api/account/password', {
@@ -28,7 +35,12 @@ export function ChangePasswordClient({ forced }: { forced: boolean }) {
         body: JSON.stringify({ currentPassword: forced ? undefined : current, newPassword: next }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok || !d.ok) { setErr(d.error || t('auth.errPasswordChangeFailed')); setBusy(false); return; }
+      if (!res.ok || !d.ok) {
+        // A rejected CURRENT password is the usual reason and belongs on that field.
+        const text = d.error || t('auth.errPasswordChangeFailed');
+        if (res.status === 400 && !forced) setCurErr(text); else setErr(text);
+        setBusy(false); return;
+      }
       router.push('/');
       router.refresh();
     } catch {
@@ -60,24 +72,35 @@ export function ChangePasswordClient({ forced }: { forced: boolean }) {
           </p>
 
           <form onSubmit={submit}>
-            {!forced && (
-              <input
-                className="field" type="password" autoComplete="current-password"
-                placeholder={t('auth.currentPassword')} value={current}
-                onChange={(e) => setCurrent(e.target.value)} style={{ marginBottom: 10 }}
-              />
-            )}
-            <input
-              className="field" type="password" autoComplete="new-password"
-              placeholder={t('auth.newPasswordMinPlaceholder')} value={next}
-              onChange={(e) => setNext(e.target.value)} style={{ marginBottom: 10 }}
-            />
-            <input
-              className="field" type="password" autoComplete="new-password"
-              placeholder={t('auth.repeatNewPassword')} value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-            />
-            {err && <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>}
+            <div style={{ display: 'grid', gap: 12 }}>
+              {!forced && (
+                <Field label={t('auth.currentPassword')} error={curErr}>
+                  {(f) => (
+                    <input {...f} className="field" type="password" autoComplete="current-password"
+                      value={current} onChange={(e) => { setCurrent(e.target.value); setCurErr(null); }} />
+                  )}
+                </Field>
+              )}
+              {/* The length rule stays visible as a hint. As a placeholder it vanished
+                  at the first keystroke — precisely when it still needed reading. */}
+              <Field
+                label={t('auth.newPassword')}
+                hint={t('auth.passwordMinHint', { n: PASSWORD_MIN })}
+                error={nextErr}
+              >
+                {(f) => (
+                  <input {...f} className="field" type="password" autoComplete="new-password"
+                    value={next} onChange={(e) => { setNext(e.target.value); setNextErr(null); }} />
+                )}
+              </Field>
+              <Field label={t('auth.repeatNewPassword')} error={confirmErr}>
+                {(f) => (
+                  <input {...f} className="field" type="password" autoComplete="new-password"
+                    value={confirm} onChange={(e) => { setConfirm(e.target.value); setConfirmErr(null); }} />
+                )}
+              </Field>
+            </div>
+            {err && <div role="alert" style={{ fontSize: 12.5, color: 'var(--danger-fg)', marginTop: 10 }}>{err}</div>}
             <button
               type="submit" className="btn btn-primary" disabled={busy}
               style={{ width: '100%', justifyContent: 'center', padding: '13px 16px', fontWeight: 600, marginTop: 16, gap: 8 }}

@@ -117,7 +117,7 @@ export function LoginClient({
                 onChange={(e) => setPassword(e.target.value)}
               />
               {err && (
-                <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 10 }}>{err}</div>
               )}
               <button
                 type="submit"

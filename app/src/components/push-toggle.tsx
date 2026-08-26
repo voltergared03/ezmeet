@@ -131,7 +131,7 @@ export function PushToggle() {
                   marginTop: 8,
                   fontSize: 11.5,
                   lineHeight: 1.45,
-                  color: testMsg.ok ? 'var(--muted)' : 'var(--red, var(--danger))',
+                  color: testMsg.ok ? 'var(--muted)' : 'var(--danger)',
                   maxWidth: 360,
                 }}
               >

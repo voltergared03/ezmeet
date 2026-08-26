@@ -548,7 +548,11 @@
     "errRegisterFailed": "Не вдалося подати заявку",
     "errPasswordMin": "Пароль — щонайменше 8 символів",
     "errPasswordMismatch": "Паролі не збігаються",
-    "errPasswordChangeFailed": "Не вдалося змінити пароль"
+    "errPasswordChangeFailed": "Не вдалося змінити пароль",
+    "newPassword": "Новий пароль",
+    "passwordMinHint": "Щонайменше {n} символів",
+    "errEmailRequired": "Вкажіть адресу",
+    "errEmailInvalid": "Схоже на некоректну адресу"
   },
   "join": {
     "errorNotFound": "Зустріч не знайдена або токен недійсний",

@@ -548,7 +548,11 @@
     "errRegisterFailed": "Could not submit request",
     "errPasswordMin": "Password must be at least 8 characters",
     "errPasswordMismatch": "Passwords do not match",
-    "errPasswordChangeFailed": "Could not change password"
+    "errPasswordChangeFailed": "Could not change password",
+    "newPassword": "New password",
+    "passwordMinHint": "At least {n} characters",
+    "errEmailRequired": "Enter an address",
+    "errEmailInvalid": "That does not look like an address"
   },
   "join": {
     "errorNotFound": "Meeting not found or token invalid",

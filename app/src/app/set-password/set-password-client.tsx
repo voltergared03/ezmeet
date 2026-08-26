@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { Logo } from '@/components/ui/logo';
+import { Field } from '@/components/ui/field';
+import { passwordProblem, PASSWORD_MIN } from '@/lib/form-rules';
 import { Lock, Loader2, AlertCircle } from 'lucide-react';
 
 type Status = 'checking' | 'ready' | 'invalid';
@@ -17,7 +19,9 @@ export function SetPasswordClient({ token }: { token: string }) {
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);          // form-level only
+  const [pwErr, setPwErr] = useState<string | null>(null);
+  const [confirmErr, setConfirmErr] = useState<string | null>(null);
 
   // Validate the token on mount.
   useEffect(() => {
@@ -47,15 +51,11 @@ export function SetPasswordClient({ token }: { token: string }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr(null);
-    if (pw.length < 8) {
-      setErr(t('auth.errPasswordMin'));
-      return;
-    }
-    if (pw !== confirm) {
-      setErr(t('auth.errPasswordMismatch'));
-      return;
-    }
+    setErr(null); setPwErr(null); setConfirmErr(null);
+    // Same rule the API applies — see lib/form-rules.
+    if (passwordProblem(pw)) { setPwErr(t('auth.errPasswordMin')); return; }
+    // The mismatch belongs on CONFIRM: that is the box you retype to fix it.
+    if (pw !== confirm) { setConfirmErr(t('auth.errPasswordMismatch')); return; }
     setBusy(true);
     try {
       const res = await fetch('/api/auth/set-password', {
@@ -164,25 +164,27 @@ export function SetPasswordClient({ token }: { token: string }) {
                     style={{ marginBottom: 10, opacity: 0.7 }}
                   />
                 )}
-                <input
-                  className="field"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder={t('auth.newPasswordMinPlaceholder')}
-                  value={pw}
-                  onChange={(e) => setPw(e.target.value)}
-                  style={{ marginBottom: 10 }}
-                  autoFocus
-                />
-                <input
-                  className="field"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder={t('auth.repeatNewPassword')}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                />
-                {err && <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>}
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {/* The rule stays readable as a hint; as a placeholder it disappeared at the
+                      first keystroke, which is exactly when it still mattered. */}
+                  <Field
+                    label={t('auth.newPassword')}
+                    hint={t('auth.passwordMinHint', { n: PASSWORD_MIN })}
+                    error={pwErr}
+                  >
+                    {(f) => (
+                      <input {...f} className="field" type="password" autoComplete="new-password"
+                        value={pw} onChange={(e) => { setPw(e.target.value); setPwErr(null); }} autoFocus />
+                    )}
+                  </Field>
+                  <Field label={t('auth.repeatNewPassword')} error={confirmErr}>
+                    {(f) => (
+                      <input {...f} className="field" type="password" autoComplete="new-password"
+                        value={confirm} onChange={(e) => { setConfirm(e.target.value); setConfirmErr(null); }} />
+                    )}
+                  </Field>
+                </div>
+                {err && <div role="alert" style={{ fontSize: 12.5, color: 'var(--danger-fg)', marginTop: 10 }}>{err}</div>}
                 <button
                   type="submit"
                   className="btn btn-primary"

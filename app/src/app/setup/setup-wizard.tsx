@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/ui/logo';
 import { Select } from '@/components/ui/select';
 import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/i18n/locales';
+import { passwordProblem } from '@/lib/form-rules';
 import {
   Check, Copy, ArrowRight, ArrowLeft, Loader2, KeyRound, Building2, Globe, ShieldCheck,
 } from 'lucide-react';
@@ -161,7 +162,8 @@ export function SetupWizard({ initial }: { initial: Initial }) {
   // Password-auth setup: create the admin from email+password, then auto-login.
   const createPasswordAdmin = async () => {
     if (!adminEmail.trim() || !adminPassword) { setErr(t('setup.errEmailPasswordRequired')); return; }
-    if (adminPassword.length < 8) { setErr(t('setup.errPasswordTooShort')); return; }
+    // Same rule the API applies — see lib/form-rules.
+    if (passwordProblem(adminPassword)) { setErr(t('setup.errPasswordTooShort')); return; }
     setErr(null); setBusy(true);
     try {
       const res = await fetch('/api/setup/admin', {
@@ -375,7 +377,7 @@ export function SetupWizard({ initial }: { initial: Initial }) {
           )}
 
           {err && (
-            <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--red, var(--danger))', background: 'color-mix(in oklab, var(--red, var(--danger)) 10%, transparent)', padding: '9px 12px', borderRadius: 8 }}>
+            <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--danger)', background: 'color-mix(in oklab, var(--danger) 10%, transparent)', padding: '9px 12px', borderRadius: 8 }}>
               {err}
             </div>
           )}

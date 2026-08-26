@@ -101,7 +101,7 @@ export function SetupChecklist() {
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.desc}</div>
               </div>
               {res && (
-                <span style={{ fontSize: 11.5, color: res.ok ? 'var(--green)' : 'var(--red, var(--danger))', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 11.5, color: res.ok ? 'var(--green)' : 'var(--danger)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {res.ok ? '✓ OK' : res.msg}
                 </span>
               )}

@@ -189,7 +189,7 @@ function Ring({ remaining, period }: { remaining: number; period: number }) {
           cy="8"
           r={r}
           fill="none"
-          stroke={low ? 'var(--red, var(--danger))' : 'var(--accent)'}
+          stroke={low ? 'var(--danger)' : 'var(--accent)'}
           strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray={circ}

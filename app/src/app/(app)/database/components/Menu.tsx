@@ -67,7 +67,7 @@ export function MenuRow({ icon, label, onClick, danger, disabled }: { icon?: Rea
     <button
       onClick={onClick}
       disabled={disabled}
-      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: disabled ? 'var(--muted)' : danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: disabled ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', opacity: disabled ? 0.6 : 1 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: disabled ? 'var(--muted)' : danger ? 'var(--danger)' : 'var(--text)', cursor: disabled ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', opacity: disabled ? 0.6 : 1 }}
       onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = 'var(--surface-2)'; }}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >

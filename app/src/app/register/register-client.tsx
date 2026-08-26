@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/logo';
+import { Field } from '@/components/ui/field';
+import { isValidEmail, passwordProblem, PASSWORD_MIN } from '@/lib/form-rules';
 import { Loader2, Check, UserPlus } from 'lucide-react';
 
 export function RegisterClient({ wsName }: { wsName: string }) {
@@ -12,13 +14,19 @@ export function RegisterClient({ wsName }: { wsName: string }) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);          // form-level only
+  const [emailErr, setEmailErr] = useState<string | null>(null);
+  const [pwErr, setPwErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr(null);
-    if (password.length < 8) { setErr(t('auth.errPasswordMin')); return; }
+    setErr(null); setEmailErr(null); setPwErr(null);
+    // Both checks come from lib/form-rules, the same file the API imports, so the
+    // browser cannot refuse an address the server would take — or promise one it won't.
+    if (!email.trim()) { setEmailErr(t('auth.errEmailRequired')); return; }
+    if (!isValidEmail(email)) { setEmailErr(t('auth.errEmailInvalid')); return; }
+    if (passwordProblem(password)) { setPwErr(t('auth.errPasswordMin')); return; }
     setBusy(true);
     try {
       const res = await fetch('/api/register', {
@@ -71,14 +79,32 @@ export function RegisterClient({ wsName }: { wsName: string }) {
                 {t('auth.registerSubtitle')}
               </p>
               <form onSubmit={submit}>
-                <input className="field" type="email" autoComplete="username" placeholder={t('auth.email')} value={email}
-                  onChange={(e) => setEmail(e.target.value)} style={{ marginBottom: 10 }} />
-                <input className="field" placeholder={t('auth.name')} value={name}
-                  onChange={(e) => setName(e.target.value)} style={{ marginBottom: 10 }} />
-                <input className="field" type="password" autoComplete="new-password" placeholder={t('auth.passwordMinPlaceholder')} value={password}
-                  onChange={(e) => setPassword(e.target.value)} />
-                {err && <div style={{ fontSize: 12.5, color: 'var(--red, var(--danger))', marginTop: 10 }}>{err}</div>}
-                <button type="submit" className="btn btn-primary" disabled={busy || !email.trim() || !password}
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <Field label={t('auth.email')} error={emailErr} required>
+                    {(f) => (
+                      <input {...f} className="field" type="email" autoComplete="username" placeholder="user@example.com"
+                        value={email} onChange={(e) => { setEmail(e.target.value); setEmailErr(null); }} />
+                    )}
+                  </Field>
+                  <Field label={t('auth.name')}>
+                    {(f) => (
+                      <input {...f} className="field" value={name} onChange={(e) => setName(e.target.value)} />
+                    )}
+                  </Field>
+                  <Field
+                    label={t('auth.password')}
+                    hint={t('auth.passwordMinHint', { n: PASSWORD_MIN })}
+                    error={pwErr}
+                    required
+                  >
+                    {(f) => (
+                      <input {...f} className="field" type="password" autoComplete="new-password"
+                        value={password} onChange={(e) => { setPassword(e.target.value); setPwErr(null); }} />
+                    )}
+                  </Field>
+                </div>
+                {err && <div role="alert" style={{ fontSize: 12.5, color: 'var(--danger-fg)', marginTop: 10 }}>{err}</div>}
+                <button type="submit" className="btn btn-primary" disabled={busy}
                   style={{ width: '100%', justifyContent: 'center', padding: '13px 16px', fontWeight: 600, marginTop: 16, gap: 8 }}>
                   {busy ? <Loader2 size={16} className="spin" /> : <UserPlus size={15} />} {t('auth.submitRequest')}
                 </button>

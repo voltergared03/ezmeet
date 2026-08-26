@@ -111,8 +111,8 @@ function Item({ icon, label, onClick, danger }: { icon: ReactNode; label: string
   return (
     <button
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: 'pointer', fontSize: 13.5, textAlign: 'left' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? 'color-mix(in oklab, var(--red, var(--danger)) 12%, transparent)' : 'var(--surface-2)')}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: danger ? 'var(--danger)' : 'var(--text)', cursor: 'pointer', fontSize: 13.5, textAlign: 'left' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? 'color-mix(in oklab, var(--danger) 12%, transparent)' : 'var(--surface-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
       <span style={{ display: 'flex', color: danger ? 'inherit' : 'var(--muted)', flexShrink: 0 }}>{icon}</span>

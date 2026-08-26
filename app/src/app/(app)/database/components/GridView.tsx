@@ -412,7 +412,7 @@ function BulkBar({ count, label, onDuplicate, onDelete, onClear, duplicateLabel,
         </button>
       )}
       {onDelete && (
-        <button onClick={onDelete} className="btn btn-ghost" style={{ gap: 6, fontWeight: 600, color: 'var(--red, var(--danger))' }}>
+        <button onClick={onDelete} className="btn btn-ghost" style={{ gap: 6, fontWeight: 600, color: 'var(--danger)' }}>
           <Trash2 size={15} /> {deleteLabel}
         </button>
       )}
@@ -566,7 +566,7 @@ function MenuItem({ icon, label, onClick, danger }: { icon: ReactNode; label: st
   return (
     <button
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 7, background: 'transparent', color: danger ? 'var(--red, var(--danger))' : 'var(--text)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 'none', borderRadius: 7, background: 'transparent', color: danger ? 'var(--danger)' : 'var(--text)', cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >

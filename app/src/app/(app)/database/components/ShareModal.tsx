@@ -157,7 +157,7 @@ export function ShareModal({
                 placeholder={t('addPeople')}
                 style={{ width: '100%' }}
               />
-              {err && <div style={{ color: 'var(--red, var(--danger))', fontSize: 12, marginTop: 6 }}>{err}</div>}
+              {err && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{err}</div>}
               {query.trim() && candidates.length > 0 && (
                 <div style={{ marginTop: 6, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
                   {candidates.slice(0, 8).map((u) => (

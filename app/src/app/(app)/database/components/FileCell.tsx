@@ -103,7 +103,7 @@ export function FileCell({
           {busy ? <Spinner size={13} /> : <Paperclip size={13} />}
         </button>
       )}
-      {err && <span style={{ fontSize: 11, color: 'var(--red, var(--danger))', flexShrink: 0 }} title={t('fileTooLarge')}>!</span>}
+      {err && <span style={{ fontSize: 11, color: 'var(--danger)', flexShrink: 0 }} title={t('fileTooLarge')}>!</span>}
 
       <input
         ref={inputRef}
