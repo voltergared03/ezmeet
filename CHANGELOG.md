@@ -4,6 +4,53 @@ All notable changes to Garely are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project currently
 ships `beta` tags ahead of a 1.0 public release.
 
+## [1.25.0-beta.9] — 2026-08-27
+
+Things the app knew were wrong and did not say.
+
+### Added
+- **An admin can block an account instead of deleting it.** Until now the only way to cut
+  somebody's access was to delete them — which also stops their mail for good and removes
+  them from the meetings they were invited to. That is right for someone who has left and
+  wrong for someone on leave, on notice, or under review, where the work has to stay put
+  and only the access should stop. Blocking signs them out on every device immediately and
+  keeps everything else exactly as it is; unblocking restores access. You cannot block
+  yourself, or the last remaining admin.
+
+### Changed
+- **Clearer wording throughout, in both languages.** Messages that named a condition now
+  say what happened and what to do about it — "no connection to the server" instead of
+  "network error", "give it a title" instead of "title is required". The Ukrainian also
+  had a genuine word-choice error on the sign-in, two-factor and password screens, and
+  three different apostrophe characters that rendered differently from one screen to the
+  next.
+
+### Fixed
+- **On a phone, the calendar opened on the oldest meeting in the workspace.** Seeing what
+  was coming next meant scrolling past everything that had already happened. The mobile
+  agenda now starts at today; finished meetings live in the Archive, which is its own
+  page. Overdue tasks are not swept away with the past — they are lifted to the top,
+  since they are the one thing behind you that still needs doing.
+- **After midnight the calendar mislabelled the days.** With the tab left open overnight —
+  normal on a phone — yesterday's meetings still said "Today" and today's said "Tomorrow".
+  The date is now re-checked at midnight and whenever you come back to the tab.
+- **Shared notes in a meeting said "Saved" when they were not.** A rejected save or a
+  dropped connection still printed "Saved at 14:32", so notes could exist only in the
+  writer's own browser while everyone believed they were kept. It now retries once, then
+  says plainly that it has stopped saving — and shows the last time it really did, so you
+  can see how much is at risk.
+- **A forgotten meeting kept running after it was marked finished.** Ending a stale
+  meeting only updated the database; the video room stayed open, and with it the
+  transcription and its per-minute cost, while the app showed the meeting as over. The
+  room is now closed too.
+- **The "My meetings" tab in the archive did nothing.** It highlighted and left the list
+  unchanged. It now filters to meetings you called or took part in — and only appears for
+  admins, since everyone else already sees just their own.
+- **A meeting could be created twice from one calendar event.** Google's push
+  notification, the ten-minute sync and reconnecting your calendar can all run at the same
+  moment; two of them landing together each created the meeting. The database now permits
+  only one, so the duplicate cannot happen rather than rarely happening.
+
 ## [1.25.0-beta.8] — 2026-08-26
 
 ### Fixed
