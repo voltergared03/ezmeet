@@ -20,7 +20,16 @@ export function AgendaView({ meetings, tasks, today, onMeetingClick, onTaskClick
 }) {
   const t = useTranslations();
   const locale = useLocale();
-  const groups = useMemo(() => {
+  // The mobile agenda used to bucket EVERY meeting it was handed — the page fetches
+  // the whole history with no date range — and sort ascending, so the oldest day was
+  // at the top and today's meeting sat below fifty past ones. Finding the next meeting
+  // meant scrolling to the bottom of the year.
+  //
+  // Past meetings belong in the Archive, which exists for exactly that and is a
+  // separate page. What must NOT disappear with them is an overdue task: it is in the
+  // past by definition and is the one thing there you still have to act on, so those
+  // are lifted out and shown first.
+  const { overdue, groups } = useMemo(() => {
     const map = new Map<string, { date: Date; meetings: Meeting[]; tasks: CalTask[] }>();
     const bucket = (d0: Date) => {
       const d = new Date(d0);
@@ -40,8 +49,14 @@ export function AgendaView({ meetings, tasks, today, onMeetingClick, onTaskClick
     for (const g of arr) {
       g.meetings.sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
     }
-    return arr;
-  }, [meetings, tasks]);
+    const cutoff = today.getTime();
+    const past = arr.filter((g) => g.date.getTime() < cutoff);
+    return {
+      // Oldest first, so the most urgent overdue item leads.
+      overdue: past.flatMap((g) => g.tasks).filter((tk) => tk.status !== 'done'),
+      groups: arr.filter((g) => g.date.getTime() >= cutoff),
+    };
+  }, [meetings, tasks, today]);
 
   const dayLabel = (d: Date) => {
     const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
@@ -51,7 +66,7 @@ export function AgendaView({ meetings, tasks, today, onMeetingClick, onTaskClick
     return d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
   };
 
-  if (groups.length === 0) {
+  if (groups.length === 0 && overdue.length === 0) {
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: '48px 24px', textAlign: 'center', color: 'var(--muted)' }}>
         <Calendar size={40} style={{ opacity: 0.3, marginBottom: 12 }} />
@@ -63,6 +78,20 @@ export function AgendaView({ meetings, tasks, today, onMeetingClick, onTaskClick
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px clamp(14px, 4vw, 28px) 90px' }}>
+      {/* Overdue first: it is the only thing behind us that still needs doing, and
+          hiding it with the rest of the past would be a quiet regression. */}
+      {overdue.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-fg)' }}>{t('calendar.overdue')}</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>{overdue.length}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {overdue.map((tk) => <TaskCard key={tk.id} tk={tk} t={t} onClick={onTaskClick} overdue />)}
+          </div>
+        </div>
+      )}
       {groups.map((g) => {
         const isToday = g.date.getTime() === today.getTime();
         return (
@@ -97,31 +126,42 @@ export function AgendaView({ meetings, tasks, today, onMeetingClick, onTaskClick
                   </button>
                 );
               })}
-              {g.tasks.map((tk) => {
-                const accent = taskAccent(tk.priority);
-                return (
-                  <button key={tk.id} onClick={() => onTaskClick(tk)} className="card" style={{
-                    textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'center', padding: 16, width: '100%',
-                    borderLeft: `3px solid ${accent}`,
-                  }}>
-                    <div style={{ width: 46, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-                      <ListChecks size={20} style={{ color: accent }} />
-                    </div>
-                    <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', minHeight: 34 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tk.title}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ textTransform: 'uppercase', letterSpacing: '.04em', color: accent, fontWeight: 600, fontSize: 10.5 }}>{t('calendar.deadline')}</span>
-                        {tk.meeting?.title && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {tk.meeting.title}</span>}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+              {g.tasks.map((tk) => <TaskCard key={tk.id} tk={tk} t={t} onClick={onTaskClick} />)}
             </div>
           </div>
         );
       })}
     </div>
+  );
+}
+
+
+/** One task card. Shared by the day groups and the overdue block above them. */
+function TaskCard({ tk, t, onClick, overdue }: {
+  tk: CalTask;
+  t: ReturnType<typeof useTranslations>;
+  onClick: (t: CalTask) => void;
+  overdue?: boolean;
+}) {
+  const accent = overdue ? 'var(--danger)' : taskAccent(tk.priority);
+  return (
+    <button onClick={() => onClick(tk)} className="card" style={{
+      textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'center', padding: 16, width: '100%',
+      borderLeft: `3px solid ${accent}`,
+    }}>
+      <div style={{ width: 46, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+        <ListChecks size={20} style={{ color: accent }} />
+      </div>
+      <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', minHeight: 34 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tk.title}</div>
+        <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ textTransform: 'uppercase', letterSpacing: '.04em', color: accent, fontWeight: 600, fontSize: 10.5 }}>
+            {t('calendar.deadline')}
+          </span>
+          {tk.meeting?.title && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {tk.meeting.title}</span>}
+        </div>
+      </div>
+    </button>
   );
 }

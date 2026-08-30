@@ -46,10 +46,42 @@ export default function CalendarPage() {
   const [departments, setDepartments] = useState<{ id: string; name: string; color: string | null; members: { userId: string }[] }[]>([]);
   const [filterDept, setFilterDept] = useState('all');
 
-  const today = useMemo(() => {
+  // Recomputed at midnight, not once at mount. On a phone this view lives in a tab
+  // for days, and a frozen `today` relabels everything after midnight: yesterday's
+  // meetings keep saying "Today" and today's say "Tomorrow" — and, since the agenda
+  // now starts at today, yesterday would refuse to leave the list.
+  const [today, setToday] = useState<Date>(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
+  });
+
+  useEffect(() => {
+    const midnight = () => {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      // Only re-render when the day actually turned.
+      setToday((prev) => (prev.getTime() === d.getTime() ? prev : d));
+    };
+    // A timer alone is not enough: a backgrounded mobile tab is frozen and the timer
+    // fires late or not at all, so the day is also re-checked whenever the tab is
+    // brought back — which is exactly when someone looks at it.
+    const onVisible = () => { if (document.visibilityState === 'visible') midnight(); };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const next = new Date();
+    next.setHours(24, 0, 0, 0);
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const timeout = setTimeout(() => {
+      midnight();
+      interval = setInterval(midnight, 86400000);
+    }, next.getTime() - Date.now() + 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   const weekStart = useMemo(() => startOfWeek(cursor), [cursor]);

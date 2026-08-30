@@ -473,7 +473,8 @@
       "scheduled": "Scheduled",
       "live": "Live",
       "ended": "Ended"
-    }
+    },
+    "overdue": "Overdue"
   },
   "schedule": {
     "titlePlaceholder": "Meeting title",

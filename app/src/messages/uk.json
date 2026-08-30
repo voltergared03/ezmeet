@@ -473,7 +473,8 @@
       "scheduled": "Заплановано",
       "live": "Активний",
       "ended": "Завершено"
-    }
+    },
+    "overdue": "Прострочено"
   },
   "schedule": {
     "titlePlaceholder": "Назва мітингу",
