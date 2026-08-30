@@ -179,6 +179,12 @@ The carousel says nothing about keyboard access, and Garely has **zero `:focus-v
 styles** in 1031 lines of `globals.css`. Every rebuilt control needs a visible focus ring —
 otherwise the whole app is unusable without a mouse, and no amount of the above fixes that.
 
+## Findings deliberately left alone
+
+Not everything the audit raised was worth acting on. Where a finding was measured and
+consciously deferred, the reason and the threshold that should bring it back live in
+[deferred.md](deferred.md) — so nobody re-fixes it blind, and nobody forgets it either.
+
 ## Scale of the job
 
 26 pages, 3 layouts, 12 components, 1031-line `globals.css` with a solid OKLCH token system
